@@ -5,6 +5,7 @@ import {
   leaveRoom,
   openDmChannel,
   reconnectAll,
+  regenerateSessionIdentity,
   sendChat,
   sendDm,
   sendDmTyping,
@@ -46,6 +47,11 @@ export interface RoomManagerApi {
   openDm: (peerId: string) => boolean
   changeNickname: (nickname: string) => void
   reconnectAll: () => void
+  /**
+   * M5 (RF-07) — regenerates the cryptographic identity (new fingerprint),
+   * persists it and re-announces presence + keys. No-op without a session.
+   */
+  regenerateIdentity: () => Promise<void>
   /**
    * RF-01 entry point: creates the session identity for `nickname`,
    * persists it — profile plus the §8.2 JWK pair since M3 — under
@@ -131,6 +137,10 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     void reconnectAll()
   }, [])
 
+  const regenerate = useCallback(async () => {
+    await regenerateSessionIdentity()
+  }, [])
+
   const enterWithNickname = useCallback(async (nickname: string) => {
     const session = await createSessionIdentity(nickname)
     const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
@@ -156,6 +166,7 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     openDm,
     changeNickname: changeNickname,
     reconnectAll: reconnect,
+    regenerateIdentity: regenerate,
     enterWithNickname,
   }
 }

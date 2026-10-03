@@ -29,7 +29,7 @@ import {
   type ReceiptPayload,
   type TypingPayload,
 } from './protocol'
-import { computeFingerprint, createSessionIdentity, loadIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
+import { computeFingerprint, createSessionIdentity, loadIdentity, persistIdentity, regenerateIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
 import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
 import { mentionsNickname } from '../markdown/parse'
 import {
@@ -259,9 +259,46 @@ export function getSessionIdentity(): SessionIdentity | null {
   return sessionIdentity
 }
 
+/**
+ * RF-07 (M5) — regenerates the cryptographic identity: a new ECDH keypair
+ * is created and persisted under `gritos:identity` (same nickname), the DM
+ * key cache is dropped (old keys no longer match), the store is updated and
+ * presence + keys are re-announced to every peer of every active room.
+ * Returns the new session, or null when there was no session identity yet.
+ */
+export async function regenerateSessionIdentity(): Promise<SessionIdentity | null> {
+  const current = sessionIdentity
+  if (current === null) return null
+  const nickname = current.identity.nickname
+  const session = await regenerateIdentity(nickname)
+  sessionIdentity = session
+  identityPromise = Promise.resolve(session)
+  clearDmKeyCache()
+  useAppStore.getState().setIdentity(session.identity)
+  broadcastPresence()
+  // The `keys` action carries the new public key to every peer we know of.
+  for (const connection of connections.values()) {
+    for (const peerId of connection.peerKeys.keys()) {
+      void connection.actions.keys.send(session.rawPublicKey, { target: peerId })
+    }
+  }
+  return session
+}
+
 function generateEphemeralNick(): string {
   const random = crypto.getRandomValues(new Uint32Array(1))[0]
   return `par-${(random % 0xffff).toString(16).padStart(4, '0')}`
+}
+
+/**
+ * Re-persists the §8.2 identity record with a new nickname, keeping the
+ * keypair material untouched (M5: nickname changes survive reloads).
+ */
+function repersistNickname(nickname: string): void {
+  const persisted = loadIdentity()
+  if (persisted !== null) {
+    persistIdentity({ ...persisted, nickname })
+  }
 }
 
 /** RF-01 — nickname changes are announced to every peer of every room. */
@@ -278,6 +315,7 @@ export function setNickname(nickname: string): void {
     identity: { ...sessionIdentity.identity, nickname: nick },
   }
   useAppStore.getState().setIdentity(sessionIdentity.identity)
+  repersistNickname(nick)
   broadcastPresence()
 }
 
