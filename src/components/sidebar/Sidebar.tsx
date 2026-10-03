@@ -1,7 +1,91 @@
+import { useState } from 'react'
+import { RoomList } from './RoomList'
+import { PeerList } from './PeerList'
+import { JoinRoomPopover } from './JoinRoomPopover'
+import { useAppStore } from '../../stores/useAppStore'
+import { useSettingsStore } from '../../stores/useSettingsStore'
+import { useRoomManager } from '../../hooks/useRoomManager'
+
 /**
- * Placeholder — implemented in M2 (spec §10.1): collapsible sidebar
- * (Ctrl/Cmd+B, mobile drawer) hosting the room and peer lists.
+ * Collapsible sidebar (spec §10.1): *Activas*, *Sugeridas*, *Recientes*
+ * (RF-02), [+ Unirse] popover and the *Pares* section of the active view
+ * (RF-06). Visibility/collapse is owned by the layout (desktop persistence
+ * under `gritos:ui`; mobile drawer), this component renders the content.
  */
-export function Sidebar() {
-  return null
+export function Sidebar(props: { onRoomOpened?: () => void }) {
+  const rooms = useAppStore((state) => state.rooms)
+  const recentRooms = useAppStore((state) => state.recentRooms)
+  const activeView = useAppStore((state) => state.activeView)
+  const rememberRooms = useSettingsStore((state) => state.settings.rememberRooms)
+  const { joinRoomFocused, leaveRoom } = useRoomManager()
+
+  const [joinOpen, setJoinOpen] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
+
+  const roomList = Object.values(rooms)
+  const activeRoomId =
+    activeView?.kind === 'room' && rooms[activeView.id] !== undefined ? activeView.id : null
+  const activeRoom = activeRoomId !== null ? rooms[activeRoomId] : null
+
+  const openRoom = (roomId: string) => {
+    useAppStore.getState().setActiveView({ kind: 'room', id: roomId })
+    props.onRoomOpened?.()
+  }
+
+  const joinByName = async (name: string) => {
+    const { roomId, error } = await joinRoomFocused(name)
+    if (error !== null) {
+      setJoinError(error)
+      setJoinOpen(true)
+      return
+    }
+    setJoinError(null)
+    setJoinOpen(false)
+    if (roomId !== null) props.onRoomOpened?.()
+  }
+
+  return (
+    <div className="flex h-full w-64 flex-col gap-4 overflow-y-auto border-r border-border bg-surface p-3 text-sm">
+      <RoomList
+        rooms={roomList}
+        recentRooms={recentRooms}
+        showRecents={rememberRooms}
+        activeRoomId={activeRoomId}
+        onOpenRoom={openRoom}
+        onLeaveRoom={(roomId) => leaveRoom(roomId)}
+        onJoinByName={(name) => void joinByName(name)}
+      />
+
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => setJoinOpen((open) => !open)}
+          aria-expanded={joinOpen}
+          className="rounded-md border border-border px-2 py-1.5 text-left text-sm font-medium hover:border-accent"
+        >
+          [+ Unirse]
+        </button>
+        {joinOpen && (
+          <JoinRoomPopover
+            onJoined={() => {
+              setJoinOpen(false)
+              setJoinError(null)
+              props.onRoomOpened?.()
+            }}
+            onDismiss={() => {
+              setJoinOpen(false)
+              setJoinError(null)
+            }}
+          />
+        )}
+        {joinError !== null && !joinOpen && (
+          <p role="alert" className="text-xs text-accent">
+            {joinError}
+          </p>
+        )}
+      </div>
+
+      <PeerList room={activeRoom} />
+    </div>
+  )
 }
