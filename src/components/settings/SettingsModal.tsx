@@ -113,7 +113,7 @@ function SettingsModalContent(_props: { onClose: () => void }) {
               setNicknameError(null)
             }}
             onBlur={applyNickname}
-            className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
+            className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-sm focus:border-accent"
           />
           <button
             type="submit"

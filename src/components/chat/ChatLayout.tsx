@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from '../sidebar/Sidebar'
 import { ChatHeader } from './ChatHeader'
 import { MessageFeed } from './MessageFeed'
@@ -71,6 +71,19 @@ export function ChatLayout() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isMobile, toggleSidebar])
 
+  // RNF-05 — the mobile drawer closes with Esc and takes focus when opened
+  // so keyboard users land inside it (the backdrop click covers pointers).
+  const drawerPanelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!drawerOpen) return
+    drawerPanelRef.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [drawerOpen])
+
   const activeRoom = activeView?.kind === 'room' ? (rooms[activeView.id] ?? null) : null
   const activeDm =
     activeView?.kind === 'dm' ? (dms[activeView.peerId] ?? null) : null
@@ -115,7 +128,13 @@ export function ChatLayout() {
             onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
-          <div className="relative h-full shadow-xl">{sidebar}</div>
+          <div
+            ref={drawerPanelRef}
+            tabIndex={-1}
+            className="relative h-full shadow-xl focus:outline-none"
+          >
+            {sidebar}
+          </div>
         </div>
       )}
 

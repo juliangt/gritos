@@ -34,51 +34,56 @@ export function RoomList(props: {
         {props.rooms.length === 0 && (
           <p className="text-xs text-muted">Ninguna sala activa todavía.</p>
         )}
-        {props.rooms.map((room) => (
-          <div key={room.id} className="group flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => props.onOpenRoom(room.id)}
-              aria-current={room.id === props.activeRoomId ? 'true' : undefined}
-              className={`flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-1 text-left hover:bg-surface ${
-                room.id === props.activeRoomId ? 'bg-surface font-semibold' : ''
-              }`}
-            >
-              <StatusDot status={room.status} />
-              <span className="truncate">#{room.name}</span>
-              {room.hasPassword && (
-                <span role="img" aria-label="sala cifrada" title="Sala con contraseña">
-                  🔒
-                </span>
-              )}
-              <Badge count={room.unread} />
-            </button>
-            <button
-              type="button"
-              onClick={() => props.onLeaveRoom(room.id)}
-              aria-label={`Abandonar ${room.name}`}
-              title={`Abandonar ${room.name}`}
-              className="rounded px-1 text-muted opacity-0 hover:text-accent group-hover:opacity-100"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+        <ul className="flex flex-col">
+          {props.rooms.map((room) => (
+            <li key={room.id} className="group flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => props.onOpenRoom(room.id)}
+                aria-current={room.id === props.activeRoomId ? 'true' : undefined}
+                className={`flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-1 text-left hover:bg-surface ${
+                  room.id === props.activeRoomId ? 'bg-surface font-semibold' : ''
+                }`}
+              >
+                <StatusDot status={room.status} />
+                <span className="truncate">#{room.name}</span>
+                {room.hasPassword && (
+                  <span role="img" aria-label="sala cifrada" title="Sala con contraseña">
+                    🔒
+                  </span>
+                )}
+                <Badge count={room.unread} />
+              </button>
+              <button
+                type="button"
+                onClick={() => props.onLeaveRoom(room.id)}
+                aria-label={`Abandonar ${room.name}`}
+                title={`Abandonar ${room.name}`}
+                className="rounded px-1 text-muted opacity-0 hover:text-accent group-hover:opacity-100 focus-visible:opacity-100"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {suggested.length > 0 && (
         <section aria-label="Salas sugeridas" className="flex flex-col gap-1">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Sugeridas</h2>
-          {suggested.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => props.onJoinByName(name)}
-              className="truncate rounded px-1.5 py-1 text-left text-muted hover:bg-surface hover:text-text"
-            >
-              #{name}
-            </button>
-          ))}
+          <ul className="flex flex-col">
+            {suggested.map((name) => (
+              <li key={name}>
+                <button
+                  type="button"
+                  onClick={() => props.onJoinByName(name)}
+                  className="w-full truncate rounded px-1.5 py-1 text-left text-muted hover:bg-surface hover:text-text"
+                >
+                  #{name}
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -92,16 +97,19 @@ export function RoomList(props: {
       {recents.length > 0 && (
         <section aria-label="Salas recientes" className="flex flex-col gap-1">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recientes</h2>
-          {recents.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => props.onJoinByName(name)}
-              className="truncate rounded px-1.5 py-1 text-left text-muted hover:bg-surface hover:text-text"
-            >
-              #{name}
-            </button>
-          ))}
+          <ul className="flex flex-col">
+            {recents.map((name) => (
+              <li key={name}>
+                <button
+                  type="button"
+                  onClick={() => props.onJoinByName(name)}
+                  className="w-full truncate rounded px-1.5 py-1 text-left text-muted hover:bg-surface hover:text-text"
+                >
+                  #{name}
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </div>

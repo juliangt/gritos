@@ -67,50 +67,52 @@ export function PeerList({ room }: { room: Room | null }) {
           Sin pares aún. Comparte el nombre de la sala para que otros se unan.
         </p>
       )}
-      {room.peers.map((peer) => {
-        const displayName = disambiguatedNickname(peer.nickname, peer.id, room.peers)
-        return (
-          <div key={peer.id} className="relative flex flex-col">
-            <button
-              type="button"
-              onClick={() => setMenuPeerId((current) => (current === peer.id ? null : peer.id))}
-              aria-expanded={menuPeerId === peer.id}
-              className="flex items-center gap-1.5 truncate rounded px-1.5 py-1 text-left hover:bg-surface"
-              title={peer.fingerprint ?? undefined}
-            >
-              <span role="img" aria-label="latencia">
-                {latencyDot(peer.latencyMs, peer.degraded)}
-              </span>
-              <span className="truncate">{displayName}</span>
-            </button>
-            {menuPeerId === peer.id && (
-              <div
-                role="menu"
-                aria-label={`Acciones para ${displayName}`}
-                className="absolute left-2 top-7 z-10 flex flex-col rounded-md border border-border bg-surface p-1 text-xs shadow-lg"
+      <ul className="flex flex-col">
+        {room.peers.map((peer) => {
+          const displayName = disambiguatedNickname(peer.nickname, peer.id, room.peers)
+          return (
+            <li key={peer.id} className="relative flex flex-col">
+              <button
+                type="button"
+                onClick={() => setMenuPeerId((current) => (current === peer.id ? null : peer.id))}
+                aria-expanded={menuPeerId === peer.id}
+                className="flex items-center gap-1.5 truncate rounded px-1.5 py-1 text-left hover:bg-surface"
+                title={peer.fingerprint ?? undefined}
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => startDm(peer)}
-                  className="rounded px-2 py-1 text-left hover:bg-bg"
+                <span role="img" aria-label="latencia">
+                  {latencyDot(peer.latencyMs, peer.degraded)}
+                </span>
+                <span className="truncate">{displayName}</span>
+              </button>
+              {menuPeerId === peer.id && (
+                <div
+                  role="menu"
+                  aria-label={`Acciones para ${displayName}`}
+                  className="absolute left-2 top-7 z-10 flex flex-col rounded-md border border-border bg-surface p-1 text-xs shadow-lg"
                 >
-                  Mensaje directo
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={peer.fingerprint === null}
-                  onClick={() => copyFingerprint(peer)}
-                  className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
-                >
-                  Copiar fingerprint
-                </button>
-              </div>
-            )}
-          </div>
-        )
-      })}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => startDm(peer)}
+                    className="rounded px-2 py-1 text-left hover:bg-bg"
+                  >
+                    Mensaje directo
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={peer.fingerprint === null}
+                    onClick={() => copyFingerprint(peer)}
+                    className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
+                  >
+                    Copiar fingerprint
+                  </button>
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
       {copied && <p className="text-xs text-muted">Fingerprint copiado.</p>}
     </section>
   )

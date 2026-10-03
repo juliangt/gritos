@@ -23,28 +23,33 @@ export function DmList(props: {
       {props.channels.length === 0 ? (
         <p className="text-xs text-muted">{EMPTY_DM_LIST_TEXT}</p>
       ) : (
-        props.channels.map((channel) => (
-          <button
-            key={channel.peerId}
-            type="button"
-            onClick={() => props.onOpenDm(channel.peerId)}
-            aria-current={channel.peerId === props.activePeerId ? 'true' : undefined}
-            title={
-              channel.available ? undefined : 'El par se ha desconectado — el historial permanece'
-            }
-            className={`flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left hover:bg-surface ${
-              channel.peerId === props.activePeerId ? 'bg-surface font-semibold' : ''
-            }`}
-          >
-            <span className="truncate">{channel.peerNick}</span>
-            {!channel.available && (
-              <span role="img" aria-label="par desconectado" title="El par se ha desconectado">
-                ⚪
-              </span>
-            )}
-            <Badge count={channel.unread} />
-          </button>
-        ))
+        <ul className="flex flex-col">
+          {props.channels.map((channel) => (
+            <li key={channel.peerId}>
+              <button
+                type="button"
+                onClick={() => props.onOpenDm(channel.peerId)}
+                aria-current={channel.peerId === props.activePeerId ? 'true' : undefined}
+                title={
+                  channel.available
+                    ? undefined
+                    : 'El par se ha desconectado — el historial permanece'
+                }
+                className={`flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left hover:bg-surface ${
+                  channel.peerId === props.activePeerId ? 'bg-surface font-semibold' : ''
+                }`}
+              >
+                <span className="truncate">{channel.peerNick}</span>
+                {!channel.available && (
+                  <span role="img" aria-label="par desconectado" title="El par se ha desconectado">
+                    ⚪
+                  </span>
+                )}
+                <Badge count={channel.unread} />
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   )

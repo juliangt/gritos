@@ -122,7 +122,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
             submit()
           }
         }}
-        className="max-h-36 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50"
+        className="max-h-36 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm focus:border-accent disabled:opacity-50"
       />
       <div className="flex items-center gap-3 text-xs text-muted">
         <span className="hidden sm:inline">**negrita** · *cursiva* · `código`</span>
