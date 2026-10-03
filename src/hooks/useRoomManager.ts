@@ -3,14 +3,21 @@ import {
   adoptSessionIdentity,
   ensureSessionIdentity,
   leaveRoom,
+  openDmChannel,
   reconnectAll,
   sendChat,
+  sendDm,
+  sendDmTyping,
   sendTestChat,
   sendTyping,
   setNickname,
   joinRoom,
 } from '../lib/p2p/roomManager'
-import { createSessionIdentity, persistIdentity } from '../lib/crypto/identity'
+import {
+  createSessionIdentity,
+  exportIdentityJwks,
+  persistIdentity,
+} from '../lib/crypto/identity'
 import { useAppStore } from '../stores/useAppStore'
 
 /**
@@ -31,12 +38,18 @@ export interface RoomManagerApi {
   sendChat: (roomId: string, text: string) => void
   sendTyping: (roomId: string, on: boolean) => void
   sendTestChat: (roomId: string, text: string) => void
+  /** M3 (RF-04) — encrypts and broadcasts a DM; null when it cannot send. */
+  sendDm: (peerId: string, text: string) => Promise<boolean>
+  /** M3 — directed DM typing signal. */
+  sendDmTyping: (peerId: string, on: boolean) => void
+  /** M3 — opens the DM channel with a peer and focuses it. */
+  openDm: (peerId: string) => boolean
   changeNickname: (nickname: string) => void
   reconnectAll: () => void
   /**
    * RF-01 entry point: creates the session identity for `nickname`,
-   * persists the profile under `gritos:identity` and installs it in the
-   * manager/store. Keypair JWK persistence itself lands in M3.
+   * persists it — profile plus the §8.2 JWK pair since M3 — under
+   * `gritos:identity` and installs it in the manager/store.
    */
   enterWithNickname: (nickname: string) => Promise<void>
 }
@@ -99,6 +112,17 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     sendTestChat(roomId, text)
   }, [])
 
+  const dm = useCallback(
+    (peerId: string, text: string) => sendDm(peerId, text).then((envelope) => envelope !== null),
+    [],
+  )
+
+  const dmTyping = useCallback((peerId: string, on: boolean) => {
+    sendDmTyping(peerId, on)
+  }, [])
+
+  const openDm = useCallback((peerId: string) => openDmChannel(peerId), [])
+
   const changeNickname = useCallback((nickname: string) => {
     setNickname(nickname)
   }, [])
@@ -109,10 +133,13 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
 
   const enterWithNickname = useCallback(async (nickname: string) => {
     const session = await createSessionIdentity(nickname)
+    const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
     persistIdentity({
       nickname,
       fingerprint: session.identity.fingerprint,
       createdAt: session.identity.createdAt,
+      pubJwk,
+      privJwk,
     })
     adoptSessionIdentity(session)
   }, [])
@@ -124,6 +151,9 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     sendChat: chat,
     sendTyping: typing,
     sendTestChat: testChat,
+    sendDm: dm,
+    sendDmTyping: dmTyping,
+    openDm,
     changeNickname: changeNickname,
     reconnectAll: reconnect,
     enterWithNickname,

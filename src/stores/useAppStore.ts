@@ -95,11 +95,22 @@ export interface Room {
 export interface DmChannel {
   peerId: string
   peerNick: string
+  /**
+   * M3 additive field (spec §8.1 field names preserved): fingerprint derived
+   * from the peer's `keys` action — the crypto-trusted value shown in the
+   * DM header for TOFU verification.
+   */
+  peerFingerprint: string | null
   /** Hard cap of 500 messages, FIFO discard (RF-04). */
   messages: Message[]
   unread: number
   /** false once no active room is shared with the peer anymore. */
   available: boolean
+  /**
+   * M3 additive field: peerId → timestamp of the last DM typing signal
+   * (RF-04: DMs inherit typing); expires after 4 s like room typing.
+   */
+  typing: Record<string, number>
 }
 
 export type ActiveView = { kind: 'room'; id: string } | { kind: 'dm'; peerId: string }
@@ -182,11 +193,25 @@ export interface AppActions {
   setTyping: (roomId: string, peerId: string, ts: number | null) => void
   /**
    * M2 — switches the focused view without touching any room connection
-   * (RF-02); opening a room clears its unread badge.
+   * (RF-02); opening a room or a DM clears its unread badge (RF-04).
    */
   setActiveView: (view: ActiveView | null) => void
   /** M2 — recent room names, most-recent-first (RF-02, §8.2). */
   setRecentRooms: (recent: string[]) => void
+  /**
+   * M3 — creates the DM channel for `peerId` when missing (RF-04); an
+   * existing channel only gets its fingerprint refreshed when a non-null
+   * one is provided (nickname history is kept).
+   */
+  ensureDmChannel: (peerId: string, peerNick: string, peerFingerprint: string | null) => void
+  /** M3 — appends to `dms[peerId]` with the 500-message cap (RF-04). */
+  appendDmMessage: (peerId: string, message: Message) => void
+  /** M3 — flips own DM messages to 'delivered' on the peer's receipt. */
+  markDmMessagesDelivered: (peerId: string, ids: string[]) => void
+  /** M3 — recomputes `available` after peer/room changes (RF-04). */
+  setDmAvailable: (peerId: string, available: boolean) => void
+  /** M3 — DM typing signal (ts = null clears); expires after 4 s. */
+  setDmTyping: (peerId: string, ts: number | null) => void
 }
 
 export const useAppStore = create<AppState & AppActions>()((set) => ({
@@ -301,7 +326,8 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
   setActiveView: (view) =>
     set((state) => {
       if (view === null) return { activeView: null }
-      // Opening a room clears its unread badge (RF-02).
+      // Opening a room clears its unread badge (RF-02); opening a DM does
+      // the same for its channel (RF-04).
       if (view.kind === 'room') {
         const room = state.rooms[view.id]
         if (room !== undefined && room.unread > 0) {
@@ -314,8 +340,103 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
           }
         }
       }
+      if (view.kind === 'dm') {
+        const channel = state.dms[view.peerId]
+        if (channel !== undefined && channel.unread > 0) {
+          return {
+            activeView: view,
+            dms: {
+              ...state.dms,
+              [view.peerId]: { ...channel, unread: 0 },
+            },
+          }
+        }
+      }
       return { activeView: view }
     }),
 
   setRecentRooms: (recent) => set({ recentRooms: recent }),
+
+  ensureDmChannel: (peerId, peerNick, peerFingerprint) =>
+    set((state) => {
+      const existing = state.dms[peerId]
+      if (existing === undefined) {
+        return {
+          dms: {
+            ...state.dms,
+            [peerId]: {
+              peerId,
+              peerNick,
+              peerFingerprint,
+              messages: [],
+              unread: 0,
+              available: false,
+              typing: {},
+            },
+          },
+        }
+      }
+      if (peerFingerprint !== null && existing.peerFingerprint !== peerFingerprint) {
+        return {
+          dms: { ...state.dms, [peerId]: { ...existing, peerFingerprint } },
+        }
+      }
+      return state
+    }),
+
+  appendDmMessage: (peerId, message) =>
+    set((state) => {
+      const channel = state.dms[peerId]
+      if (channel === undefined) return state
+      const messages = appendMessageCapped(channel.messages, message)
+      // RF-04 — peer messages in non-focused DMs increment the unread badge;
+      // own messages never do.
+      const isActiveView =
+        state.activeView?.kind === 'dm' && state.activeView.peerId === peerId
+      const countsAsUnread = message.authorId !== 'self' && message.kind !== 'system' && !isActiveView
+      return {
+        dms: {
+          ...state.dms,
+          [peerId]: {
+            ...channel,
+            messages,
+            unread: countsAsUnread ? channel.unread + 1 : channel.unread,
+          },
+        },
+      }
+    }),
+
+  markDmMessagesDelivered: (peerId, ids) =>
+    set((state) => {
+      const channel = state.dms[peerId]
+      if (channel === undefined) return state
+      const idSet = new Set(ids)
+      let changed = false
+      const messages = channel.messages.map((message) => {
+        if (message.authorId !== 'self' || !idSet.has(message.id)) return message
+        if (message.status === 'delivered') return message
+        changed = true
+        return { ...message, status: 'delivered' as const }
+      })
+      return changed ? { dms: { ...state.dms, [peerId]: { ...channel, messages } } } : state
+    }),
+
+  setDmAvailable: (peerId, available) =>
+    set((state) => {
+      const channel = state.dms[peerId]
+      if (channel === undefined || channel.available === available) return state
+      // true→false keeps the history in memory (RF-04) — only the flag flips.
+      return { dms: { ...state.dms, [peerId]: { ...channel, available } } }
+    }),
+
+  setDmTyping: (peerId, ts) =>
+    set((state) => {
+      const channel = state.dms[peerId]
+      if (channel === undefined) return state
+      if (ts === null && !(peerId in channel.typing)) return state
+      const typing = { ...channel.typing }
+      if (ts === null) delete typing[peerId]
+      else typing[peerId] = ts
+      return { dms: { ...state.dms, [peerId]: { ...channel, typing } } }
+    }),
 }))
