@@ -237,7 +237,7 @@ describe('presence and keys on peer join (§7.1)', () => {
 })
 
 describe('chat flow (§6.4, §7.3)', () => {
-  it('appends a valid received chat and answers with a directed receipt', async () => {
+  it('appends a valid received chat and answers with a debounced directed receipt', async () => {
     const { room, roomId } = await join('lobby')
     room.peerJoin('peer-1')
     const envelope = chatEnvelope({ body: 'hola mundo' })
@@ -253,8 +253,12 @@ describe('chat flow (§6.4, §7.3)', () => {
       text: 'hola mundo',
       status: 'delivered',
       encrypted: false,
+      kind: 'user',
     })
 
+    // Receipts are debounced (M2 §7.1 batching), not immediate.
+    expect(room.action('receipt').sends).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(300)
     const receipt = room.lastSend('receipt')
     expect(receipt.data).toEqual({ ids: [envelope.id] })
     expect(receipt.options).toEqual({ target: 'peer-1' })
@@ -280,11 +284,7 @@ describe('chat flow (§6.4, §7.3)', () => {
     const { room, roomId } = await join('lobby')
     room.peerJoin('peer-1')
     room.receive('chat', chatEnvelope({ body: 'a'.repeat(4001) }), 'peer-1')
-    room.receive(
-      'chat',
-      chatEnvelope({ enc: true, iv: 'AAAA', body: 'a'.repeat(100) }),
-      'peer-1',
-    )
+    room.receive('chat', chatEnvelope({ enc: true, iv: 'AAAA', body: 'a'.repeat(100) }), 'peer-1')
     expect(storedRoom(roomId).messages).toHaveLength(0)
   })
 
@@ -293,11 +293,7 @@ describe('chat flow (§6.4, §7.3)', () => {
     room.peerJoin('peer-1')
 
     // Addressed to somebody else: discarded, never relayed nor stored.
-    room.receive(
-      'chat',
-      chatEnvelope({ kind: 'dm', to: 'someone-else', body: 'secret' }),
-      'peer-1',
-    )
+    room.receive('chat', chatEnvelope({ kind: 'dm', to: 'someone-else', body: 'secret' }), 'peer-1')
     expect(storedRoom(roomId).messages).toHaveLength(0)
     expect(room.action('chat').sends).toHaveLength(0)
 
@@ -462,5 +458,191 @@ describe('leave and reconnect (RF-02, RF-07)', () => {
     expect(fake.configs[3]?.roomId).toBe(dev.connection.roomId)
     expect(useAppStore.getState().rooms[lobby.roomId]).toBeDefined()
     expect(useAppStore.getState().rooms[dev.roomId]).toBeDefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// M2 — outgoing chat queue, receipts batching, system lines, recents
+// ---------------------------------------------------------------------------
+
+describe('M2 outgoing chat (RF-03, §10.3)', () => {
+  it('queues sends while searching and flushes them on the first peer join', async () => {
+    const { room, roomId } = await join('lobby')
+    // Room is 'searching': the envelope is queued, not sent.
+    const first = manager.sendChat(roomId, 'en cola')
+    expect(first).not.toBeNull()
+    expect(room.action('chat').sends).toHaveLength(0)
+
+    const second = manager.sendChat(roomId, 'también en cola')
+    room.peerJoin('peer-1')
+    await flushMicrotasks()
+
+    expect(second).not.toBeNull()
+    const sends = room.action('chat').sends
+    expect(sends).toHaveLength(2)
+    expect(sends[0]?.data).toMatchObject({ body: 'en cola' })
+    expect(sends[1]?.data).toMatchObject({ body: 'también en cola' })
+
+    const messages = storedRoom(roomId).messages
+    expect(messages.filter((message) => message.authorId === 'self')).toHaveLength(2)
+  })
+
+  it('sends immediately once connected', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const envelope = manager.sendChat(roomId, 'hola')
+    expect(envelope).not.toBeNull()
+    expect(room.lastSend('chat').data).toEqual(envelope)
+  })
+
+  it('emits typing signals via sendTyping', async () => {
+    const { room, roomId } = await join('lobby')
+    manager.sendTyping(roomId, true)
+    expect(room.lastSend('typing').data).toEqual({ on: true })
+    manager.sendTyping(roomId, false)
+    expect(room.lastSend('typing').data).toEqual({ on: false })
+  })
+
+  it('caps the feed at 500 and flags the FIFO separator', async () => {
+    const { roomId } = await join('lobby')
+    const fakeRoom = fake.rooms[fake.rooms.length - 1]
+    fakeRoom.peerJoin('peer-1')
+    for (let i = 0; i < 505; i += 1) {
+      fakeRoom.receive('chat', chatEnvelope({ body: `msg-${i}` }), 'peer-1')
+    }
+    await vi.advanceTimersByTimeAsync(300)
+    expect(storedRoom(roomId).fifoTrimmed).toBe(true)
+  })
+})
+
+describe('M2 receipts batching (§7.1: debounce + ≤50 ids)', () => {
+  it('debounces ~300 ms and batches several ids into one directed payload', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+
+    const ids: string[] = []
+    for (let i = 0; i < 5; i += 1) {
+      const envelope = chatEnvelope({ body: `m${i}` })
+      ids.push(envelope.id)
+      room.receive('chat', envelope, 'peer-1')
+    }
+    // Nothing before the debounce window elapses.
+    await vi.advanceTimersByTimeAsync(299)
+    expect(room.action('receipt').sends).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1)
+    const receipt = room.lastSend('receipt')
+    expect(receipt.options).toEqual({ target: 'peer-1' })
+    expect((receipt.data as { ids: string[] }).ids).toEqual(ids)
+  })
+
+  it('splits large bursts into payloads of at most 50 ids', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    for (let i = 0; i < 120; i += 1) {
+      room.receive('chat', chatEnvelope({ body: `m${i}` }), 'peer-1')
+    }
+    await vi.advanceTimersByTimeAsync(300)
+
+    const receipts = room.action('receipt').sends
+    expect(receipts.map((send) => (send.data as { ids: string[] }).ids.length)).toEqual([
+      50, 50, 20,
+    ])
+    for (const send of receipts) {
+      expect(send.options).toEqual({ target: 'peer-1' })
+    }
+  })
+
+  it('keeps receipts per author, directed to each', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.peerJoin('peer-2')
+
+    const a = chatEnvelope({ body: 'de a' })
+    const b = chatEnvelope({ body: 'de b' })
+    room.receive('chat', a, 'peer-1')
+    room.receive('chat', b, 'peer-2')
+    await vi.advanceTimersByTimeAsync(300)
+
+    const sends = room.action('receipt').sends
+    expect(sends).toHaveLength(2)
+    const byTarget = new Map(
+      sends.map((send) => [send.options?.target, (send.data as { ids: string[] }).ids]),
+    )
+    expect(byTarget.get('peer-1')).toEqual([a.id])
+    expect(byTarget.get('peer-2')).toEqual([b.id])
+  })
+})
+
+describe('M2 system feed lines (RF-06)', () => {
+  it('adds a join line on the first presence, silent on nickname changes', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+
+    let messages = storedRoom(roomId).messages
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      kind: 'system',
+      authorId: 'system',
+      text: '— luna-cauta se ha unido —',
+    })
+
+    room.receive('presence', { nick: 'luna-c', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+    messages = storedRoom(roomId).messages
+    expect(messages).toHaveLength(1)
+  })
+
+  it('adds a leave line with the last known nickname on peer leave', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+    room.peerLeave('peer-1')
+
+    const messages = storedRoom(roomId).messages
+    expect(messages[messages.length - 1]).toMatchObject({
+      kind: 'system',
+      text: '— luna-cauta ha salido —',
+    })
+    // A returning peer re-announces its join.
+    room.peerJoin('peer-1')
+    room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+    const again = storedRoom(roomId).messages
+    expect(again[again.length - 1]).toMatchObject({
+      text: '— luna-cauta se ha unido —',
+    })
+  })
+
+  it('does not count system lines as unread for a non-active room', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('presence', { nick: 'luna-cauta', fp: 'A31F' }, 'peer-1')
+    expect(storedRoom(roomId).unread).toBe(0)
+
+    room.receive('chat', chatEnvelope(), 'peer-1')
+    expect(storedRoom(roomId).unread).toBe(1)
+  })
+})
+
+describe('M2 recent rooms (§8.2 gritos:rooms)', () => {
+  it('records joined rooms most-recent-first while rememberRooms is on', async () => {
+    await manager.joinRoom('lobby')
+    await manager.joinRoom('dev')
+    expect(useAppStore.getState().recentRooms).toEqual(['dev', 'lobby'])
+  })
+
+  it('keeps the list deduped and most-recent-first through re-joins', async () => {
+    useSettingsStore.getState().setSettings({ maxActiveRooms: 6 })
+    for (const name of ['a', 'b', 'c', 'd', 'e']) {
+      await manager.joinRoom(name)
+    }
+    await manager.joinRoom('a') // re-join moves 'a' to the front, no dup
+    const recent = useAppStore.getState().recentRooms
+    expect(recent).toEqual(['a', 'e', 'd', 'c', 'b'])
+  })
+
+  it('records nothing when rememberRooms is off', async () => {
+    useSettingsStore.getState().setSettings({ rememberRooms: false })
+    await manager.joinRoom('lobby')
+    expect(useAppStore.getState().recentRooms).toEqual([])
   })
 })
