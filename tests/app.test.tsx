@@ -73,6 +73,12 @@ describe('App routing (M2: onboarding | chat shell)', () => {
     })
     expect(screen.queryByLabelText('Tu apodo')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
+    // Drain the auto-join started by this mount BEFORE the next test
+    // reinstalls the fake: a pending doJoinRoom continuation would
+    // otherwise land in the following test's joinRoomFn (race flake).
+    await waitFor(() => {
+      expect(fake.joinRoomFn).toHaveBeenCalled()
+    })
   })
 
   it('does not auto-join when autoJoinLobby is off (RF-01 acceptance)', async () => {

@@ -30,7 +30,8 @@ import {
   type ReceiptPayload,
   type TypingPayload,
 } from './protocol'
-import { computeFingerprint, createSessionIdentity, type SessionIdentity } from '../crypto/identity'
+import { computeFingerprint, createSessionIdentity, loadIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
+import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
 import { pushRecentRoom, saveRecentRooms } from '../recentRooms'
 import { joinSystemLine, leaveSystemLine } from '../feed'
 
@@ -41,13 +42,14 @@ import { joinSystemLine, leaveSystemLine } from '../feed'
  * room, its 8 registered actions (§7.1) and its status heuristic, and feeds
  * the Zustand store (§8.1).
  *
- * dm/keys full crypto lands in M3: the actions are already registered,
- * received raw public keys are kept in memory per peer, and dm payloads are
- * protocol-filtered (foreign recipients discard) and then ignored until M3.
- * M2 adds the outgoing chat path (sendChat with a local queue while the
- * room is not connected, §10.3), debounced receipt batching (§7.1), the
- * typing send, system feed lines for joins/leaves (RF-06) and the
- * recent-rooms recording (§8.2 `gritos:rooms`).
+ * M3 adds the E2EE DM path (RF-04, §9.2): received raw public keys are kept
+ * per peer (with their crypto-trusted fingerprints), `sendDm` derives the
+ * shared key (ECDH → HKDF, cached in memory per session), encrypts with
+ * AES-GCM and broadcasts a `dm` Envelope addressed with `to`; the receive
+ * path filters non-recipients (§7.3), decrypts with the sender's key and
+ * feeds the `dms` store channels, including unread, receipts, typing and
+ * the `available` flag recomputed on every peer/room change. Incoming DMs
+ * are surfaced to the notifications layer through the `onDmReceived` seam.
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -125,8 +127,10 @@ interface RoomInternals extends RoomConnection {
   readonly actions: RoomActions
   /** Per-room dedup window — spec §7.3. */
   readonly seenIds: Set<string>
-  /** Raw ECDH public keys per peer, in memory only (consumed in M3). */
+  /** Raw ECDH public keys per peer, in memory only (§7.1). */
   readonly peerKeys: Map<string, Uint8Array>
+  /** Fingerprints derived from the received keys — the crypto-trusted ones. */
+  readonly peerKeyFps: Map<string, string>
   /** Peers whose presence was already announced in the feed (join lines). */
   readonly announcedPeers: Set<string>
   /** Chat envelopes awaiting the first DataChannel (§10.3 local queue). */
@@ -164,28 +168,52 @@ let sessionIdentity: SessionIdentity | null = null
 let identityPromise: Promise<SessionIdentity> | null = null
 
 /**
- * Lazily creates the ephemeral session identity (M2: keys stay ephemeral;
- * the profile persists). Idempotent — StrictMode double-mounts and
- * concurrent callers share the same identity. When the store already holds
- * an identity (restored from `gritos:identity` by the onboarding/boot
- * hooks), its nickname/fingerprint/createdAt are adopted so what is
- * announced over the wire matches what the UI and localStorage hold.
+ * Lazily creates or restores the session identity. Idempotent — StrictMode
+ * double-mounts and concurrent callers share the same identity. M3 (§8.2 +
+ * §9.1): when a persisted identity exists (store or `gritos:identity`), its
+ * JWK keypair is re-imported so the announced fingerprint always matches
+ * the ECDH material; pre-M3 profile-only records are migrated with a fresh
+ * keypair (nickname preserved). Only visitors with no identity at all get
+ * an anonymous ephemeral one.
  */
 export function ensureSessionIdentity(nickname?: string): Promise<SessionIdentity> {
   if (sessionIdentity !== null) return Promise.resolve(sessionIdentity)
   if (identityPromise === null) {
-    const storedIdentity = useAppStore.getState().identity
-    const nick =
-      storedIdentity?.nickname ??
-      (nickname !== undefined && nickname.trim() !== '' ? nickname.trim() : generateEphemeralNick())
-    identityPromise = createSessionIdentity(nick).then((created) => {
-      const identity = storedIdentity ?? created.identity
-      sessionIdentity = { ...created, identity }
-      useAppStore.getState().setIdentity(identity)
+    identityPromise = (async () => {
+      const stored = useAppStore.getState().identity
+      const persisted =
+        stored !== null
+          ? {
+              nickname: stored.nickname,
+              fingerprint: stored.fingerprint,
+              createdAt: stored.createdAt,
+              ...extractPersistedJwks(),
+            }
+          : loadIdentity()
+      if (persisted !== null) {
+        const { session } = await restoreSessionIdentity(persisted)
+        sessionIdentity = session
+        useAppStore.getState().setIdentity(session.identity)
+        return sessionIdentity
+      }
+      const nick =
+        nickname !== undefined && nickname.trim() !== '' ? nickname.trim() : generateEphemeralNick()
+      const created = await createSessionIdentity(nick)
+      sessionIdentity = created
+      useAppStore.getState().setIdentity(created.identity)
       return sessionIdentity
-    })
+    })()
   }
   return identityPromise
+}
+
+/** Reads the optional JWK fields of the persisted record, when readable. */
+function extractPersistedJwks(): { pubJwk?: JsonWebKey; privJwk?: JsonWebKey } {
+  const persisted = loadIdentity()
+  if (persisted?.pubJwk !== undefined && persisted.privJwk !== undefined) {
+    return { pubJwk: persisted.pubJwk, privJwk: persisted.privJwk }
+  }
+  return {}
 }
 
 /**
@@ -347,6 +375,8 @@ export async function leaveRoom(roomId: string): Promise<void> {
   teardownConnection(connection)
   await connection.trystero.leave()
   useAppStore.getState().removeRoom(roomId)
+  // M3 — peers that only lived in this room lose their DM availability.
+  refreshDmAvailability()
 }
 
 /** RF-07 — re-joins every active room applying the current network settings. */
@@ -452,6 +482,134 @@ export function sendTyping(roomId: string, on: boolean): void {
   safeSend(connection.actions.typing, { on } satisfies TypingPayload)
 }
 
+// ---------------------------------------------------------------------------
+// DM path (RF-04, §9.2)
+// ---------------------------------------------------------------------------
+
+export type DmReceivedListener = (peerId: string, nick: string, text: string) => void
+
+const dmListeners = new Set<DmReceivedListener>()
+
+/** Subscribes to decrypted incoming DMs (notifications, M3/M5). */
+export function onDmReceived(listener: DmReceivedListener): () => void {
+  dmListeners.add(listener)
+  return () => {
+    dmListeners.delete(listener)
+  }
+}
+
+function emitDmReceived(peerId: string, nick: string, text: string): void {
+  for (const listener of dmListeners) {
+    listener(peerId, nick, text)
+  }
+}
+
+/**
+ * RF-04 — recomputes `DmChannel.available` for every channel: a peer is
+ * available while it shares at least one active room. Runs after every
+ * peer join/leave and room removal; true→false keeps the history in memory.
+ */
+function refreshDmAvailability(): void {
+  const state = useAppStore.getState()
+  const connected = new Set<string>()
+  for (const room of Object.values(state.rooms)) {
+    for (const peer of room.peers) connected.add(peer.id)
+  }
+  for (const [peerId, channel] of Object.entries(state.dms)) {
+    const available = connected.has(peerId)
+    if (available !== channel.available) state.setDmAvailable(peerId, available)
+  }
+}
+
+/** Nickname of a connected peer from any shared room's entry, when present. */
+function peerNicknameOf(peerId: string): { nickname: string; fingerprint: string | null } | null {
+  for (const room of Object.values(useAppStore.getState().rooms)) {
+    const peer = room.peers.find((entry) => entry.id === peerId)
+    if (peer !== undefined) return { nickname: peer.nickname, fingerprint: peer.fingerprint }
+  }
+  return null
+}
+
+/**
+ * RF-04 — opens (or reuses) the DM channel with a connected peer and
+ * focuses it. Returns false when the peer shares no active room: there is
+ * no global channel (spec §11).
+ */
+export function openDmChannel(peerId: string): boolean {
+  const peer = peerNicknameOf(peerId)
+  if (peer === null || peer.nickname.trim() === '') return false
+  const state = useAppStore.getState()
+  state.ensureDmChannel(peerId, peer.nickname, peer.fingerprint)
+  state.setActiveView({ kind: 'dm', peerId })
+  refreshDmAvailability()
+  return true
+}
+
+/**
+ * RF-04/§9.2 — encrypts `text` for `peerId` and broadcasts the `dm`
+ * Envelope (broadcast with `to`; non-recipients discard, §7.1). Returns the
+ * envelope, or null when there is no identity, the peer is unavailable
+ * (no shared room), its key is unknown, or the text exceeds the 4000-char
+ * protocol limit (§7.3).
+ */
+export function sendDm(peerId: string, text: string): Promise<Envelope | null> {
+  const identity = sessionIdentity
+  const state = useAppStore.getState()
+  const channel = state.dms[peerId]
+  if (identity === null) return Promise.resolve(null)
+  if (channel === undefined || !channel.available) return Promise.resolve(null)
+  if (text.length > MAX_PLAINTEXT_LENGTH) return Promise.resolve(null)
+
+  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
+  if (shared === undefined) return Promise.resolve(null)
+
+  const peerRawKey = shared.peerKeys.get(peerId) as Uint8Array
+  const theirFp = shared.peerKeyFps.get(peerId)
+  if (theirFp === undefined) return Promise.resolve(null)
+
+  return getCachedDmKey(
+    identity.keypair.privateKey,
+    peerRawKey,
+    identity.identity.fingerprint,
+    theirFp,
+  )
+    .then((key) => encryptDm(key, text))
+    .then((sealed) => {
+      const envelope = createEnvelope({
+        from: trysteroSelfId,
+        nick: identity.identity.nickname,
+        kind: 'dm',
+        to: peerId,
+        enc: true,
+        iv: sealed.iv,
+        body: sealed.payload,
+      })
+      safeSend(shared.actions.dm, envelope)
+      const nick = channel.peerNick !== '' ? channel.peerNick : peerId
+      useAppStore.getState().ensureDmChannel(peerId, nick, theirFp)
+      useAppStore.getState().appendDmMessage(peerId, {
+        id: envelope.id,
+        roomId: `dm:${peerId}`,
+        authorId: 'self',
+        authorNick: envelope.nick,
+        text,
+        ts: envelope.ts,
+        encrypted: false,
+        status: 'sent',
+        kind: 'user',
+      })
+      return envelope
+    })
+    .catch(() => null)
+}
+
+/** §7.1 — DM typing signal, directed at the peer and flagged `dm`. */
+export function sendDmTyping(peerId: string, on: boolean): void {
+  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
+  if (shared === undefined) return
+  safeSend(shared.actions.typing, { on, dm: true } satisfies TypingPayload, { target: peerId })
+}
+
 /** Flushes chat envelopes queued while the room had no DataChannel yet. */
 function flushPendingChats(connection: RoomInternals): void {
   const pending = connection.pendingChats
@@ -555,6 +713,7 @@ function createConnection(init: {
     actions,
     seenIds: new Set<string>(),
     peerKeys: new Map<string, Uint8Array>(),
+    peerKeyFps: new Map<string, string>(),
     announcedPeers: new Set<string>(),
     pendingChats: [],
     pendingReceipts: new Map<string, string[]>(),
@@ -567,9 +726,12 @@ function createConnection(init: {
     if (typeof payload?.nick !== 'string' || typeof payload?.fp !== 'string') {
       return
     }
-    useAppStore
-      .getState()
-      .updatePeer(connection.roomId, peerId, { nickname: payload.nick, fingerprint: payload.fp })
+    // The fingerprint derived from the peer's `keys` action is the trusted
+    // one (§9.1): a diverging presence fingerprint never overwrites it and
+    // nothing is logged (§7.3 silence).
+    const patch: Partial<Peer> = { nickname: payload.nick }
+    if (!connection.peerKeyFps.has(peerId)) patch.fingerprint = payload.fp
+    useAppStore.getState().updatePeer(connection.roomId, peerId, patch)
     // RF-06 — the first presence announcement of a peer becomes a discrete
     // system feed line; later ones are nickname changes and stay silent.
     if (!connection.announcedPeers.has(peerId) && payload.nick.trim() !== '') {
@@ -590,7 +752,13 @@ function createConnection(init: {
     void computeFingerprint(bytes).then((fingerprint) => {
       // The peer may have left while the hash was being computed.
       if (connection.peerKeys.has(peerId)) {
+        connection.peerKeyFps.set(peerId, fingerprint)
         useAppStore.getState().updatePeer(connection.roomId, peerId, { fingerprint })
+        // Refresh the DM header fingerprint of an existing channel (RF-04);
+        // channels are only created on demand (open/send/receive).
+        if (useAppStore.getState().dms[peerId] !== undefined) {
+          useAppStore.getState().ensureDmChannel(peerId, '', fingerprint)
+        }
       }
     })
   }
@@ -605,6 +773,12 @@ function createConnection(init: {
 
   actions.typing.onMessage = (payload, { peerId }) => {
     if (typeof payload?.on !== 'boolean') return
+    if (payload.dm === true) {
+      // M3 — directed DM typing (RF-04): lands on the channel, not the room.
+      useAppStore.getState().setDmTyping(peerId, payload.on ? Date.now() : null)
+      if (payload.on) ensureTypingSweeper(connection)
+      return
+    }
     if (payload.on) {
       useAppStore.getState().setTyping(connection.roomId, peerId, Date.now())
       ensureTypingSweeper(connection)
@@ -613,9 +787,11 @@ function createConnection(init: {
     }
   }
 
-  actions.receipt.onMessage = (payload) => {
+  actions.receipt.onMessage = (payload, { peerId }) => {
     if (!validateReceipt(payload)) return
     useAppStore.getState().markMessagesDelivered(connection.roomId, payload.ids)
+    // M3 — DM messages of the same author flip to ✓✓ too (RF-04).
+    useAppStore.getState().markDmMessagesDelivered(peerId, payload.ids)
   }
   actions.ping.onMessage = (payload, { peerId }) => {
     if (typeof payload?.t !== 'number' || !Number.isFinite(payload.t)) return
@@ -663,6 +839,8 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
     degraded: false,
   }
   useAppStore.getState().addPeer(connection.roomId, peer)
+  // M3 — the peer is (back) in a shared room: DM channels may go available.
+  refreshDmAvailability()
 }
 
 function handlePeerLeave(connection: RoomInternals, peerId: string): void {
@@ -674,9 +852,14 @@ function handlePeerLeave(connection: RoomInternals, peerId: string): void {
     appendSystemMessage(connection.roomId, leaveSystemLine(nickname))
   }
   connection.peerKeys.delete(peerId)
+  connection.peerKeyFps.delete(peerId)
   connection.announcedPeers.delete(peerId)
   useAppStore.getState().removePeer(connection.roomId, peerId)
   useAppStore.getState().setTyping(connection.roomId, peerId, null)
+  useAppStore.getState().setDmTyping(peerId, null)
+  // M3 — losing the last shared room flips the DM channel to disconnected;
+  // its history stays in memory until reload (RF-04).
+  refreshDmAvailability()
 
   if (
     useAppStore.getState().rooms[connection.roomId] !== undefined &&
@@ -733,13 +916,65 @@ function appendSystemMessage(roomId: string, text: string): void {
 function handleDmEnvelope(
   connection: RoomInternals,
   data: unknown,
-  _transportPeerId: string,
+  transportPeerId: string,
 ): void {
   const envelope = parseEnvelope(data)
   if (envelope === null || envelope.kind !== 'dm') return
   if (filterDmForSelf(envelope, trysteroSelfId) === null) return
   if (!shouldProcess(envelope, connection.seenIds)) return
-  // E2EE consumption lands in M3: addressed DMs are intentionally ignored.
+  if (!envelope.enc || envelope.iv === null) return
+
+  const identity = sessionIdentity
+  const peerRawKey = connection.peerKeys.get(transportPeerId)
+  // §9.2 — the sender's raw public key must be known; otherwise the payload
+  // is undecryptable and is discarded silently (§7.3).
+  if (identity === null || peerRawKey === undefined) return
+
+  const senderFp =
+    connection.peerKeyFps.get(transportPeerId) ?? null
+  void decryptDmEnvelope(connection, envelope, transportPeerId, peerRawKey, senderFp)
+}
+
+/** Async tail of the DM receive path: derive → decrypt → store. */
+async function decryptDmEnvelope(
+  connection: RoomInternals,
+  envelope: Envelope,
+  senderId: string,
+  peerRawKey: Uint8Array,
+  senderFp: string | null,
+): Promise<void> {
+  const identity = sessionIdentity
+  if (identity === null) return
+  const theirFp = senderFp ?? (await computeFingerprint(peerRawKey))
+  try {
+    const key = await getCachedDmKey(
+      identity.keypair.privateKey,
+      peerRawKey,
+      identity.identity.fingerprint,
+      theirFp,
+    )
+    const text = await decryptDm(key, { iv: envelope.iv ?? '', payload: envelope.body })
+    const state = useAppStore.getState()
+    state.ensureDmChannel(senderId, envelope.nick, theirFp)
+    state.appendDmMessage(senderId, {
+      id: envelope.id,
+      roomId: `dm:${senderId}`,
+      authorId: senderId,
+      authorNick: envelope.nick,
+      text,
+      ts: envelope.ts,
+      encrypted: false,
+      status: 'delivered',
+      kind: 'user',
+    })
+    refreshDmAvailability()
+    // §6.4/§7.1 — the DM answers with the same debounced directed receipt
+    // as a room chat message.
+    queueReceipt(connection, senderId, envelope.id)
+    emitDmReceived(senderId, envelope.nick, text)
+  } catch {
+    // Wrong key, tampered tag or malformed payload (§7.3): silent discard.
+  }
 }
 
 function setConnectionStatus(connection: RoomInternals, status: RoomStatus): void {
@@ -769,14 +1004,30 @@ function ensureTypingSweeper(connection: RoomInternals): void {
   if (connection.typingTimer !== null) return
   connection.typingTimer = setInterval(() => {
     pruneExpiredTyping(connection.roomId, Date.now())
+    pruneExpiredDmTyping(Date.now())
     const room = useAppStore.getState().rooms[connection.roomId]
-    if (room === undefined || Object.keys(room.typing).length === 0) {
-      if (connection.typingTimer !== null) {
-        clearInterval(connection.typingTimer)
-        connection.typingTimer = null
-      }
+    const dmTypingActive = Object.values(useAppStore.getState().dms).some(
+      (channel) => Object.keys(channel.typing).length > 0,
+    )
+    if (
+      (room === undefined || Object.keys(room.typing).length === 0) &&
+      !dmTypingActive &&
+      connection.typingTimer !== null
+    ) {
+      clearInterval(connection.typingTimer)
+      connection.typingTimer = null
     }
   }, 1_000)
+}
+
+/** RF-04 — DM typing entries expire after TYPING_TTL_MS like room ones. */
+export function pruneExpiredDmTyping(now: number): void {
+  for (const [peerId, channel] of Object.entries(useAppStore.getState().dms)) {
+    if (channel.typing[peerId] === undefined) continue
+    if (now - (channel.typing[peerId] as number) >= TYPING_TTL_MS) {
+      useAppStore.getState().setDmTyping(peerId, null)
+    }
+  }
 }
 
 function teardownConnection(connection: RoomInternals): void {
@@ -811,6 +1062,8 @@ export function resetManagerForTests(): void {
   connections.clear()
   pendingJoins.clear()
   pongListeners.clear()
+  dmListeners.clear()
+  clearDmKeyCache()
   sessionIdentity = null
   identityPromise = null
   useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS } })

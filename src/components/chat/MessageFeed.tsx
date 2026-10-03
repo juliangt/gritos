@@ -2,22 +2,27 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageItem } from './MessageItem'
 import { NewMessagesButton } from './NewMessagesButton'
 import { FIFO_SEPARATOR_TEXT, shouldAutoScroll } from '../../lib/feed'
-import type { Room } from '../../stores/useAppStore'
+import type { Message, Peer } from '../../stores/useAppStore'
 import { useMentionCandidates } from '../../hooks/useMentionCandidates'
 
 /**
- * Message feed (RF-03 / spec §10.4): flat bubbles with smart scrolling —
- * auto-scroll only while the user is ≤150 px from the bottom; otherwise a
- * floating '↓ N mensajes nuevos' button accumulates arrivals and jumps to
- * the bottom on click. The FIFO separator renders once the 500-message cap
- * has trimmed this room's history.
+ * Message feed (RF-03 / §10.4, reused by rooms and DMs per RF-04): flat
+ * bubbles with smart scrolling — auto-scroll only while the user is ≤150 px
+ * from the bottom; otherwise a floating '↓ N mensajes nuevos' button
+ * accumulates arrivals and jumps to the bottom on click. The FIFO separator
+ * renders once the 500-message cap has trimmed the history.
  */
-export function MessageFeed({ room }: { room: Room }) {
+export function MessageFeed(props: {
+  messages: readonly Message[]
+  peers: readonly Peer[]
+  fifoTrimmed: boolean
+  ariaLabel: string
+}) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
-  const previousLengthRef = useRef(room.messages.length)
+  const previousLengthRef = useRef(props.messages.length)
   const [newCount, setNewCount] = useState(0)
-  const mentionCandidates = useMentionCandidates(room.peers)
+  const mentionCandidates = useMentionCandidates(props.peers)
 
   const scrollToBottom = useCallback(() => {
     const element = scrollRef.current
@@ -26,15 +31,15 @@ export function MessageFeed({ room }: { room: Room }) {
 
   // Each message batch: auto-scroll when engaged, otherwise count up.
   useEffect(() => {
-    const delta = room.messages.length - previousLengthRef.current
-    previousLengthRef.current = room.messages.length
+    const delta = props.messages.length - previousLengthRef.current
+    previousLengthRef.current = props.messages.length
     if (delta <= 0) return
     if (atBottomRef.current) {
       scrollToBottom()
     } else {
       setNewCount((count) => count + delta)
     }
-  }, [room.messages.length, scrollToBottom])
+  }, [props.messages.length, scrollToBottom])
 
   const handleScroll = useCallback(() => {
     const element = scrollRef.current
@@ -57,17 +62,17 @@ export function MessageFeed({ room }: { room: Room }) {
         ref={scrollRef}
         onScroll={handleScroll}
         aria-live="polite"
-        aria-label={`Mensajes de #${room.name}`}
+        aria-label={props.ariaLabel}
         className="flex h-full flex-col gap-1 overflow-y-auto px-4 py-3"
       >
-        {room.fifoTrimmed && (
+        {props.fifoTrimmed && (
           <p className="my-1 text-center text-xs text-muted">{FIFO_SEPARATOR_TEXT}</p>
         )}
-        {room.messages.map((message) => (
+        {props.messages.map((message) => (
           <MessageItem
             key={message.id}
             message={message}
-            peers={room.peers}
+            peers={props.peers}
             mentionCandidates={mentionCandidates}
           />
         ))}

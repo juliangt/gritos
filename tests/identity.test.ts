@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   computeFingerprint,
   createSessionIdentity,
+  exportIdentityJwks,
   exportRawPublicKey,
   formatFingerprint,
   generateSessionKeypair,
+  hasIdentityJwks,
+  importIdentityKeypair,
+  regenerateIdentity,
 } from '../src/lib/crypto/identity'
 import { sha256Hex } from '../src/lib/crypto/hashes'
 
@@ -90,6 +94,66 @@ describe('createSessionIdentity', () => {
         public: session.keypair.publicKey,
       },
       session.keypair.privateKey,
+      256,
+    )
+    expect(bits.byteLength).toBe(32)
+  })
+})
+
+describe('JWK export/import roundtrip (spec §8.2 + §9.1)', () => {
+  it('re-imports the persisted JWK pair into the identical keypair', async () => {
+    const keypair = await generateSessionKeypair()
+    const rawBefore = await exportRawPublicKey(keypair.publicKey)
+    const { pubJwk, privJwk } = await exportIdentityJwks(keypair)
+
+    expect(pubJwk.kty).toBe('EC')
+    expect(pubJwk.crv).toBe('P-256')
+
+    const restored = await importIdentityKeypair(pubJwk, privJwk)
+    const rawAfter = await exportRawPublicKey(restored.publicKey)
+    expect(rawAfter).toEqual(rawBefore)
+
+    // The restored pair performs the same ECDH: identical derived bits.
+    const bitsBefore = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: keypair.publicKey },
+      keypair.privateKey,
+      256,
+    )
+    const bitsAfter = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: restored.publicKey },
+      restored.privateKey,
+      256,
+    )
+    expect(new Uint8Array(bitsAfter)).toEqual(new Uint8Array(bitsBefore))
+
+    // The fingerprint from the restored key matches the original.
+    expect(await computeFingerprint(rawAfter)).toBe(await computeFingerprint(rawBefore))
+  })
+
+  it('flags records with and without the JWK pair', () => {
+    expect(hasIdentityJwks({ pubJwk: { kty: 'EC' }, privJwk: { kty: 'EC' } })).toBe(true)
+    expect(
+      hasIdentityJwks({ nickname: 'x', fingerprint: 'fp', createdAt: 1 }),
+    ).toBe(false)
+    expect(hasIdentityJwks(null)).toBe(false)
+  })
+})
+
+describe('regenerateIdentity (RF-07 API, M3)', () => {
+  it('creates a different fingerprint and a fresh usable keypair', async () => {
+    const first = await createSessionIdentity('zorro-bravo')
+    const second = await regenerateIdentity('zorro-bravo')
+
+    expect(second.identity.nickname).toBe('zorro-bravo')
+    expect(second.identity.fingerprint).toMatch(FP_FORMAT)
+    expect(second.identity.fingerprint).not.toBe(first.identity.fingerprint)
+    expect(second.rawPublicKey).not.toEqual(first.rawPublicKey)
+    expect(second.identity.createdAt).toBeGreaterThanOrEqual(first.identity.createdAt)
+
+    // The regenerated keypair is a working ECDH pair.
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: second.keypair.publicKey },
+      second.keypair.privateKey,
       256,
     )
     expect(bits.byteLength).toBe(32)

@@ -2,14 +2,12 @@ import type { Identity } from '../../stores/useAppStore'
 import { sha256Hex } from './hashes'
 
 /**
- * Local identity — spec.md §9.1: ECDH P-256 keypair, raw 65-byte public key
- * hashed into a 4×4-hex fingerprint (TOFU verification in DMs).
- *
- * M2 scope: the keypair itself stays EPHEMERAL per browser session; what is
- * persisted under `gritos:identity` (§8.2) is the profile
- * `{nickname, fingerprint, createdAt}` so returning visitors skip
- * onboarding. The JWK pair (pubJwk/privJwk) and regeneration land in M3 —
- * the persisted shape is typed open for them below.
+ * Local identity — spec.md §9.1 + §8.2: ECDH P-256 keypair generated on the
+ * first run (or when regenerating), raw 65-byte public key hashed into a
+ * 4×4-hex fingerprint (TOFU verification in DMs). The JWK pair is persisted
+ * under `gritos:identity` as `{nickname, fingerprint, createdAt, pubJwk,
+ * privJwk}` so the same keypair survives reloads; identities persisted by
+ * M2 (profile only, no JWKs) are migrated in place preserving the nickname.
  */
 
 export const IDENTITY_STORAGE_KEY = 'gritos:identity'
@@ -25,15 +23,16 @@ export interface PersistedIdentity {
   nickname: string
   fingerprint: string
   createdAt: number
-  /** M3: exported JWKs (spec §8.2). Optional until DM crypto lands. */
+  /** JWK of the public key (spec §8.2). */
   pubJwk?: JsonWebKey
+  /** JWK of the private key (spec §8.2). */
   privJwk?: JsonWebKey
 }
 
 /**
  * Everything the session needs to announce itself: the store-facing
- * `Identity`, the keypair for M3's ECDH, and the raw 65-byte public key
- * that travels over the `keys` action.
+ * `Identity`, the keypair for ECDH, and the raw 65-byte public key that
+ * travels over the `keys` action.
  */
 export interface SessionIdentity {
   identity: Identity
@@ -41,12 +40,11 @@ export interface SessionIdentity {
   rawPublicKey: Uint8Array
 }
 
+const ECDH_ALG: EcKeyGenParams = { name: 'ECDH', namedCurve: 'P-256' }
+
 /** Generates the session ECDH P-256 keypair (spec §9.1). */
 export async function generateSessionKeypair(): Promise<IdentityKeypair> {
-  const keypair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
-    'deriveKey',
-    'deriveBits',
-  ])
+  const keypair = await crypto.subtle.generateKey(ECDH_ALG, true, ['deriveKey', 'deriveBits'])
   return keypair as IdentityKeypair
 }
 
@@ -54,6 +52,46 @@ export async function generateSessionKeypair(): Promise<IdentityKeypair> {
 export async function exportRawPublicKey(publicKey: CryptoKey): Promise<Uint8Array> {
   const raw = await crypto.subtle.exportKey('raw', publicKey)
   return new Uint8Array(raw)
+}
+
+/** Exports both keys as JWK for `gritos:identity` persistence (§8.2). */
+export async function exportIdentityJwks(
+  keypair: IdentityKeypair,
+): Promise<{ pubJwk: JsonWebKey; privJwk: JsonWebKey }> {
+  const [pubJwk, privJwk] = await Promise.all([
+    crypto.subtle.exportKey('jwk', keypair.publicKey),
+    crypto.subtle.exportKey('jwk', keypair.privateKey),
+  ])
+  return { pubJwk, privJwk }
+}
+
+/**
+ * Re-imports a persisted JWK pair into live CryptoKeys. The resulting
+ * keypair is bit-identical to the one exported: derive operations and the
+ * raw public key match the original session.
+ */
+export async function importIdentityKeypair(
+  pubJwk: JsonWebKey,
+  privJwk: JsonWebKey,
+): Promise<IdentityKeypair> {
+  const publicKey = await crypto.subtle.importKey('jwk', pubJwk, ECDH_ALG, true, [])
+  const privateKey = await crypto.subtle.importKey('jwk', privJwk, ECDH_ALG, true, [
+    'deriveKey',
+    'deriveBits',
+  ])
+  return { publicKey, privateKey } as IdentityKeypair
+}
+
+/** True when the persisted record already carries the JWK pair (§8.2). */
+export function hasIdentityJwks(
+  persisted: Partial<PersistedIdentity> | null,
+): persisted is PersistedIdentity & { pubJwk: JsonWebKey; privJwk: JsonWebKey } {
+  return (
+    persisted !== null &&
+    typeof persisted === 'object' &&
+    persisted.pubJwk !== undefined &&
+    persisted.privJwk !== undefined
+  )
 }
 
 /**
@@ -71,24 +109,34 @@ export async function computeFingerprint(rawPublicKey: Uint8Array): Promise<stri
   return formatFingerprint(await sha256Hex(rawPublicKey))
 }
 
-/** Builds the full ephemeral session identity (nickname included). */
+/**
+ * Builds a full identity from a fresh keypair: the fingerprint is always
+ * recomputed from the raw public key so the announced value matches the
+ * crypto material bit for bit.
+ */
 export async function createSessionIdentity(nickname: string): Promise<SessionIdentity> {
   const keypair = await generateSessionKeypair()
-  const rawPublicKey = await exportRawPublicKey(keypair.publicKey)
+  return attachRawKey({ nickname, keypair })
+}
+
+async function attachRawKey(params: {
+  nickname: string
+  keypair: IdentityKeypair
+}): Promise<SessionIdentity> {
+  const rawPublicKey = await exportRawPublicKey(params.keypair.publicKey)
   const fingerprint = await computeFingerprint(rawPublicKey)
   return {
-    identity: { nickname, fingerprint, createdAt: Date.now() },
-    keypair,
+    identity: { nickname: params.nickname, fingerprint, createdAt: Date.now() },
+    keypair: params.keypair,
     rawPublicKey,
   }
 }
 
 // ---------------------------------------------------------------------------
-// M2 persistence (profile only — §8.2). M3 extends the stored payload with
-// the JWK pair; the readers below already pass unknown fields through.
+// Persistence (§8.2 `gritos:identity`)
 // ---------------------------------------------------------------------------
 
-/** Writes the persisted profile under `gritos:identity` (§8.2, RF-01). */
+/** Writes the persisted identity under `gritos:identity` (§8.2, RF-01). */
 export function persistIdentity(identity: PersistedIdentity): void {
   if (typeof localStorage === 'undefined') return
   try {
@@ -99,7 +147,7 @@ export function persistIdentity(identity: PersistedIdentity): void {
 }
 
 /**
- * Restores the persisted profile, or null on first visit / corrupted
+ * Restores the persisted identity, or null on first visit / corrupted
  * payload (RF-01: no onboarding when a valid identity exists).
  */
 export function loadIdentity(): PersistedIdentity | null {
@@ -128,9 +176,69 @@ export function loadIdentity(): PersistedIdentity | null {
   }
 }
 
-/** M3 (RF-07) — regenerating changes the fingerprint and invalidates DM keys. */
-export async function regenerateIdentity(
-  _nickname: string,
-): Promise<{ identity: Identity; keypair: IdentityKeypair }> {
-  throw new Error('not implemented: identity regeneration lands in M3 (RF-07)')
+/**
+ * Restores a session identity from the persisted record (§8.2 → §9.1).
+ * With JWKs present the exact keypair is re-imported, so reloads keep the
+ * same fingerprint and ECDH material. Pre-M3 records (profile only) are
+ * migrated: a fresh keypair is generated, the fingerprint is recomputed
+ * from it and the record is re-persisted with the nickname/createdAt
+ * preserved. The returned `migrated` flag reports which path ran.
+ */
+export async function restoreSessionIdentity(
+  persisted: PersistedIdentity,
+): Promise<{ session: SessionIdentity; migrated: boolean }> {
+  if (hasIdentityJwks(persisted)) {
+    const keypair = await importIdentityKeypair(persisted.pubJwk, persisted.privJwk)
+    const rawPublicKey = await exportRawPublicKey(keypair.publicKey)
+    // Trust the key material: the fingerprint is recomputed from the raw
+    // public key so it can never drift from what peers will verify.
+    const fingerprint = await computeFingerprint(rawPublicKey)
+    return {
+      session: {
+        identity: {
+          nickname: persisted.nickname,
+          fingerprint,
+          createdAt: persisted.createdAt,
+        },
+        keypair,
+        rawPublicKey,
+      },
+      migrated: false,
+    }
+  }
+
+  // Migration from the M2 profile-only shape: keep nickname/createdAt, bind
+  // a real keypair, and re-persist the merged §8.2 record.
+  const session = await createSessionIdentity(persisted.nickname)
+  const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
+  persistIdentity({
+    nickname: persisted.nickname,
+    fingerprint: session.identity.fingerprint,
+    createdAt: persisted.createdAt,
+    pubJwk,
+    privJwk,
+  })
+  session.identity.createdAt = persisted.createdAt
+  return { session, migrated: true }
+}
+
+/**
+ * Regenerates the identity (RF-07 acceptance, UI wiring lands in M5): a new
+ * ECDH keypair with a new fingerprint is created, persisted under
+ * `gritos:identity` and returned. Call sites must also invalidate the
+ * per-session DM key cache (`clearDmKeyCache` in lib/crypto/dm.ts) and
+ * re-announce presence + keys — both are wiring concerns of the session
+ * layer, not of this module.
+ */
+export async function regenerateIdentity(nickname: string): Promise<SessionIdentity> {
+  const session = await createSessionIdentity(nickname)
+  const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
+  persistIdentity({
+    nickname: session.identity.nickname,
+    fingerprint: session.identity.fingerprint,
+    createdAt: session.identity.createdAt,
+    pubJwk,
+    privJwk,
+  })
+  return session
 }

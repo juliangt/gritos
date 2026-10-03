@@ -56,3 +56,18 @@ export function newMessagesButtonText(count: number): string {
   const noun = count === 1 ? 'mensaje nuevo' : 'mensajes nuevos'
   return `↓ ${count} ${noun}`
 }
+
+// ---------------------------------------------------------------------------
+// DM view texts (RF-04, exact spec wording)
+// ---------------------------------------------------------------------------
+
+/** RF-04 — header state when the peer shares no active room anymore. */
+export const DM_DISCONNECTED_TEXT = 'El par se ha desconectado'
+
+/** RF-04 — TOFU verification notice shown under the peer's fingerprint. */
+export const DM_VERIFY_NOTICE = 'Compáralo con tu interlocutor para verificar su identidad'
+
+/** Accessible label of the DM message feed. */
+export function dmFeedLabel(peerNick: string): string {
+  return `Mensajes directos con ${peerNick}`
+}

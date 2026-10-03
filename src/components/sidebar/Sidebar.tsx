@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { RoomList } from './RoomList'
 import { PeerList } from './PeerList'
+import { DmList } from './DmList'
 import { JoinRoomPopover } from './JoinRoomPopover'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
@@ -8,12 +9,14 @@ import { useRoomManager } from '../../hooks/useRoomManager'
 
 /**
  * Collapsible sidebar (spec §10.1): *Activas*, *Sugeridas*, *Recientes*
- * (RF-02), [+ Unirse] popover and the *Pares* section of the active view
- * (RF-06). Visibility/collapse is owned by the layout (desktop persistence
+ * (RF-02), [+ Unirse] popover, the *Pares* section of the active view
+ * (RF-06) and the *Mensajes directos* channels with their unread badges
+ * (RF-04). Visibility/collapse is owned by the layout (desktop persistence
  * under `gritos:ui`; mobile drawer), this component renders the content.
  */
 export function Sidebar(props: { onRoomOpened?: () => void }) {
   const rooms = useAppStore((state) => state.rooms)
+  const dms = useAppStore((state) => state.dms)
   const recentRooms = useAppStore((state) => state.recentRooms)
   const activeView = useAppStore((state) => state.activeView)
   const rememberRooms = useSettingsStore((state) => state.settings.rememberRooms)
@@ -23,12 +26,20 @@ export function Sidebar(props: { onRoomOpened?: () => void }) {
   const [joinError, setJoinError] = useState<string | null>(null)
 
   const roomList = Object.values(rooms)
+  const dmList = Object.values(dms)
   const activeRoomId =
     activeView?.kind === 'room' && rooms[activeView.id] !== undefined ? activeView.id : null
   const activeRoom = activeRoomId !== null ? rooms[activeRoomId] : null
+  const activeDmPeerId = activeView?.kind === 'dm' ? activeView.peerId : null
 
   const openRoom = (roomId: string) => {
     useAppStore.getState().setActiveView({ kind: 'room', id: roomId })
+    props.onRoomOpened?.()
+  }
+
+  const openDm = (peerId: string) => {
+    // setActiveView clears the channel's unread badge (RF-04).
+    useAppStore.getState().setActiveView({ kind: 'dm', peerId })
     props.onRoomOpened?.()
   }
 
@@ -86,6 +97,8 @@ export function Sidebar(props: { onRoomOpened?: () => void }) {
       </div>
 
       <PeerList room={activeRoom} />
+
+      <DmList channels={dmList} activePeerId={activeDmPeerId} onOpenDm={openDm} />
     </div>
   )
 }

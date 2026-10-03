@@ -53,8 +53,13 @@ export type PresencePayload = { nick: string; fp: string }
 /** §7.1 — raw ECDH P-256 public key, 65 bytes (spec §9.1). */
 export type KeysPayload = Uint8Array
 
-/** §7.1 — typing indicator. */
-export type TypingPayload = { on: boolean }
+/**
+ * §7.1 — typing indicator. M3 additive optional field `dm` (§7.3: unknown
+ * fields are ignored): when true the signal refers to the direct-message
+ * channel with the receiving peer and is sent directed; absent/false keeps
+ * the room-wide meaning.
+ */
+export type TypingPayload = { on: boolean; dm?: boolean }
 
 /** §7.1 — batched read receipts, max MAX_RECEIPT_BATCH ids. */
 export type ReceiptPayload = { ids: string[] }
