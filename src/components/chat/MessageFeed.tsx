@@ -26,7 +26,13 @@ export function MessageFeed(props: {
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
-  const previousLengthRef = useRef(props.messages.length)
+  const previousTailRef = useRef<{ length: number; firstId: string | null; lastId: string | null }>(
+    {
+      length: props.messages.length,
+      firstId: props.messages[0]?.id ?? null,
+      lastId: props.messages[props.messages.length - 1]?.id ?? null,
+    },
+  )
   const [newCount, setNewCount] = useState(0)
   // Fine slice selectors (M6, RNF-03): the own-nickname subscription lives
   // here — once per feed, never per message row.
@@ -38,17 +44,30 @@ export function MessageFeed(props: {
     if (element !== null) element.scrollTop = element.scrollHeight
   }, [])
 
-  // Each message batch: auto-scroll when engaged, otherwise count up.
+  // Each message batch: auto-scroll when engaged, otherwise count up. Past
+  // the 500-message FIFO cap the length no longer grows (one in, one out),
+  // so arrivals are also detected through the first/last id changing.
   useEffect(() => {
-    const delta = props.messages.length - previousLengthRef.current
-    previousLengthRef.current = props.messages.length
-    if (delta <= 0) return
+    const length = props.messages.length
+    const firstId = props.messages[0]?.id ?? null
+    const lastId = props.messages[length - 1]?.id ?? null
+    const previous = previousTailRef.current
+    previousTailRef.current = { length, firstId, lastId }
+
+    let arrivals: number
+    if (length === previous.length) {
+      if (firstId === previous.firstId && lastId === previous.lastId) return
+      arrivals = 1
+    } else {
+      arrivals = length - previous.length
+      if (arrivals <= 0) return
+    }
     if (atBottomRef.current) {
       scrollToBottom()
     } else {
-      setNewCount((count) => count + delta)
+      setNewCount((count) => count + arrivals)
     }
-  }, [props.messages.length, scrollToBottom])
+  }, [props.messages, scrollToBottom])
 
   const handleScroll = useCallback(() => {
     const element = scrollRef.current
