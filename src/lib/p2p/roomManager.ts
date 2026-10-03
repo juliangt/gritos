@@ -22,6 +22,7 @@ import {
   parseEnvelope,
   shouldProcess,
   validateReceipt,
+  MAX_RECEIPT_BATCH,
   type Envelope,
   type PingPayload,
   type PongPayload,
@@ -29,11 +30,9 @@ import {
   type ReceiptPayload,
   type TypingPayload,
 } from './protocol'
-import {
-  computeFingerprint,
-  createSessionIdentity,
-  type SessionIdentity,
-} from '../crypto/identity'
+import { computeFingerprint, createSessionIdentity, type SessionIdentity } from '../crypto/identity'
+import { pushRecentRoom, saveRecentRooms } from '../recentRooms'
+import { joinSystemLine, leaveSystemLine } from '../feed'
 
 /**
  * The single Trystero surface of the app (plan.md §3 architecture rules:
@@ -45,6 +44,10 @@ import {
  * dm/keys full crypto lands in M3: the actions are already registered,
  * received raw public keys are kept in memory per peer, and dm payloads are
  * protocol-filtered (foreign recipients discard) and then ignored until M3.
+ * M2 adds the outgoing chat path (sendChat with a local queue while the
+ * room is not connected, §10.3), debounced receipt batching (§7.1), the
+ * typing send, system feed lines for joins/leaves (RF-06) and the
+ * recent-rooms recording (§8.2 `gritos:rooms`).
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -61,6 +64,9 @@ export const ERROR_HEURISTIC_MS = 15_000
 
 /** RF-03 — a typing signal expires after 4 s. */
 export const TYPING_TTL_MS = 4_000
+
+/** §7.1 — receiver receipts are batched with this debounce before sending. */
+export const RECEIPT_DEBOUNCE_MS = 300
 
 /** Uncompressed ECDH P-256 public key: 0x04 ‖ X ‖ Y = 65 bytes (§9.1). */
 export const RAW_PUBLIC_KEY_LENGTH = 65
@@ -121,6 +127,13 @@ interface RoomInternals extends RoomConnection {
   readonly seenIds: Set<string>
   /** Raw ECDH public keys per peer, in memory only (consumed in M3). */
   readonly peerKeys: Map<string, Uint8Array>
+  /** Peers whose presence was already announced in the feed (join lines). */
+  readonly announcedPeers: Set<string>
+  /** Chat envelopes awaiting the first DataChannel (§10.3 local queue). */
+  pendingChats: Envelope[]
+  /** Receipt ids per author peerId, flushed debounced in ≤50 batches. */
+  readonly pendingReceipts: Map<string, string[]>
+  receiptTimer: ReturnType<typeof setTimeout> | null
   errorTimer: ReturnType<typeof setTimeout> | null
   typingTimer: ReturnType<typeof setInterval> | null
 }
@@ -151,25 +164,40 @@ let sessionIdentity: SessionIdentity | null = null
 let identityPromise: Promise<SessionIdentity> | null = null
 
 /**
- * Lazily creates the ephemeral session identity (M1 scope: no persistence).
- * Idempotent — StrictMode double-mounts and concurrent callers share the
- * same identity. An explicit nickname is honored on first creation.
+ * Lazily creates the ephemeral session identity (M2: keys stay ephemeral;
+ * the profile persists). Idempotent — StrictMode double-mounts and
+ * concurrent callers share the same identity. When the store already holds
+ * an identity (restored from `gritos:identity` by the onboarding/boot
+ * hooks), its nickname/fingerprint/createdAt are adopted so what is
+ * announced over the wire matches what the UI and localStorage hold.
  */
-export function ensureSessionIdentity(
-  nickname?: string,
-): Promise<SessionIdentity> {
+export function ensureSessionIdentity(nickname?: string): Promise<SessionIdentity> {
+  if (sessionIdentity !== null) return Promise.resolve(sessionIdentity)
   if (identityPromise === null) {
+    const storedIdentity = useAppStore.getState().identity
     const nick =
-      nickname !== undefined && nickname.trim() !== ''
-        ? nickname.trim()
-        : generateEphemeralNick()
+      storedIdentity?.nickname ??
+      (nickname !== undefined && nickname.trim() !== '' ? nickname.trim() : generateEphemeralNick())
     identityPromise = createSessionIdentity(nick).then((created) => {
-      sessionIdentity = created
-      useAppStore.getState().setIdentity(created.identity)
-      return created
+      const identity = storedIdentity ?? created.identity
+      sessionIdentity = { ...created, identity }
+      useAppStore.getState().setIdentity(identity)
+      return sessionIdentity
     })
   }
   return identityPromise
+}
+
+/**
+ * Installs a session identity created elsewhere (the onboarding screen
+ * creates one to persist its fingerprint). First writer wins: later calls
+ * no-op, keeping a single keypair per session.
+ */
+export function adoptSessionIdentity(session: SessionIdentity): void {
+  if (sessionIdentity !== null) return
+  sessionIdentity = session
+  identityPromise = Promise.resolve(session)
+  useAppStore.getState().setIdentity(session.identity)
 }
 
 /** Current session identity, or null before ensureSessionIdentity resolves. */
@@ -232,14 +260,34 @@ export function onPong(listener: PongListener): () => void {
 // Join / leave / reconnect
 // ---------------------------------------------------------------------------
 
-/** Errors surfaced as rejection reasons are RoomLimitError / RoomNameError. */
-export async function joinRoom(
-  name: string,
-  password?: string,
-): Promise<RoomConnection> {
-  const normalized = normalizeRoomName(name)
-  if (normalized === null) throw new RoomNameError(name)
+/** In-flight joins keyed by name+NUL+password — concurrent calls share one. */
+const pendingJoins = new Map<string, Promise<RoomConnection>>()
 
+/** RF-02 — records a joined room as recent (names only) when rememberRooms. */
+function recordRecentRoom(name: string): void {
+  if (!useSettingsStore.getState().settings.rememberRooms) return
+  const next = pushRecentRoom(useAppStore.getState().recentRooms, name)
+  useAppStore.getState().setRecentRooms(next)
+  saveRecentRooms(next)
+}
+
+/** Errors surfaced as rejection reasons are RoomLimitError / RoomNameError. */
+export function joinRoom(name: string, password?: string): Promise<RoomConnection> {
+  const normalized = normalizeRoomName(name)
+  if (normalized === null) {
+    return Promise.reject(new RoomNameError(name))
+  }
+  const key = `${normalized}\u0000${password ?? ''}`
+  const pending = pendingJoins.get(key)
+  if (pending !== undefined) return pending
+  const join = doJoinRoom(normalized, password).finally(() => {
+    pendingJoins.delete(key)
+  })
+  pendingJoins.set(key, join)
+  return join
+}
+
+async function doJoinRoom(normalized: string, password?: string): Promise<RoomConnection> {
   const settings = useSettingsStore.getState().settings
   if (connections.size >= settings.maxActiveRooms) {
     throw new RoomLimitError(settings.maxActiveRooms)
@@ -247,7 +295,10 @@ export async function joinRoom(
 
   const roomId = await deriveRoomId(normalized, password)
   const existing = connections.get(roomId)
-  if (existing !== undefined) return publicViewOf(existing)
+  if (existing !== undefined) {
+    recordRecentRoom(normalized)
+    return publicViewOf(existing)
+  }
 
   await ensureSessionIdentity()
 
@@ -281,8 +332,10 @@ export async function joinRoom(
     messages: [],
     typing: {},
     unread: 0,
+    fifoTrimmed: false,
   })
 
+  recordRecentRoom(normalized)
   return publicViewOf(connection)
 }
 
@@ -331,11 +384,34 @@ export function getPeerRawKey(roomId: string, peerId: string): Uint8Array | null
 }
 
 // ---------------------------------------------------------------------------
-// Debug-panel surface (removed in M6 — plan §4)
+// Outgoing chat / typing (RF-03) — used by ChatInput and the debug panel
 // ---------------------------------------------------------------------------
 
-/** Broadcasts a chat Envelope to the room and echoes it into the store. */
-export function sendTestChat(roomId: string, text: string): Envelope | null {
+/**
+ * Sends an action payload, swallowing rejections from channels that closed
+ * mid-flight (peers leaving while a batch flush is scheduled).
+ */
+function safeSend<T>(
+  action: { send: (data: T, options?: { target: string }) => Promise<void> },
+  data: T,
+  options?: { target: string },
+): void {
+  try {
+    void Promise.resolve(action.send(data, options)).catch(() => {
+      // Channel closed — nothing to report to the UI for best-effort sends.
+    })
+  } catch {
+    // Fake transports in tests may throw synchronously; same policy.
+  }
+}
+
+/**
+ * RF-03 — builds a chat Envelope, broadcasts it and echoes it into the
+ * store as an own 'sent' message. While the room is not connected
+ * (`searching`/`error`, §10.3) the envelope is queued locally and flushed
+ * on the first peer join, so the user can keep typing.
+ */
+export function sendChat(roomId: string, text: string): Envelope | null {
   const connection = connections.get(roomId)
   const identity = sessionIdentity
   if (connection === undefined || identity === null) return null
@@ -346,7 +422,11 @@ export function sendTestChat(roomId: string, text: string): Envelope | null {
     kind: 'chat',
     body: text.slice(0, MAX_PLAINTEXT_LENGTH),
   })
-  void connection.actions.chat.send(envelope)
+  if (connection.status !== 'connected') {
+    connection.pendingChats.push(envelope)
+  } else {
+    safeSend(connection.actions.chat, envelope)
+  }
   useAppStore.getState().appendMessage(roomId, {
     id: envelope.id,
     roomId,
@@ -358,6 +438,59 @@ export function sendTestChat(roomId: string, text: string): Envelope | null {
     status: 'sent',
   })
   return envelope
+}
+
+/** M1 debug-panel alias over the real send path (removed in M6). */
+export function sendTestChat(roomId: string, text: string): Envelope | null {
+  return sendChat(roomId, text)
+}
+
+/** §7.1 — typing indicator for the composing state of ChatInput. */
+export function sendTyping(roomId: string, on: boolean): void {
+  const connection = connections.get(roomId)
+  if (connection === undefined) return
+  safeSend(connection.actions.typing, { on } satisfies TypingPayload)
+}
+
+/** Flushes chat envelopes queued while the room had no DataChannel yet. */
+function flushPendingChats(connection: RoomInternals): void {
+  const pending = connection.pendingChats
+  connection.pendingChats = []
+  for (const envelope of pending) {
+    safeSend(connection.actions.chat, envelope)
+  }
+}
+
+/**
+ * §7.1 — queues a receipt id for `authorPeerId`. The flush is debounced
+ * (RECEIPT_DEBOUNCE_MS) and split into payloads of at most 50 ids.
+ */
+function queueReceipt(connection: RoomInternals, authorPeerId: string, messageId: string): void {
+  const ids = connection.pendingReceipts.get(authorPeerId)
+  if (ids === undefined) {
+    connection.pendingReceipts.set(authorPeerId, [messageId])
+  } else {
+    ids.push(messageId)
+  }
+  if (connection.receiptTimer === null) {
+    connection.receiptTimer = setTimeout(() => {
+      connection.receiptTimer = null
+      flushReceipts(connection)
+    }, RECEIPT_DEBOUNCE_MS)
+  }
+}
+
+/** Sends every pending receipt, chunked to MAX_RECEIPT_BATCH ids each. */
+function flushReceipts(connection: RoomInternals): void {
+  for (const [authorPeerId, ids] of [...connection.pendingReceipts]) {
+    connection.pendingReceipts.delete(authorPeerId)
+    while (ids.length > 0) {
+      const batch = ids.splice(0, MAX_RECEIPT_BATCH)
+      safeSend(connection.actions.receipt, { ids: batch } satisfies ReceiptPayload, {
+        target: authorPeerId,
+      })
+    }
+  }
 }
 
 /** Sends a directed latency probe (§7.1 ping). Used by the useLatency loop. */
@@ -422,6 +555,10 @@ function createConnection(init: {
     actions,
     seenIds: new Set<string>(),
     peerKeys: new Map<string, Uint8Array>(),
+    announcedPeers: new Set<string>(),
+    pendingChats: [],
+    pendingReceipts: new Map<string, string[]>(),
+    receiptTimer: null,
     errorTimer: null,
     typingTimer: null,
   }
@@ -433,16 +570,18 @@ function createConnection(init: {
     useAppStore
       .getState()
       .updatePeer(connection.roomId, peerId, { nickname: payload.nick, fingerprint: payload.fp })
+    // RF-06 — the first presence announcement of a peer becomes a discrete
+    // system feed line; later ones are nickname changes and stay silent.
+    if (!connection.announcedPeers.has(peerId) && payload.nick.trim() !== '') {
+      connection.announcedPeers.add(peerId)
+      appendSystemMessage(connection.roomId, joinSystemLine(payload.nick))
+    }
   }
 
   actions.keys.onMessage = (data, { peerId }) => {
     // Trystero delivers binary payloads as ArrayBuffers (or TypedArrays).
     const bytes =
-      data instanceof Uint8Array
-        ? data
-        : data instanceof ArrayBuffer
-          ? new Uint8Array(data)
-          : null
+      data instanceof Uint8Array ? data : data instanceof ArrayBuffer ? new Uint8Array(data) : null
     if (bytes === null) return
     if (isOversized(bytes.byteLength) || bytes.byteLength !== RAW_PUBLIC_KEY_LENGTH) {
       return
@@ -478,7 +617,6 @@ function createConnection(init: {
     if (!validateReceipt(payload)) return
     useAppStore.getState().markMessagesDelivered(connection.roomId, payload.ids)
   }
-
   actions.ping.onMessage = (payload, { peerId }) => {
     if (typeof payload?.t !== 'number' || !Number.isFinite(payload.t)) return
     void connection.actions.pong.send({ t: payload.t } satisfies PongPayload, {
@@ -504,6 +642,9 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
   // First peer activity disproves the tracker-dead heuristic (§10.3).
   disarmErrorHeuristic(connection)
   setConnectionStatus(connection, 'connected')
+  // §10.3 — messages typed while searching go out now that a DataChannel
+  // exists.
+  flushPendingChats(connection)
 
   const identity = sessionIdentity
   if (identity !== null) {
@@ -525,12 +666,22 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
 }
 
 function handlePeerLeave(connection: RoomInternals, peerId: string): void {
+  // RF-06 — the leave becomes a discrete system line with the last known
+  // nickname, before the peer entry is dropped.
+  const room = useAppStore.getState().rooms[connection.roomId]
+  const nickname = room?.peers.find((peer) => peer.id === peerId)?.nickname
+  if (nickname !== undefined && nickname.trim() !== '') {
+    appendSystemMessage(connection.roomId, leaveSystemLine(nickname))
+  }
   connection.peerKeys.delete(peerId)
+  connection.announcedPeers.delete(peerId)
   useAppStore.getState().removePeer(connection.roomId, peerId)
   useAppStore.getState().setTyping(connection.roomId, peerId, null)
 
-  const room = useAppStore.getState().rooms[connection.roomId]
-  if (room !== undefined && room.peers.length === 0) {
+  if (
+    useAppStore.getState().rooms[connection.roomId] !== undefined &&
+    (useAppStore.getState().rooms[connection.roomId]?.peers.length ?? 1) === 0
+  ) {
     // No DataChannel left: back to hunting (§10.3 searching).
     setConnectionStatus(connection, 'searching')
     armErrorHeuristic(connection)
@@ -556,14 +707,27 @@ function handleChatEnvelope(
     ts: envelope.ts,
     encrypted: false,
     status: 'delivered',
+    kind: 'user',
   }
   useAppStore.getState().appendMessage(connection.roomId, message)
 
-  // §6.4 step 2 — receipt directed to the author (batch of 1 ≤ 50).
-  void connection.actions.receipt.send(
-    { ids: [envelope.id] } satisfies ReceiptPayload,
-    { target: transportPeerId },
-  )
+  // §6.4 step 2 — receipt directed to the author (debounced, ≤50 ids).
+  queueReceipt(connection, transportPeerId, envelope.id)
+}
+
+/** Local-only feed line (RF-06): never sent over the wire, no dedup needed. */
+function appendSystemMessage(roomId: string, text: string): void {
+  useAppStore.getState().appendMessage(roomId, {
+    id: crypto.randomUUID(),
+    roomId,
+    authorId: 'system',
+    authorNick: '',
+    text,
+    ts: Date.now(),
+    encrypted: false,
+    status: 'delivered',
+    kind: 'system',
+  })
 }
 
 function handleDmEnvelope(
@@ -617,6 +781,12 @@ function ensureTypingSweeper(connection: RoomInternals): void {
 
 function teardownConnection(connection: RoomInternals): void {
   disarmErrorHeuristic(connection)
+  if (connection.receiptTimer !== null) {
+    clearTimeout(connection.receiptTimer)
+    connection.receiptTimer = null
+  }
+  connection.pendingReceipts.clear()
+  connection.pendingChats = []
   if (connection.typingTimer !== null) {
     clearInterval(connection.typingTimer)
     connection.typingTimer = null
@@ -639,6 +809,7 @@ export function resetManagerForTests(): void {
     }
   }
   connections.clear()
+  pendingJoins.clear()
   pongListeners.clear()
   sessionIdentity = null
   identityPromise = null
