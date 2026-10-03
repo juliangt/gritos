@@ -3,6 +3,10 @@ import * as manager from '../src/lib/p2p/roomManager'
 import { useAppStore } from '../src/stores/useAppStore'
 import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
 import {
+  base64ToBytes,
+  bytesToBase64,
+} from '../src/lib/crypto/dm'
+import {
   decryptRoomMessage,
   deriveRoomKey,
   encryptRoomMessage,
@@ -124,10 +128,11 @@ describe('encrypted chat flow (§6.4 step 4, §9.3)', () => {
     room.peerJoin('peer-a')
     const envelope = await sealFromA('mensaje cifrado de a')
     room.receive('chat', envelope, 'peer-a')
-    await flushCrypto()
+    // The receive tail awaits the connection's key promise + AES-GCM; poll
+    // instead of a fixed sleep so parallel PBKDF2 load cannot flake it.
+    await vi.waitFor(() => expect(storedRoom(roomId).messages).toHaveLength(1))
 
     const messages = storedRoom(roomId).messages
-    expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
       id: envelope.id,
       authorId: 'peer-a',
@@ -220,7 +225,7 @@ describe('undecryptable receives (RF-05 placeholder, §7.3)', () => {
     const { roomId, room } = await joinB()
     room.peerJoin('peer-a')
     const sealed = await encryptRoomMessage(await deriveRoomKey(PASSWORD, ROOM), 'original-privado')
-    const blob = Buffer.from(sealed.payload, 'base64')
+    const blob = base64ToBytes(sealed.payload)
     blob[blob.length - 1] ^= 0x01
     const envelope = createEnvelope({
       from: 'peer-a',
@@ -228,13 +233,13 @@ describe('undecryptable receives (RF-05 placeholder, §7.3)', () => {
       kind: 'chat',
       enc: true,
       iv: sealed.iv,
-      body: blob.toString('base64'),
+      body: bytesToBase64(blob),
     })
     room.receive('chat', envelope, 'peer-a')
-    await flushCrypto()
+    // Placeholder path is async too (failed open after the key resolved).
+    await vi.waitFor(() => expect(storedRoom(roomId).messages).toHaveLength(1))
 
     const messages = storedRoom(roomId).messages
-    expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
       id: envelope.id,
       authorId: 'peer-a',
