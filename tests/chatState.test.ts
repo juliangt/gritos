@@ -129,6 +129,44 @@ describe('FIFO cap + separator flag (RF-03)', () => {
   })
 })
 
+describe('arrival order + 2 s ts-window (spec §7.3)', () => {
+  const T0 = 1_760_000_000_000
+
+  it('orders received messages by ts inside the 2 s window', () => {
+    const a = userMessage({ id: 'a', ts: T0 })
+    const b = userMessage({ id: 'b', ts: T0 + 1_500 })
+    let acc = appendMessageCapped([], a)
+    acc = appendMessageCapped(acc, b) // arrival order while no inversion
+    expect(acc.map((message) => message.id)).toEqual(['a', 'b'])
+
+    // A straggler authored between them but arriving last lands by ts.
+    acc = appendMessageCapped(acc, userMessage({ id: 'late', ts: T0 + 200 }))
+    expect(acc.map((message) => message.id)).toEqual(['a', 'late', 'b'])
+  })
+
+  it('keeps pure arrival order beyond the 2 s window', () => {
+    let acc = appendMessageCapped([], userMessage({ id: 'a', ts: T0 }))
+    acc = appendMessageCapped(acc, userMessage({ id: 'late', ts: T0 - 2_500 }))
+    expect(acc.map((message) => message.id)).toEqual(['a', 'late'])
+  })
+
+  it('own echoes and system lines stay at the tail (barriers)', () => {
+    let acc = appendMessageCapped([], userMessage({ id: 'a', ts: T0 + 1_000 }))
+    acc = appendMessageCapped(
+      acc,
+      userMessage({ id: 'own', authorId: 'self', ts: T0 + 1_100 }),
+    )
+    // Older than everything, but it must not cross the own message.
+    acc = appendMessageCapped(acc, userMessage({ id: 'late', ts: T0 }))
+    expect(acc.map((message) => message.id)).toEqual(['a', 'own', 'late'])
+
+    const system = userMessage({ id: 'sys', authorId: 'system', kind: 'system', ts: T0 + 1_200 })
+    acc = appendMessageCapped(acc, system)
+    acc = appendMessageCapped(acc, userMessage({ id: 'late2', ts: T0 + 100 }))
+    expect(acc.map((message) => message.id)).toEqual(['a', 'own', 'late', 'sys', 'late2'])
+  })
+})
+
 describe('connection status texts (spec §10.3 exact)', () => {
   it('uses the exact spec strings', () => {
     expect(connectionStatusText('searching', 0)).toBe('Buscando pares en la red torrent…')

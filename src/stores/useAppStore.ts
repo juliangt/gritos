@@ -137,13 +137,42 @@ export const INITIAL_APP_STATE: AppState = {
 /** RF-03 — memory cap: at most the last 500 messages per room. */
 export const MESSAGE_CAP = 500
 
-/** Pure FIFO-cap append used by the store action (testable in isolation). */
+/**
+ * spec §7.3 — order: messages are shown in arrival order, but inside a 2 s
+ * window they are ordered by `ts`. A received message only walks back over
+ * recent USER messages; own echoes and local system lines stay at the tail
+ * (the user typed them there) and act as barriers.
+ */
+export const ARRIVAL_ORDER_WINDOW_MS = 2_000
+
+/**
+ * Pure FIFO-cap append used by the store action (testable in isolation).
+ * Implements the §7.3 order rule: plain append for own/system messages,
+ * ts-ordered insertion inside ARRIVAL_ORDER_WINDOW_MS for received ones.
+ */
 export function appendMessageCapped(
   messages: Message[],
   message: Message,
   cap: number = MESSAGE_CAP,
 ): Message[] {
-  const next = [...messages, message]
+  let index = messages.length
+  if (message.authorId !== 'self' && message.kind !== 'system') {
+    while (index > 0) {
+      const previous = messages[index - 1] as Message
+      if (
+        previous.kind !== 'user' ||
+        previous.authorId === 'self' ||
+        !(
+          message.ts < previous.ts &&
+          previous.ts - message.ts <= ARRIVAL_ORDER_WINDOW_MS
+        )
+      ) {
+        break
+      }
+      index -= 1
+    }
+  }
+  const next = [...messages.slice(0, index), message, ...messages.slice(index)]
   return next.length > cap ? next.slice(next.length - cap) : next
 }
 
