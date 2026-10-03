@@ -5,7 +5,8 @@ import { create } from 'zustand'
  *
  * Everything here lives in memory only. The sole persistence surface of v1
  * is the `gritos:*` keys in `localStorage` (spec §8.2); messages, presence,
- * typing and passwords are never persisted.
+ * typing and passwords are never persisted. M1 adds the actions that the
+ * RoomManager (lib/p2p) uses to wire P2P events into this state.
  */
 
 export type ThemeChoice = 'light' | 'dark' | 'system'
@@ -114,8 +115,167 @@ export const INITIAL_APP_STATE: AppState = {
   recentRooms: [],
 }
 
+/** RF-03 — memory cap: at most the last 500 messages per room. */
+export const MESSAGE_CAP = 500
+
+/** Pure FIFO-cap append used by the store action (testable in isolation). */
+export function appendMessageCapped(
+  messages: Message[],
+  message: Message,
+  cap: number = MESSAGE_CAP,
+): Message[] {
+  const next = [...messages, message]
+  return next.length > cap ? next.slice(next.length - cap) : next
+}
+
+/** spec §10.3 — exact connection status header texts. */
+export function roomStatusHeaderText(
+  status: RoomStatus,
+  peerCount: number,
+): string {
+  switch (status) {
+    case 'searching':
+      return 'Buscando pares en la red torrent…'
+    case 'connected':
+      return `Canal P2P establecido · ${peerCount} pares`
+    case 'error':
+      return 'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos'
+  }
+}
+
+/** RF-06 — latency dot: 🟢 <150 ms, 🟡 150–400 ms, 🔴 >400 ms, ⚪ sin datos/degradado. */
+export function latencyDot(latencyMs: number | null, degraded: boolean): string {
+  if (degraded || latencyMs === null) return '⚪'
+  if (latencyMs < 150) return '🟢'
+  if (latencyMs <= 400) return '🟡'
+  return '🔴'
+}
+
 /**
- * Ephemeral, memory-only app state. Actions are added by later milestones
- * (M1 wires the P2P events into it); M0 only establishes the typed shape.
+ * Actions used by the RoomManager to feed P2P events into the state.
+ * All updates are immutable; actions targeting an unknown room no-op so
+ * a leave/join race can never corrupt the state.
  */
-export const useAppStore = create<AppState>()(() => ({ ...INITIAL_APP_STATE }))
+export interface AppActions {
+  setIdentity: (identity: Identity) => void
+  setNickname: (nickname: string) => void
+  upsertRoom: (room: Room) => void
+  removeRoom: (roomId: string) => void
+  setRoomStatus: (roomId: string, status: RoomStatus) => void
+  addPeer: (roomId: string, peer: Peer) => void
+  updatePeer: (roomId: string, peerId: string, patch: Partial<Peer>) => void
+  removePeer: (roomId: string, peerId: string) => void
+  appendMessage: (roomId: string, message: Message) => void
+  markMessagesDelivered: (roomId: string, ids: string[]) => void
+  /** ts = null clears the peer's typing entry. */
+  setTyping: (roomId: string, peerId: string, ts: number | null) => void
+}
+
+export const useAppStore = create<AppState & AppActions>()((set) => ({
+  ...INITIAL_APP_STATE,
+
+  setIdentity: (identity) => set({ identity }),
+
+  setNickname: (nickname) =>
+    set((state) => ({
+      identity:
+        state.identity === null
+          ? null
+          : { ...state.identity, nickname },
+    })),
+
+  upsertRoom: (room) =>
+    set((state) => ({ rooms: { ...state.rooms, [room.id]: room } })),
+
+  removeRoom: (roomId) =>
+    set((state) => {
+      if (!(roomId in state.rooms)) return state
+      const rooms = { ...state.rooms }
+      delete rooms[roomId]
+      return { rooms }
+    }),
+
+  setRoomStatus: (roomId, status) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room || room.status === status) return state
+      return {
+        rooms: { ...state.rooms, [roomId]: { ...room, status } },
+      }
+    }),
+
+  addPeer: (roomId, peer) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room) return state
+      const peers = [...room.peers.filter((p) => p.id !== peer.id), peer]
+      return { rooms: { ...state.rooms, [roomId]: { ...room, peers } } }
+    }),
+
+  updatePeer: (roomId, peerId, patch) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room) return state
+      let changed = false
+      const peers = room.peers.map((peer) => {
+        if (peer.id !== peerId) return peer
+        changed = true
+        return { ...peer, ...patch }
+      })
+      return changed
+        ? { rooms: { ...state.rooms, [roomId]: { ...room, peers } } }
+        : state
+    }),
+
+  removePeer: (roomId, peerId) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room) return state
+      const peers = room.peers.filter((peer) => peer.id !== peerId)
+      if (peers.length === room.peers.length) return state
+      return { rooms: { ...state.rooms, [roomId]: { ...room, peers } } }
+    }),
+
+  appendMessage: (roomId, message) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room) return state
+      return {
+        rooms: {
+          ...state.rooms,
+          [roomId]: {
+            ...room,
+            messages: appendMessageCapped(room.messages, message),
+          },
+        },
+      }
+    }),
+
+  markMessagesDelivered: (roomId, ids) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room) return state
+      const idSet = new Set(ids)
+      let changed = false
+      const messages = room.messages.map((message) => {
+        if (message.authorId !== 'self' || !idSet.has(message.id)) return message
+        if (message.status === 'delivered') return message
+        changed = true
+        return { ...message, status: 'delivered' as const }
+      })
+      return changed
+        ? { rooms: { ...state.rooms, [roomId]: { ...room, messages } } }
+        : state
+    }),
+
+  setTyping: (roomId, peerId, ts) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room) return state
+      if (ts === null && !(peerId in room.typing)) return state
+      const typing = { ...room.typing }
+      if (ts === null) delete typing[peerId]
+      else typing[peerId] = ts
+      return { rooms: { ...state.rooms, [roomId]: { ...room, typing } } }
+    }),
+}))
