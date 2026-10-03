@@ -39,3 +39,16 @@ Fill in Pass/Fail and the browser used during manual execution.
 | M2-20 | Keep the two tabs talking past 500 messages in one room | The feed keeps the newest 500 and shows the "— mensajes anteriores descartados —" separator at the top | | |
 | M2-21 | Scroll up in a busy room and wait for new messages | No forced auto-scroll; a floating "↓ N mensajes nuevos" button appears, jumps to the bottom and clears on click | | |
 | M2-22 | Open the app with `?debug` | The M1 debug panel renders below the chat shell; without the flag it stays hidden | | |
+| M3-1 | Reload the app with an M2 `gritos:identity` (profile only, no JWKs) | Onboarding is skipped; the record is migrated in place: nickname preserved, a real ECDH keypair is bound and `pubJwk`/`privJwk` appear under `gritos:identity` | | |
+| M3-2 | Reload the app again after entering (identity with JWKs) | The same keypair is restored: the fingerprint shown matches the pre-reload one; no onboarding | | |
+| M3-3 | Peer menu (click a peer in Pares) | Menu shows "Mensaje directo" (enabled) and "Copiar fingerprint"; it closes on Esc, on an outside click and after any action | | |
+| M3-4 | Choose "Mensaje directo" | The DM view opens: header shows the peer nickname, its fingerprint in 4×4 groups, the notice "Compáralo con tu interlocutor para verificar su identidad" and the "1 par" state; the feed, typing bar and composer are the room components | | |
+| M3-5 | E2EE DM between 2 tabs sharing #lobby: send messages both ways | Both tabs decrypt and show the messages; own messages show ✓ then ✓✓ after the peer's receipt | | |
+| M3-6 | Third tab in the same room inspects the `dm` envelope in DevTools (WebRTC data / payload) | The `body` is base64 ciphertext (no plaintext); the third tab shows no DM content anywhere in its UI | | |
+| M3-7 | Compare the fingerprint in the header on both ends of the DM | Both ends show the identical 4×4 fingerprint for the same peer | | |
+| M3-8 | Tab B types in the DM while tab A watches | A shows "zorro-bravo está escribiendo…" in the DM view only; it disappears 4 s after B stops; the shared room's typing line is unaffected | | |
+| M3-9 | With tab A in another view (or another room), tab B sends a DM | A's sidebar "Mensajes directos" section shows the channel with an unread badge; opening it clears the badge and shows the history | | |
+| M3-10 | Close tab B entirely (peer leaves the last shared room) | Tab A's DM header and composer switch to "El par se ha desconectado"; the composer (textarea + Enviar) is disabled; the history remains visible in memory | | |
+| M3-11 | While disconnected, try to type/send in the DM | Input and button are blocked; sending is impossible until the peer re-joins a shared room (then the header returns to "1 par") | | |
+| M3-12 | With the tab hidden (background) and permission already granted, receive a DM | An OS notification "gritos — DM de <nick>" with body "<nick>: <text>" appears; clicking it focuses the tab and opens that DM view (no permission prompt is ever shown in M3) | | |
+| M3-13 | Send a DM of more than 4000 characters | The composer counter appears from 3800 and sending stays blocked above 4000; nothing is sent | | |
