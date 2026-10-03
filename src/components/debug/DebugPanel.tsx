@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import {
+  connectionStatusText,
   latencyDot,
-  roomStatusHeaderText,
   useAppStore,
 } from '../../stores/useAppStore'
 import { getSelfPeerId } from '../../lib/p2p/roomManager'
@@ -147,7 +147,7 @@ function DebugRoom(props: {
           {room.hasPassword ? ' 🔒' : ''}
         </h3>
         <span className="text-muted">
-          {roomStatusHeaderText(room.status, room.peers.length)}
+          {connectionStatusText(room.status, room.peers.length)}
         </span>
         <span className="ml-auto flex gap-2">
           <button
