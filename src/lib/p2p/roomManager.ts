@@ -31,6 +31,7 @@ import {
 } from './protocol'
 import { computeFingerprint, createSessionIdentity, loadIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
 import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
+import { mentionsNickname } from '../markdown/parse'
 import {
   decryptRoomMessage,
   deriveRoomKey,
@@ -583,6 +584,39 @@ function refreshDmAvailability(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Mention seam (RF-09, M5) — used by useNotifications
+// ---------------------------------------------------------------------------
+
+export type MentionReceivedListener = (
+  roomId: string,
+  roomName: string,
+  nick: string,
+  text: string,
+) => void
+
+const mentionListeners = new Set<MentionReceivedListener>()
+
+/** Subscribes to room messages that mention the own nickname (RF-09). */
+export function onMentionReceived(listener: MentionReceivedListener): () => void {
+  mentionListeners.add(listener)
+  return () => {
+    mentionListeners.delete(listener)
+  }
+}
+
+/** Fires the mention seam for every listener (gating lives in the hook). */
+function emitMentionReceived(
+  roomId: string,
+  roomName: string,
+  nick: string,
+  text: string,
+): void {
+  for (const listener of mentionListeners) {
+    listener(roomId, roomName, nick, text)
+  }
+}
+
 /** Nickname of a connected peer from any shared room's entry, when present. */
 function peerNicknameOf(peerId: string): { nickname: string; fingerprint: string | null } | null {
   for (const room of Object.values(useAppStore.getState().rooms)) {
@@ -978,6 +1012,13 @@ function appendRoomChat(
     status: 'delivered',
     kind: 'user',
   })
+  // RF-09 — a received message mentioning the own nickname surfaces through
+  // the mention seam (the notifications hook applies the hidden/settings/
+  // permission gate). Encrypted placeholders can never match a nickname.
+  const ownNick = sessionIdentity?.identity.nickname
+  if (ownNick !== undefined && !encrypted && mentionsNickname(text, ownNick)) {
+    emitMentionReceived(connection.roomId, connection.name, envelope.nick, text)
+  }
 }
 
 /**
@@ -1174,6 +1215,7 @@ export function resetManagerForTests(): void {
   pendingJoins.clear()
   pongListeners.clear()
   dmListeners.clear()
+  mentionListeners.clear()
   clearDmKeyCache()
   sessionIdentity = null
   identityPromise = null

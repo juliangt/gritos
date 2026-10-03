@@ -89,6 +89,17 @@ export function parseInline(text: string, mentions: readonly string[] = []): Inl
   return tokens
 }
 
+/**
+ * RF-09 helper on top of the M2 mention matcher: true when `text` contains
+ * an `@nickname` mention (case-insensitive, word boundary — same rules the
+ * renderer highlights with). Used by the desktop-notification gate.
+ */
+export function mentionsNickname(text: string, nickname: string): boolean {
+  const nick = nickname.trim()
+  if (nick === '') return false
+  return parseInline(text, [nick]).some((token) => token.type === 'mention')
+}
+
 const FENCE_MARKER = '```'
 
 /**
