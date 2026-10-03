@@ -29,8 +29,9 @@ import {
   type ReceiptPayload,
   type TypingPayload,
 } from './protocol'
-import { computeFingerprint, createSessionIdentity, loadIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
+import { computeFingerprint, createSessionIdentity, loadIdentity, persistIdentity, regenerateIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
 import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
+import { mentionsNickname } from '../markdown/parse'
 import {
   decryptRoomMessage,
   deriveRoomKey,
@@ -258,9 +259,46 @@ export function getSessionIdentity(): SessionIdentity | null {
   return sessionIdentity
 }
 
+/**
+ * RF-07 (M5) — regenerates the cryptographic identity: a new ECDH keypair
+ * is created and persisted under `gritos:identity` (same nickname), the DM
+ * key cache is dropped (old keys no longer match), the store is updated and
+ * presence + keys are re-announced to every peer of every active room.
+ * Returns the new session, or null when there was no session identity yet.
+ */
+export async function regenerateSessionIdentity(): Promise<SessionIdentity | null> {
+  const current = sessionIdentity
+  if (current === null) return null
+  const nickname = current.identity.nickname
+  const session = await regenerateIdentity(nickname)
+  sessionIdentity = session
+  identityPromise = Promise.resolve(session)
+  clearDmKeyCache()
+  useAppStore.getState().setIdentity(session.identity)
+  broadcastPresence()
+  // The `keys` action carries the new public key to every peer we know of.
+  for (const connection of connections.values()) {
+    for (const peerId of connection.peerKeys.keys()) {
+      void connection.actions.keys.send(session.rawPublicKey, { target: peerId })
+    }
+  }
+  return session
+}
+
 function generateEphemeralNick(): string {
   const random = crypto.getRandomValues(new Uint32Array(1))[0]
   return `par-${(random % 0xffff).toString(16).padStart(4, '0')}`
+}
+
+/**
+ * Re-persists the §8.2 identity record with a new nickname, keeping the
+ * keypair material untouched (M5: nickname changes survive reloads).
+ */
+function repersistNickname(nickname: string): void {
+  const persisted = loadIdentity()
+  if (persisted !== null) {
+    persistIdentity({ ...persisted, nickname })
+  }
 }
 
 /** RF-01 — nickname changes are announced to every peer of every room. */
@@ -277,6 +315,7 @@ export function setNickname(nickname: string): void {
     identity: { ...sessionIdentity.identity, nickname: nick },
   }
   useAppStore.getState().setIdentity(sessionIdentity.identity)
+  repersistNickname(nick)
   broadcastPresence()
 }
 
@@ -580,6 +619,39 @@ function refreshDmAvailability(): void {
   for (const [peerId, channel] of Object.entries(state.dms)) {
     const available = connected.has(peerId)
     if (available !== channel.available) state.setDmAvailable(peerId, available)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mention seam (RF-09, M5) — used by useNotifications
+// ---------------------------------------------------------------------------
+
+export type MentionReceivedListener = (
+  roomId: string,
+  roomName: string,
+  nick: string,
+  text: string,
+) => void
+
+const mentionListeners = new Set<MentionReceivedListener>()
+
+/** Subscribes to room messages that mention the own nickname (RF-09). */
+export function onMentionReceived(listener: MentionReceivedListener): () => void {
+  mentionListeners.add(listener)
+  return () => {
+    mentionListeners.delete(listener)
+  }
+}
+
+/** Fires the mention seam for every listener (gating lives in the hook). */
+function emitMentionReceived(
+  roomId: string,
+  roomName: string,
+  nick: string,
+  text: string,
+): void {
+  for (const listener of mentionListeners) {
+    listener(roomId, roomName, nick, text)
   }
 }
 
@@ -978,6 +1050,13 @@ function appendRoomChat(
     status: 'delivered',
     kind: 'user',
   })
+  // RF-09 — a received message mentioning the own nickname surfaces through
+  // the mention seam (the notifications hook applies the hidden/settings/
+  // permission gate). Encrypted placeholders can never match a nickname.
+  const ownNick = sessionIdentity?.identity.nickname
+  if (ownNick !== undefined && !encrypted && mentionsNickname(text, ownNick)) {
+    emitMentionReceived(connection.roomId, connection.name, envelope.nick, text)
+  }
 }
 
 /**
@@ -1174,9 +1253,39 @@ export function resetManagerForTests(): void {
   pendingJoins.clear()
   pongListeners.clear()
   dmListeners.clear()
+  mentionListeners.clear()
   clearDmKeyCache()
   sessionIdentity = null
   identityPromise = null
   useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS } })
   useAppStore.setState({ ...INITIAL_APP_STATE })
+}
+
+// ---------------------------------------------------------------------------
+// Panic path (RF-08) — used by lib/panic.ts
+// ---------------------------------------------------------------------------
+
+/**
+ * RF-08 — synchronously tears down every connection (WebRTC meshes closed
+ * via `leave`, timers freed, room keys discarded) and clears the manager's
+ * join bookkeeping. Best-effort: a fake/real transport that throws on leave
+ * never blocks the wipe.
+ */
+export function abortAllRooms(): void {
+  for (const connection of connections.values()) {
+    teardownConnection(connection)
+    try {
+      void connection.trystero.leave()
+    } catch {
+      // Nothing to clean up beyond the teardown itself.
+    }
+  }
+  connections.clear()
+  pendingJoins.clear()
+}
+
+/** RF-08 — drops the in-memory session identity (its keys are wiped). */
+export function resetSessionIdentity(): void {
+  sessionIdentity = null
+  identityPromise = null
 }

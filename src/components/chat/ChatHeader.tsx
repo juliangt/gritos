@@ -8,8 +8,7 @@ import { SettingsModal } from '../settings/SettingsModal'
  * Main-area header (spec §10.1/§10.3): '#name' with the 🔒 marker, the
  * exact connection status text (RF-05: a password room that exhausts the
  * heuristic without peers shows the single not-found message), peer count,
- * the sidebar toggle and the settings entry — an M2 stub modal; the full
- * modal (RF-07) lands in M5.
+ * the sidebar toggle and the settings entry (RF-07 modal).
  */
 export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
