@@ -7,6 +7,23 @@
 /** RF-03 — separator shown when the 500-message cap has trimmed history. */
 export const FIFO_SEPARATOR_TEXT = '— mensajes anteriores descartados —'
 
+// ---------------------------------------------------------------------------
+// Empty states (M6, spec §10.4 — discrete, Spanish)
+// ---------------------------------------------------------------------------
+
+/** Empty room feed: invites sharing the room name (RF-02). */
+export const EMPTY_ROOM_FEED_TEXT = 'Comparte el nombre de la sala para que otros se unan.'
+
+/** Empty DM feed (RF-04): the conversation exists but has no messages yet. */
+export const EMPTY_DM_FEED_TEXT = 'Todavía no hay mensajes. Escribe el primero.'
+
+/** Empty *Mensajes directos* section (RF-04): no open DM channels. */
+export const EMPTY_DM_LIST_TEXT =
+  'Aún no hay mensajes directos. Abre el menú de un par para iniciar una conversación cifrada.'
+
+/** Empty *Recientes* section (RF-02): nothing remembered yet. */
+export const EMPTY_RECENTS_TEXT = 'Sin salas recientes todavía.'
+
 /** RF-03 — auto-scroll only when the user is at most this far from the bottom. */
 export const SMART_SCROLL_THRESHOLD_PX = 150
 

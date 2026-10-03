@@ -79,3 +79,43 @@ Fill in Pass/Fail and the browser used during manual execution.
 | M5-19 | Cancel the panic dialog at either step | Nothing is deleted: identity, settings and rooms remain intact | | |
 | M5-20 | After exercising settings, identity, rooms and UI, inspect Application → Local Storage | Exactly the four keys `gritos:settings`, `gritos:identity`, `gritos:rooms`, `gritos:ui`; no message content, password or DM key material anywhere | | |
 | M5-21 | Reconnect a password room after changing network settings ("Reconectar todo") | The room re-joins with the new config and chat stays encrypted end-to-end (payload still `enc:true`, illegible in DevTools) | | |
+| M6-1 | Open the app with and without the `?debug` query flag | With the flag the M1 debug panel renders below the shell; without it nothing debug-related renders; no debug code paths run in normal use | | |
+| M6-2 | Enter a fresh room (empty feed), with no DM channels and with `Recientes` empty | Discrete Spanish empty states: feed "Comparte el nombre de la sala para que otros se unan."; "Aún no hay mensajes directos…" under Mensajes directos; "Sin salas recientes todavía." under Recientes; Pares keeps "Sin pares aún. Comparte el nombre de la sala…" | | |
+| M6-3 | Tab through onboarding → shell → sidebar → composer with the keyboard only | Every interactive element shows a visible accent focus ring (`:focus-visible`); sidebar order follows the visual order; the ✕ leave button becomes visible when keyboard-focused | | |
+| M6-4 | Inspect the feed and sidebar sections (DevTools → Elements, or with a screen reader) | Feed container is `role="log"` with `aria-live="polite"`; Activas/Sugeridas/Recientes/Pares/DMs render as semantic lists (`ul`/`li`) | | |
+| M6-5 | Open and dismiss each floating surface: settings modal, confirm dialogs, join popover, peer menu, mobile drawer | Every one closes with Esc (modals also on backdrop/✕ and restore focus to the opener); the join popover dismisses on Esc | | |
+| M6-6 | Check muted/accent text in BOTH themes (light `#6f6a65`, dark `#a8a29e` tokens) | Muted text ≥ 4.5:1 (light ≈ 5.1:1 on bg/surface, dark ≈ 6.9:1); accent error text ≥ 4.5:1 in both themes | | |
+| M6-7 | At a ≤768 px viewport (e.g. 375×667): open/close the drawer, send a message, open a DM | Sidebar is an overlay drawer with backdrop (backdrop click, Esc, room selection close it); composer fully usable; header compact with ☰ and ⚙ reachable | | |
+| M6-8 | Busy room (~15 peers, long history): watch rendering while messages append | Only the new message row re-renders (MessageItem memoized with stable props; no per-row store subscriptions); interaction stays smooth | | |
+| M6-9 | `npm run build && npm run preview`, open the page and watch the console | CSP meta present; ZERO CSP violations reported; the anti-flash theme script still applies the persisted theme (hash-pinned inline script); title "gritos — chat p2p sin servidor" and `color-scheme` meta present (verified in Chromium 143 headless: 0 console messages, 0 violations) | | |
+| M6-10 | Force the tracker-error state (block wss:// traffic / offline after join) in any active room | Non-blocking banner at the top of the chat area: "Sin acceso a trackers — revisa tu conexión o configura trackers alternativos" with "Abrir ajustes" (opens Ajustes on the Red tab) and a ✕ dismiss; the banner returns when ANOTHER room errors or the same room errors again after recovering | | |
+| M6-11 | Run the whole M6 full pass below against the PRODUCTION build served by `npm run preview` | Everything below behaves identically on the bundle in `dist/` | | |
+
+## M6 full pass — master checklist (plan §7)
+
+Consolidated acceptance checklist for v1.0.0. Execute in ≥2 tabs (two peer
+pairs); where noted, in 2 different browsers (e.g. Chrome + Firefox). Items
+not executed automatically are left unchecked for the release manager.
+
+| # | Check | Pass/Fail | Browser(s) |
+|---|-------|-----------|------------|
+| 1 | First visit → onboarding → auto-join `#lobby` (with and without `autoJoinLobby`) | | |
+| 2 | 2 tabs in `#lobby`: mutual presence, latency dots, `connected` status | | |
+| 3 | Message with the full Markdown subset + mention renders correctly on the receiver | | |
+| 4 | Typing indicator visible; expires after 4 s | | |
+| 5 | Receipts ✓ → ✓✓ | | |
+| 6 | Scroll: long history, auto-scroll only near bottom, "N mensajes nuevos" button | | |
+| 7 | 3 simultaneous active rooms (cap 4): cross-room messages, per-room unread, view switching without reconnects | | |
+| 8 | Joining a 5th room is rejected with the exact cap message | | |
+| 9 | E2EE DM between 2 tabs; a third tab cannot decrypt | | |
+| 10 | Fingerprint identical on both ends of the DM | | |
+| 11 | Password room: 2 clients join, ciphertext illegible in DevTools, third client cannot find the room | | |
+| 12 | Reload in a password room asks for the password again | | |
+| 13 | Custom trackers visible on reconnect (DevTools → Network); custom STUN applied (about:webrtc / chrome://webrtc-internals) | | |
+| 14 | Mention and DM notifications with hidden tab; click focuses and navigates to the origin | | |
+| 15 | Light/dark/system theme switches live, no flash on load | | |
+| 16 | Panic button empties `localStorage` and lands on the clean onboarding | | |
+| 17 | Regenerating the identity changes the fingerprint and re-announces it | | |
+| 18 | Abrupt tab close: the rest mark it disconnected in <10 s | | |
+| 19 | Mobile (viewport ≤768 px): drawer, message sending, DM | | |
+| 20 | `npm run build` + `preview`: all of the above against the production bundle | | |

@@ -64,7 +64,8 @@ function rowsToSettings(rows: readonly IceRow[]): RTCIceServer[] {
 }
 
 export function NetworkTab() {
-  const { settings, setSettings } = useSettingsStore()
+  const settings = useSettingsStore((state) => state.settings)
+  const setSettings = useSettingsStore((state) => state.setSettings)
   // Never bootstraps an identity; reconnect-all acts on the session only.
   const { reconnectAll } = useRoomManager({ ensureIdentity: false })
 
@@ -162,7 +163,7 @@ export function NetworkTab() {
               aria-label={`Tracker ${index + 1}`}
               aria-invalid={url.trim() !== '' && !isValidTrackerUrl(url)}
               onChange={(event) => updateTrackerRow(index, event.target.value)}
-              className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-accent"
+              className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs focus:border-accent"
             />
             <button
               type="button"
@@ -216,7 +217,7 @@ export function NetworkTab() {
                 aria-label={`URL del servidor ICE ${index + 1}`}
                 aria-invalid={row.url.trim() !== '' && !isValidIceUrl(row.url)}
                 onChange={(event) => updateIceRow(index, { url: event.target.value })}
-                className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-accent"
+                className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs focus:border-accent"
               />
               <button
                 type="button"
@@ -237,7 +238,7 @@ export function NetworkTab() {
                   aria-label={`Usuario TURN ${index + 1}`}
                   autoComplete="off"
                   onChange={(event) => updateIceRow(index, { username: event.target.value })}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-accent"
+                  className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs focus:border-accent"
                 />
                 <input
                   type="password"
@@ -246,7 +247,7 @@ export function NetworkTab() {
                   aria-label={`Contraseña TURN ${index + 1}`}
                   autoComplete="new-password"
                   onChange={(event) => updateIceRow(index, { credential: event.target.value })}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-accent"
+                  className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs focus:border-accent"
                 />
               </div>
             )}
@@ -279,7 +280,7 @@ export function NetworkTab() {
           aria-invalid={maxRoomsError !== null}
           onChange={(event) => updateMaxRooms(event.target.value)}
           onBlur={blurMaxRooms}
-          className="w-24 rounded-md border border-border bg-surface px-2 py-1 text-sm outline-none focus:border-accent"
+          className="w-24 rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-accent"
         />
         {maxRoomsError !== null && (
           <p role="alert" className="text-xs text-accent">

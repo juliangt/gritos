@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   EMPTY_ROOM_PASSWORD_TEXT,
   ENCRYPTED_ROOM_HINT,
@@ -16,7 +16,8 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * surface the exact manager message "Límite de salas activas alcanzado (N)".
  * A wrong password is NOT a join error: the room simply never finds peers,
  * and the not-found message appears in the room view once the error
- * heuristic exhausts (lib/rooms roomStatusText).
+ * heuristic exhausts (lib/rooms roomStatusText). Esc dismisses the popover
+ * when an onDismiss handler exists (RNF-05).
  */
 export function JoinRoomPopover(props: {
   onJoined: (roomId: string) => void
@@ -28,6 +29,18 @@ export function JoinRoomPopover(props: {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const { joinRoomFocused } = useRoomManager()
+
+  const onDismiss = props.onDismiss
+  // RNF-05 — Esc closes the popover (the Modal, the peer menu and the mobile
+  // drawer cover the rest of the floating surfaces).
+  useEffect(() => {
+    if (onDismiss === undefined) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDismiss()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onDismiss])
 
   // Live normalization preview: '#mi-sala' while typing, '—' when invalid.
   const normalized = normalizeRoomName(name)
@@ -72,7 +85,7 @@ export function JoinRoomPopover(props: {
           setName(event.target.value)
           setError(null)
         }}
-        className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent"
+        className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm focus:border-accent"
       />
       {name.trim() !== '' && (
         <p className="text-xs text-muted">
@@ -104,7 +117,7 @@ export function JoinRoomPopover(props: {
               setPassword(event.target.value)
               setError(null)
             }}
-            className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent"
+            className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm focus:border-accent"
           />
           <p className="text-xs text-muted">{ENCRYPTED_ROOM_HINT}</p>
         </>

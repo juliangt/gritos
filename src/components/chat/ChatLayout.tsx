@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Sidebar } from '../sidebar/Sidebar'
 import { ChatHeader } from './ChatHeader'
 import { MessageFeed } from './MessageFeed'
 import { TypingBar } from './TypingBar'
 import { ChatInput } from './ChatInput'
+import { NetworkErrorBanner } from './NetworkErrorBanner'
 import { DmHeader } from '../dm/DmHeader'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
@@ -11,7 +12,7 @@ import { useUiStore } from '../../stores/useUiStore'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useLatency } from '../../hooks/useLatency'
 import { useNotifications } from '../../hooks/useNotifications'
-import { dmFeedLabel } from '../../lib/feed'
+import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
 import { joinRoom } from '../../lib/p2p/roomManager'
 
 /** Spec §10.1 — at this width the sidebar becomes an overlay drawer. */
@@ -71,6 +72,19 @@ export function ChatLayout() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isMobile, toggleSidebar])
 
+  // RNF-05 — the mobile drawer closes with Esc and takes focus when opened
+  // so keyboard users land inside it (the backdrop click covers pointers).
+  const drawerPanelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!drawerOpen) return
+    drawerPanelRef.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [drawerOpen])
+
   const activeRoom = activeView?.kind === 'room' ? (rooms[activeView.id] ?? null) : null
   const activeDm =
     activeView?.kind === 'dm' ? (dms[activeView.peerId] ?? null) : null
@@ -115,11 +129,18 @@ export function ChatLayout() {
             onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
-          <div className="relative h-full shadow-xl">{sidebar}</div>
+          <div
+            ref={drawerPanelRef}
+            tabIndex={-1}
+            className="relative h-full shadow-xl focus:outline-none"
+          >
+            {sidebar}
+          </div>
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <NetworkErrorBanner />
         {activeDm !== null ? (
           <DmHeader
             channel={activeDm}
@@ -145,6 +166,7 @@ export function ChatLayout() {
               peers={dmPeers}
               fifoTrimmed={false}
               ariaLabel={dmFeedLabel(activeDm.peerNick)}
+              emptyStateText={EMPTY_DM_FEED_TEXT}
             />
             <TypingBar typing={activeDm.typing} peers={dmPeers} />
             <ChatInput dm={{ peerId: activeDm.peerId, available: activeDm.available }} />
@@ -164,6 +186,7 @@ export function ChatLayout() {
               peers={activeRoom.peers}
               fifoTrimmed={activeRoom.fifoTrimmed}
               ariaLabel={`Mensajes de #${activeRoom.name}`}
+              emptyStateText={EMPTY_ROOM_FEED_TEXT}
             />
             <TypingBar typing={activeRoom.typing} peers={activeRoom.peers} />
             <ChatInput room={activeRoom} />

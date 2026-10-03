@@ -24,7 +24,7 @@ export function NicknameInput(props: {
         disabled={props.disabled === true}
         aria-invalid={props.error !== null}
         onChange={(event) => props.onValueChange(event.target.value)}
-        className="w-full rounded-md border border-border bg-surface px-3 py-2 text-base outline-none focus:border-accent"
+        className="w-full rounded-md border border-border bg-surface px-3 py-2 text-base focus:border-accent"
       />
       {props.error !== null && (
         <p role="alert" className="text-xs text-accent">
