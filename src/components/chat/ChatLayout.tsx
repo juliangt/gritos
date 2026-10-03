@@ -11,7 +11,7 @@ import { useUiStore } from '../../stores/useUiStore'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useLatency } from '../../hooks/useLatency'
 import { useNotifications } from '../../hooks/useNotifications'
-import { dmFeedLabel } from '../../lib/feed'
+import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
 import { joinRoom } from '../../lib/p2p/roomManager'
 
 /** Spec §10.1 — at this width the sidebar becomes an overlay drawer. */
@@ -145,6 +145,7 @@ export function ChatLayout() {
               peers={dmPeers}
               fifoTrimmed={false}
               ariaLabel={dmFeedLabel(activeDm.peerNick)}
+              emptyStateText={EMPTY_DM_FEED_TEXT}
             />
             <TypingBar typing={activeDm.typing} peers={dmPeers} />
             <ChatInput dm={{ peerId: activeDm.peerId, available: activeDm.available }} />
@@ -164,6 +165,7 @@ export function ChatLayout() {
               peers={activeRoom.peers}
               fifoTrimmed={activeRoom.fifoTrimmed}
               ariaLabel={`Mensajes de #${activeRoom.name}`}
+              emptyStateText={EMPTY_ROOM_FEED_TEXT}
             />
             <TypingBar typing={activeRoom.typing} peers={activeRoom.peers} />
             <ChatInput room={activeRoom} />

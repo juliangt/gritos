@@ -1,5 +1,6 @@
 import { Badge } from '../common/Badge'
 import { StatusDot } from '../common/StatusDot'
+import { EMPTY_RECENTS_TEXT } from '../../lib/feed'
 import type { Room } from '../../stores/useAppStore'
 import { SUGGESTED_ROOMS } from '../../lib/rooms'
 
@@ -7,7 +8,8 @@ import { SUGGESTED_ROOMS } from '../../lib/rooms'
  * Room sections of the sidebar (RF-02, §10.1): *Activas* (unread badge,
  * status dot, 🔒 placeholder, leave button), *Sugeridas* (hidden when
  * already active) and *Recientes* (only when rememberRooms, hidden when
- * active). Rendering is driven entirely by props so tests can mount it
+ * active; shows an empty state while nothing has been remembered yet).
+ * Rendering is driven entirely by props so tests can mount it
  * with a prepared store.
  */
 export function RoomList(props: {
@@ -77,6 +79,13 @@ export function RoomList(props: {
               #{name}
             </button>
           ))}
+        </section>
+      )}
+
+      {props.showRecents && props.recentRooms.length === 0 && (
+        <section aria-label="Salas recientes" className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recientes</h2>
+          <p className="text-xs text-muted">{EMPTY_RECENTS_TEXT}</p>
         </section>
       )}
 
