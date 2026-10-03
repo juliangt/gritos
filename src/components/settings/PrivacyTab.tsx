@@ -46,7 +46,8 @@ function permissionText(state: NotificationPermissionState): string {
 }
 
 export function PrivacyTab() {
-  const { settings, setSettings } = useSettingsStore()
+  const settings = useSettingsStore((state) => state.settings)
+  const setSettings = useSettingsStore((state) => state.setSettings)
   // Never bootstraps an identity: regeneration acts on the session only.
   const { regenerateIdentity } = useRoomManager({ ensureIdentity: false })
   const [permission, setPermission] = useState<NotificationPermissionState>(() =>

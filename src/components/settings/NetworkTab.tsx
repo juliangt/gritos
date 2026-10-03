@@ -64,7 +64,8 @@ function rowsToSettings(rows: readonly IceRow[]): RTCIceServer[] {
 }
 
 export function NetworkTab() {
-  const { settings, setSettings } = useSettingsStore()
+  const settings = useSettingsStore((state) => state.settings)
+  const setSettings = useSettingsStore((state) => state.setSettings)
   // Never bootstraps an identity; reconnect-all acts on the session only.
   const { reconnectAll } = useRoomManager({ ensureIdentity: false })
 

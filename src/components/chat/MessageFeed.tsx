@@ -3,6 +3,7 @@ import { MessageItem } from './MessageItem'
 import { NewMessagesButton } from './NewMessagesButton'
 import { FIFO_SEPARATOR_TEXT, shouldAutoScroll } from '../../lib/feed'
 import type { Message, Peer } from '../../stores/useAppStore'
+import { useAppStore } from '../../stores/useAppStore'
 import { useMentionCandidates } from '../../hooks/useMentionCandidates'
 
 /**
@@ -27,6 +28,9 @@ export function MessageFeed(props: {
   const atBottomRef = useRef(true)
   const previousLengthRef = useRef(props.messages.length)
   const [newCount, setNewCount] = useState(0)
+  // Fine slice selectors (M6, RNF-03): the own-nickname subscription lives
+  // here — once per feed, never per message row.
+  const ownNickname = useAppStore((state) => state.identity?.nickname ?? '')
   const mentionCandidates = useMentionCandidates(props.peers)
 
   const scrollToBottom = useCallback(() => {
@@ -85,6 +89,7 @@ export function MessageFeed(props: {
             message={message}
             peers={props.peers}
             mentionCandidates={mentionCandidates}
+            ownNickname={ownNickname}
           />
         ))}
       </div>

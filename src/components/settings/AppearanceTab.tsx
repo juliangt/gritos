@@ -16,7 +16,8 @@ const THEME_OPTIONS: { value: ThemeChoice; label: string }[] = [
 ]
 
 export function AppearanceTab() {
-  const { settings, setSettings } = useSettingsStore()
+  const settings = useSettingsStore((state) => state.settings)
+  const setSettings = useSettingsStore((state) => state.setSettings)
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed)
 
