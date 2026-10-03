@@ -26,6 +26,13 @@ export const ENCRYPTED_ROOM_HINT = 'Quien no tenga la contraseña no encontrará
 export const EMPTY_ROOM_PASSWORD_TEXT = 'Escribe una contraseña para la sala cifrada'
 
 /**
+ * RNF-07 — text of the non-blocking banner shown at the top of the chat
+ * area while any active room sits in the `error` state (§10.3 wording).
+ */
+export const NETWORK_ERROR_BANNER_TEXT =
+  'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos'
+
+/**
  * §10.3/RF-05 — header status text. A password room that exhausted the
  * error heuristic without finding any peer shows the single not-found
  * message (wrong password and nonexistent room are indistinguishable by

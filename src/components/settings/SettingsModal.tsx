@@ -23,13 +23,20 @@ import { PrivacyTab } from './PrivacyTab'
 
 type SettingsTab = 'network' | 'privacy' | 'appearance'
 
+export type { SettingsTab }
+
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'network', label: 'Red' },
   { id: 'privacy', label: 'Privacidad' },
   { id: 'appearance', label: 'Apariencia' },
 ]
 
-export function SettingsModal(props: { open: boolean; onClose: () => void }) {
+export function SettingsModal(props: {
+  open: boolean
+  onClose: () => void
+  /** Tab shown on open (defaults to Red — M6 network-error banner shortcut). */
+  initialTab?: SettingsTab
+}) {
   // The content mounts only while open, so its drafts and tab start fresh
   // on every open without any reset effects.
   if (!props.open) return null
@@ -40,18 +47,18 @@ export function SettingsModal(props: { open: boolean; onClose: () => void }) {
       label="Ajustes"
       className="flex max-h-[90vh] w-full max-w-md flex-col rounded-lg border border-border bg-surface p-4 outline-none"
     >
-      <SettingsModalContent onClose={props.onClose} />
+      <SettingsModalContent initialTab={props.initialTab ?? 'network'} onClose={props.onClose} />
     </Modal>
   )
 }
 
-function SettingsModalContent(_props: { onClose: () => void }) {
+function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => void }) {
   const identity = useAppStore((state) => state.identity)
   // The settings modal only MUTATES an existing session (nickname,
   // regeneration, reconnect): it must never bootstrap an identity as a
   // side effect of being opened.
   const { changeNickname } = useRoomManager({ ensureIdentity: false })
-  const [activeTab, setActiveTab] = useState<SettingsTab>('network')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(props.initialTab)
   const [nicknameDraft, setNicknameDraft] = useState(identity?.nickname ?? '')
   const [nicknameError, setNicknameError] = useState<string | null>(null)
 
@@ -85,7 +92,7 @@ function SettingsModalContent(_props: { onClose: () => void }) {
         <button
           type="button"
           aria-label="Cerrar ajustes"
-          onClick={_props.onClose}
+          onClick={props.onClose}
           className="rounded px-1.5 py-1 text-sm text-muted hover:bg-bg hover:text-text"
         >
           ✕

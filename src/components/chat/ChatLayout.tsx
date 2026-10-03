@@ -4,6 +4,7 @@ import { ChatHeader } from './ChatHeader'
 import { MessageFeed } from './MessageFeed'
 import { TypingBar } from './TypingBar'
 import { ChatInput } from './ChatInput'
+import { NetworkErrorBanner } from './NetworkErrorBanner'
 import { DmHeader } from '../dm/DmHeader'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
@@ -139,6 +140,7 @@ export function ChatLayout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <NetworkErrorBanner />
         {activeDm !== null ? (
           <DmHeader
             channel={activeDm}
