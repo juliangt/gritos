@@ -18,6 +18,12 @@ import { joinRoom } from '../../lib/p2p/roomManager'
 /** Spec §10.1 — at this width the sidebar becomes an overlay drawer. */
 const MOBILE_QUERY = '(max-width: 768px)'
 
+/** Invisible mount that runs the RF-06 ping/pong loop of ONE active room. */
+function RoomLatencyLoop(props: { roomId: string }) {
+  useLatency(props.roomId)
+  return null
+}
+
 /**
  * Chat shell (spec §10.1): collapsible sidebar (persisted collapse state
  * under `gritos:ui`, Ctrl/Cmd+B shortcut, overlay drawer ≤768 px) around
@@ -88,7 +94,6 @@ export function ChatLayout() {
   const activeRoom = activeView?.kind === 'room' ? (rooms[activeView.id] ?? null) : null
   const activeDm =
     activeView?.kind === 'dm' ? (dms[activeView.peerId] ?? null) : null
-  useLatency(activeRoom?.id ?? null)
 
   // The DM feed reuses the room components: the remote peer rides in as a
   // one-entry peer list (mention candidates, typing bar, author colors).
@@ -115,6 +120,12 @@ export function ChatLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* RF-06 — latency is measured per room, not only for the focused one:
+          every active room runs its own ping/pong loop. */}
+      {Object.keys(rooms).map((roomId) => (
+        <RoomLatencyLoop key={roomId} roomId={roomId} />
+      ))}
+
       {desktopAsideVisible && <aside className="shrink-0">{sidebar}</aside>}
 
       {drawerVisible && (
