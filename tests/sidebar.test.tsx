@@ -170,7 +170,7 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     })
   })
 
-  it('peer menu is a stub: Mensaje directo disabled until M3', () => {
+  it('peer menu opens the M3 DM view: Mensaje directo focuses the channel (RF-04)', () => {
     seedStore()
     render(<Sidebar />)
     // The peer button carries the latency dot in its accessible name; find
@@ -178,8 +178,53 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     fireEvent.click(screen.getByText('luna-cauta·a3f1').closest('button') as HTMLElement)
     const menu = screen.getByRole('menu', { name: 'Acciones para luna-cauta·a3f1' })
     expect(menu).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Mensaje directo' })).toBeDisabled()
+    const directMessage = screen.getByRole('menuitem', { name: 'Mensaje directo' })
+    expect(directMessage).toBeEnabled()
     // Without a received fingerprint there is nothing to copy yet.
     expect(screen.getByRole('menuitem', { name: 'Copiar fingerprint' })).toBeDisabled()
+
+    fireEvent.click(directMessage)
+    expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-aaaa3f1' })
+    // The menu closed after the action.
+    expect(screen.queryByRole('menu', { name: 'Acciones para luna-cauta·a3f1' })).not.toBeInTheDocument()
+  })
+
+  it('peer menu closes on Escape (§10.1)', () => {
+    seedStore()
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('luna-cauta·a3f1').closest('button') as HTMLElement)
+    expect(screen.getByRole('menu', { name: 'Acciones para luna-cauta·a3f1' })).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('lists open DM channels with unread badges and clears on open (RF-04)', () => {
+    seedStore()
+    const store = useAppStore.getState()
+    store.ensureDmChannel('peer-aaaa3f1', 'luna-cauta', 'A31F 09BC 77D2 4E5A')
+    store.setDmAvailable('peer-aaaa3f1', true)
+    store.ensureDmChannel('peer-bbbb9c2', 'zorro-bravo', 'B31F 09BC 77D2 4E5A')
+    store.appendDmMessage('peer-bbbb9c2', {
+      id: 'dm-1',
+      roomId: 'dm:peer-bbbb9c2',
+      authorId: 'peer-bbbb9c2',
+      authorNick: 'zorro-bravo',
+      text: 'psst',
+      ts: Date.now(),
+      encrypted: false,
+      status: 'delivered',
+      kind: 'user',
+    })
+    render(<Sidebar />)
+
+    const section = screen.getByRole('region', { name: 'Mensajes directos' })
+    expect(section.textContent).toContain('luna-cauta')
+    expect(section.textContent).toContain('zorro-bravo')
+    expect(screen.getByLabelText('1 sin leer')).toBeInTheDocument()
+    expect(screen.getByLabelText('par desconectado')).toBeInTheDocument() // unavailable channel
+
+    fireEvent.click(screen.getByText('zorro-bravo'))
+    expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-bbbb9c2' })
+    expect(useAppStore.getState().dms['peer-bbbb9c2']?.unread).toBe(0)
   })
 })

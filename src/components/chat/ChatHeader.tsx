@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { connectionStatusText, type Room } from '../../stores/useAppStore'
 import { StatusDot } from '../common/StatusDot'
+import { SettingsModal } from '../settings/SettingsModal'
 
 /**
  * Main-area header (spec §10.1/§10.3): '#name' with the 🔒 marker, the
@@ -9,15 +10,6 @@ import { StatusDot } from '../common/StatusDot'
  */
 export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
-
-  useEffect(() => {
-    if (!settingsOpen) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSettingsOpen(false)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen])
 
   return (
     <header className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
@@ -64,33 +56,7 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
         ⚙
       </button>
 
-      {settingsOpen && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setSettingsOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Ajustes"
-            onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-sm rounded-lg border border-border bg-surface p-4"
-          >
-            <h2 className="text-base font-semibold">Ajustes</h2>
-            <p className="mt-2 text-sm text-muted">
-              El panel de ajustes (red, privacidad y apariencia) llega en la entrega M5.
-            </p>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(false)}
-              autoFocus
-              className="mt-4 rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-text"
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
-      )}
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </header>
   )
 }
