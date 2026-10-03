@@ -49,11 +49,18 @@ export interface Peer {
 
 export type MessageStatus = 'sent' | 'delivered'
 
+/**
+ * M2 additive extension (spec §8.1 field names preserved): 'system' marks
+ * the discrete join/leave and FIFO-cap separator lines (RF-03/RF-06).
+ * Absent kind is treated as 'user'.
+ */
+export type MessageKind = 'user' | 'system'
+
 export interface Message {
   id: string
   /** Room id, or `dm:<peerId>` for direct messages. */
   roomId: string
-  /** Author peerId, or 'self' for our own messages. */
+  /** Author peerId, 'self' for our own messages, 'system' for feed lines. */
   authorId: string
   authorNick: string
   text: string
@@ -62,6 +69,7 @@ export interface Message {
   encrypted: boolean
   /** Only meaningful for our own messages (RF-03 receipts). */
   status: MessageStatus
+  kind?: MessageKind
 }
 
 export type RoomStatus = 'searching' | 'connected' | 'error'
@@ -80,6 +88,8 @@ export interface Room {
   /** peerId → timestamp of the last typing signal (expires after 4 s). */
   typing: Record<string, number>
   unread: number
+  /** True once the FIFO cap has trimmed this room's history (RF-03). */
+  fifoTrimmed: boolean
 }
 
 export interface DmChannel {
@@ -92,9 +102,7 @@ export interface DmChannel {
   available: boolean
 }
 
-export type ActiveView =
-  | { kind: 'room'; id: string }
-  | { kind: 'dm'; peerId: string }
+export type ActiveView = { kind: 'room'; id: string } | { kind: 'dm'; peerId: string }
 
 export interface AppState {
   identity: Identity | null
@@ -128,14 +136,17 @@ export function appendMessageCapped(
   return next.length > cap ? next.slice(next.length - cap) : next
 }
 
-/** spec §10.3 — exact connection status header texts. */
-export function roomStatusHeaderText(
-  status: RoomStatus,
-  peerCount: number,
-): string {
+/**
+ * spec §10.3 — exact connection status header texts, including the
+ * best-effort transition state (searching with peers already discovered but
+ * no DataChannel yet): "Conectando (N pares encontrados)…".
+ */
+export function connectionStatusText(status: RoomStatus, peerCount: number): string {
   switch (status) {
     case 'searching':
-      return 'Buscando pares en la red torrent…'
+      return peerCount > 0
+        ? `Conectando (${peerCount} pares encontrados)…`
+        : 'Buscando pares en la red torrent…'
     case 'connected':
       return `Canal P2P establecido · ${peerCount} pares`
     case 'error':
@@ -169,6 +180,13 @@ export interface AppActions {
   markMessagesDelivered: (roomId: string, ids: string[]) => void
   /** ts = null clears the peer's typing entry. */
   setTyping: (roomId: string, peerId: string, ts: number | null) => void
+  /**
+   * M2 — switches the focused view without touching any room connection
+   * (RF-02); opening a room clears its unread badge.
+   */
+  setActiveView: (view: ActiveView | null) => void
+  /** M2 — recent room names, most-recent-first (RF-02, §8.2). */
+  setRecentRooms: (recent: string[]) => void
 }
 
 export const useAppStore = create<AppState & AppActions>()((set) => ({
@@ -178,14 +196,10 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
 
   setNickname: (nickname) =>
     set((state) => ({
-      identity:
-        state.identity === null
-          ? null
-          : { ...state.identity, nickname },
+      identity: state.identity === null ? null : { ...state.identity, nickname },
     })),
 
-  upsertRoom: (room) =>
-    set((state) => ({ rooms: { ...state.rooms, [room.id]: room } })),
+  upsertRoom: (room) => set((state) => ({ rooms: { ...state.rooms, [room.id]: room } })),
 
   removeRoom: (roomId) =>
     set((state) => {
@@ -222,9 +236,7 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
         changed = true
         return { ...peer, ...patch }
       })
-      return changed
-        ? { rooms: { ...state.rooms, [roomId]: { ...room, peers } } }
-        : state
+      return changed ? { rooms: { ...state.rooms, [roomId]: { ...room, peers } } } : state
     }),
 
   removePeer: (roomId, peerId) =>
@@ -240,12 +252,21 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
     set((state) => {
       const room = state.rooms[roomId]
       if (!room) return state
+      const messages = appendMessageCapped(room.messages, message)
+      const fifoTrimmed = room.fifoTrimmed || messages.length < room.messages.length + 1
+      // RF-02 — messages arriving in non-focused rooms increment the unread
+      // badge; own messages and system lines never do.
+      const isActiveView = state.activeView?.kind === 'room' && state.activeView.id === roomId
+      const countsAsUnread =
+        message.authorId !== 'self' && message.kind !== 'system' && !isActiveView
       return {
         rooms: {
           ...state.rooms,
           [roomId]: {
             ...room,
-            messages: appendMessageCapped(room.messages, message),
+            messages,
+            fifoTrimmed,
+            unread: countsAsUnread ? room.unread + 1 : room.unread,
           },
         },
       }
@@ -263,9 +284,7 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
         changed = true
         return { ...message, status: 'delivered' as const }
       })
-      return changed
-        ? { rooms: { ...state.rooms, [roomId]: { ...room, messages } } }
-        : state
+      return changed ? { rooms: { ...state.rooms, [roomId]: { ...room, messages } } } : state
     }),
 
   setTyping: (roomId, peerId, ts) =>
@@ -278,4 +297,25 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       else typing[peerId] = ts
       return { rooms: { ...state.rooms, [roomId]: { ...room, typing } } }
     }),
+
+  setActiveView: (view) =>
+    set((state) => {
+      if (view === null) return { activeView: null }
+      // Opening a room clears its unread badge (RF-02).
+      if (view.kind === 'room') {
+        const room = state.rooms[view.id]
+        if (room !== undefined && room.unread > 0) {
+          return {
+            activeView: view,
+            rooms: {
+              ...state.rooms,
+              [view.id]: { ...room, unread: 0 },
+            },
+          }
+        }
+      }
+      return { activeView: view }
+    }),
+
+  setRecentRooms: (recent) => set({ recentRooms: recent }),
 }))
