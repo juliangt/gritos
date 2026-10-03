@@ -17,13 +17,11 @@ import { useAppStore, type Identity, type Message } from '../src/stores/useAppSt
 import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { installFakeTrystero } from './fakeTrystero'
 
-let _fake: ReturnType<typeof installFakeTrystero>
-
 beforeEach(() => {
   localStorage.clear()
   window.history.pushState({}, '', '/')
   useSettingsStore.getState().resetSettings()
-  _fake = installFakeTrystero()
+  installFakeTrystero()
 })
 
 afterEach(() => {

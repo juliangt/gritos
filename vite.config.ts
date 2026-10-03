@@ -1,9 +1,25 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+
+/**
+ * Dev-only (M6): the strict CSP meta in index.html targets the production
+ * build. Vite's dev server injects an inline HMR preamble module that a
+ * hash-pinned `script-src` can never allow-list, so the meta is removed
+ * while serving in dev — `vite build` output keeps it untouched.
+ */
+function stripCspMetaInDev(): Plugin {
+  return {
+    name: 'strip-csp-meta-in-dev',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace(/<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?>/, '')
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), stripCspMetaInDev()],
   build: {
     // Vite 8 defaults to the lightningcss minifier, which warns
     // ("Unknown at-rule") about Tailwind 4's @theme/@tailwind at-rules.

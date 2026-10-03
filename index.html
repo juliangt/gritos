@@ -2,13 +2,34 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      CSP (RNF-05/M6): the inline anti-flash script is allow-listed by its
+      sha256 hash; 'unsafe-inline' in style-src covers Vite's dev-injected
+      styles (the production bundle ships CSS as a file). WebRTC is not
+      governed by CSP; the wss:/ws: entries cover the torrent trackers.
+      frame-ancestors is NOT set here: browsers ignore it in <meta> delivery
+      (verified in Chromium) — serve it as an HTTP header at the host instead
+      (see README deployment notes). The dev server strips this meta (see
+      vite.config.ts) because Vite's HMR preamble is an inline module script
+      that cannot be hashed.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'sha256-XJRLxFqQlD7zuMSaUacvg1fywU8TxLNZ36vyGXHQ2vM='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; media-src 'none'; object-src 'none'; base-uri 'self'"
+    />
+    <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="gritos — chat P2P sin servidor, sin cuentas, efímero." />
-    <title>gritos</title>
+    <meta
+      name="description"
+      content="gritos — chat P2P sin servidor: sin cuentas, cifrado de extremo a extremo y efímero. Los mensajes viajan directos entre navegadores."
+    />
+    <title>gritos — chat p2p sin servidor</title>
     <script>
       // Anti-flash (spec §10.6): apply the persisted theme before the bundle
       // loads. Reads the raw Settings JSON stored under 'gritos:settings'.
+      // NOTE: if this script changes, update its 'sha256-' hash in the CSP
+      // meta above.
       ;(function () {
         try {
           var raw = localStorage.getItem('gritos:settings')

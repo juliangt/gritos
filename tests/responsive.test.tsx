@@ -16,13 +16,11 @@ import { installFakeTrystero } from './fakeTrystero'
  * composer must stay usable and the compact header controls present.
  */
 
-let _fake: ReturnType<typeof installFakeTrystero>
-
 beforeEach(() => {
   localStorage.clear()
   window.history.pushState({}, '', '/')
   useSettingsStore.getState().resetSettings()
-  _fake = installFakeTrystero()
+  installFakeTrystero()
   const realMatchMedia = window.matchMedia.bind(window)
   vi.stubGlobal('matchMedia', (query: string) => ({
     ...realMatchMedia(query),
