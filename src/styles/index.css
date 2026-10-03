@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+
+/*
+ * Class strategy for dark mode (spec §10.6): the `dark` class on <html>,
+ * seeded before the bundle by the anti-flash script in index.html and kept
+ * in sync by the useTheme hook.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Theme tokens (RF-10) — semantic colors defined as CSS variables that flip
+ * between :root and .dark, so both Tailwind utilities and plain CSS share
+ * the same source of truth. AA contrast pairs, minimal palette.
+ */
+:root {
+  color-scheme: light;
+
+  --gritos-bg: #fafaf9;
+  --gritos-surface: #ffffff;
+  --gritos-border: #e7e5e4;
+  --gritos-text: #1c1917;
+  --gritos-text-muted: #78716c;
+  --gritos-accent: #c2410c;
+  --gritos-accent-text: #fffbeb;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --gritos-bg: #0c0a09;
+  --gritos-surface: #1c1917;
+  --gritos-border: #292524;
+  --gritos-text: #fafaf9;
+  --gritos-text-muted: #a8a29e;
+  --gritos-accent: #fb923c;
+  --gritos-accent-text: #1c1917;
+}
+
+/* Expose the tokens as Tailwind utilities: bg-bg, bg-surface, border-border,
+   text-text, text-muted, bg-accent, text-accent… */
+@theme inline {
+  --color-bg: var(--gritos-bg);
+  --color-surface: var(--gritos-surface);
+  --color-border: var(--gritos-border);
+  --color-text: var(--gritos-text);
+  --color-muted: var(--gritos-text-muted);
+  --color-accent: var(--gritos-accent);
+  --color-accent-text: var(--gritos-accent-text);
+}
+
+body {
+  background-color: var(--gritos-bg);
+  color: var(--gritos-text);
+}
