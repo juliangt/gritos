@@ -1,8 +1,20 @@
+import { useEffect } from 'react'
+import { onDmReceived } from '../lib/p2p/roomManager'
+import { notifyIncomingDm } from '../lib/notifications'
+
 /**
- * Desktop notifications — spec RF-09: only mentions (@nickname) and
- * incoming DMs, only while document.hidden, only with granted permission.
- * Full behavior (permission flow, click-to-navigate) lands in M5.
+ * Desktop notifications — spec RF-09. M3 scope: incoming DMs while the tab
+ * is hidden and the permission is already granted (§10.5 exact title/body;
+ * click → window focus + navigation to the DM view). The permission request
+ * and the settings toggle arrive with the M5 settings modal — nothing here
+ * ever prompts.
  */
 export function useNotifications(): void {
-  // M5: mention + DM notifications with click-through to the origin view.
+  useEffect(
+    () =>
+      onDmReceived((peerId, nick, text) => {
+        notifyIncomingDm({ peerId, nick, text })
+      }),
+    [],
+  )
 }
