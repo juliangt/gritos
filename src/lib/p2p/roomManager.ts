@@ -1180,3 +1180,32 @@ export function resetManagerForTests(): void {
   useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS } })
   useAppStore.setState({ ...INITIAL_APP_STATE })
 }
+
+// ---------------------------------------------------------------------------
+// Panic path (RF-08) — used by lib/panic.ts
+// ---------------------------------------------------------------------------
+
+/**
+ * RF-08 — synchronously tears down every connection (WebRTC meshes closed
+ * via `leave`, timers freed, room keys discarded) and clears the manager's
+ * join bookkeeping. Best-effort: a fake/real transport that throws on leave
+ * never blocks the wipe.
+ */
+export function abortAllRooms(): void {
+  for (const connection of connections.values()) {
+    teardownConnection(connection)
+    try {
+      void connection.trystero.leave()
+    } catch {
+      // Nothing to clean up beyond the teardown itself.
+    }
+  }
+  connections.clear()
+  pendingJoins.clear()
+}
+
+/** RF-08 — drops the in-memory session identity (its keys are wiped). */
+export function resetSessionIdentity(): void {
+  sessionIdentity = null
+  identityPromise = null
+}
