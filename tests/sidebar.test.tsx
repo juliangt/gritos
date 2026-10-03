@@ -108,7 +108,7 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     expect(screen.getByLabelText('buscando pares')).toBeInTheDocument()
   })
 
-  it('opens the join popover with live normalization preview and disabled password', async () => {
+  it('opens the join popover with live normalization preview and the password behind the toggle', async () => {
     seedStore()
     render(<Sidebar />)
     fireEvent.click(screen.getByRole('button', { name: '[+ Unirse]' }))
@@ -117,7 +117,13 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     fireEvent.change(nameField, { target: { value: 'Mi Sala' } })
     expect(screen.getByText(/Se unirá a/)).toBeInTheDocument()
     expect(screen.getByText('#mi-sala')).toBeInTheDocument()
-    expect(screen.getByLabelText('Contraseña de la sala')).toBeDisabled()
+    // M4 (RF-05): the password field only exists once 'sala cifrada' is on.
+    expect(screen.queryByLabelText('Contraseña de la sala')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'sala cifrada' }))
+    expect(screen.getByLabelText('Contraseña de la sala')).toBeEnabled()
+    expect(
+      screen.getByText('Quien no tenga la contraseña no encontrará esta sala.'),
+    ).toBeInTheDocument()
 
     // Invalid names get the exact inline error, no network call.
     fireEvent.change(nameField, { target: { value: '!!' } })

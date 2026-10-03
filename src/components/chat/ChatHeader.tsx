@@ -1,12 +1,15 @@
 import { useState } from 'react'
-import { connectionStatusText, type Room } from '../../stores/useAppStore'
+import type { Room } from '../../stores/useAppStore'
+import { roomStatusText } from '../../lib/rooms'
 import { StatusDot } from '../common/StatusDot'
 import { SettingsModal } from '../settings/SettingsModal'
 
 /**
  * Main-area header (spec §10.1/§10.3): '#name' with the 🔒 marker, the
- * exact connection status text, peer count, the sidebar toggle and the
- * settings entry — an M2 stub modal; the full modal (RF-07) lands in M5.
+ * exact connection status text (RF-05: a password room that exhausts the
+ * heuristic without peers shows the single not-found message), peer count,
+ * the sidebar toggle and the settings entry — an M2 stub modal; the full
+ * modal (RF-07) lands in M5.
  */
 export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -38,7 +41,7 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
           </h1>
           <StatusDot status={props.room.status} />
           <span className="min-w-0 truncate text-xs text-muted">
-            {connectionStatusText(props.room.status, props.room.peers.length)}
+            {roomStatusText(props.room)}
           </span>
           <span className="ml-auto shrink-0 text-xs text-muted">
             {props.room.peers.length} {props.room.peers.length === 1 ? 'par' : 'pares'}

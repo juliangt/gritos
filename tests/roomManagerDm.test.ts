@@ -31,9 +31,11 @@ afterEach(() => {
   manager.setJoinRoomFactory(null)
 })
 
-/** Lets the async decrypt/store tail (and its crypto) settle. */
+/** Lets the async decrypt/store tail (and its crypto) settle. The M4 suite
+ * runs PBKDF2 workloads alongside, so the fixed sleep needs real headroom
+ * over the ECDH → HKDF → AES-GCM threadpool roundtrips. */
 function flushMicrotasks(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 10))
+  return new Promise((resolve) => setTimeout(resolve, 60))
 }
 
 function waitForReceiptDebounce(): Promise<void> {

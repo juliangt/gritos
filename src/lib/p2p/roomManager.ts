@@ -9,7 +9,6 @@ import { deriveRoomId } from '../crypto/hashes'
 import {
   INITIAL_APP_STATE,
   useAppStore,
-  type Message,
   type Peer,
   type RoomStatus,
 } from '../../stores/useAppStore'
@@ -32,6 +31,12 @@ import {
 } from './protocol'
 import { computeFingerprint, createSessionIdentity, loadIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
 import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
+import {
+  decryptRoomMessage,
+  deriveRoomKey,
+  encryptRoomMessage,
+} from '../crypto/roomKey'
+import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
 import { pushRecentRoom, saveRecentRooms } from '../recentRooms'
 import { joinSystemLine, leaveSystemLine } from '../feed'
 
@@ -50,6 +55,15 @@ import { joinSystemLine, leaveSystemLine } from '../feed'
  * feeds the `dms` store channels, including unread, receipts, typing and
  * the `available` flag recomputed on every peer/room change. Incoming DMs
  * are surfaced to the notifications layer through the `onDmReceived` seam.
+ *
+ * M4 adds password rooms (RF-05, §9.3): joining with a password derives the
+ * roomId (§9.4, the room becomes undiscoverable without it) and starts the
+ * PBKDF2 room key, held in session memory only. Outgoing `chat` envelopes
+ * are sealed `{enc: true, iv, body: base64(IV ‖ ct)}` (order-preserving
+ * chain); incoming ones are opened with the room key, or stored as the
+ * "🔒 mensaje cifrado" placeholder when they cannot be opened — never as
+ * raw ciphertext. Typing, receipts and presence stay plaintext. Leaving
+ * discards the key; a reload re-derives it from the re-entered password.
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -123,6 +137,17 @@ interface RoomActions {
 
 interface RoomInternals extends RoomConnection {
   readonly password?: string
+  /**
+   * M4 (§9.3) — derived AES-GCM room key for password rooms, held as a
+   * session-memory promise only: never persisted, never in the store.
+   * null for public rooms.
+   */
+  roomKey: Promise<CryptoKey> | null
+  /**
+   * M4 — serializes the async per-message sealing so encrypted envelopes
+   * reach the wire (or the pending queue) in send order.
+   */
+  sendChain: Promise<void>
   readonly trystero: TrysteroRoom
   readonly actions: RoomActions
   /** Per-room dedup window — spec §7.3. */
@@ -341,11 +366,21 @@ async function doJoinRoom(normalized: string, password?: string): Promise<RoomCo
   }
 
   const trysteroRoom = joinRoomImpl(config, roomId)
+  // M4 (§9.3) — start the PBKDF2 derivation immediately; consumers await the
+  // promise when sealing/unsealing. Memory-only: it dies with the
+  // connection, and a reload re-derives from the re-entered password (RF-05).
+  const roomKey = password !== undefined ? deriveRoomKey(password, normalized) : null
+  // Consumers surface derivation failures locally; keep the promise from
+  // surfacing as an unhandled rejection before the first send/receive.
+  roomKey?.catch(() => {
+    /* handled at each use site */
+  })
   const connection = createConnection({
     roomId,
     name: normalized,
     password,
     hasPassword: password !== undefined,
+    roomKey,
     status: 'searching',
     trystero: trysteroRoom,
   })
@@ -440,6 +475,12 @@ function safeSend<T>(
  * store as an own 'sent' message. While the room is not connected
  * (`searching`/`error`, §10.3) the envelope is queued locally and flushed
  * on the first peer join, so the user can keep typing.
+ *
+ * M4 (§6.4 step 4 / §9.3) — in password rooms the wire form seals the body:
+ * `{enc: true, iv, body: base64(IV ‖ ct)}`. Sealing is async, so encrypted
+ * sends run through a per-connection chain that preserves send order; the
+ * local feed echo stays plaintext with `encrypted: false` (the author holds
+ * the key). Returns the logical (plaintext) envelope.
  */
 export function sendChat(roomId: string, text: string): Envelope | null {
   const connection = connections.get(roomId)
@@ -452,11 +493,32 @@ export function sendChat(roomId: string, text: string): Envelope | null {
     kind: 'chat',
     body: text.slice(0, MAX_PLAINTEXT_LENGTH),
   })
-  if (connection.status !== 'connected') {
-    connection.pendingChats.push(envelope)
-  } else {
-    safeSend(connection.actions.chat, envelope)
+
+  const deliver = (wire: Envelope): void => {
+    if (connection.status !== 'connected') {
+      connection.pendingChats.push(wire)
+    } else {
+      safeSend(connection.actions.chat, wire)
+    }
   }
+
+  const roomKey = connection.roomKey
+  if (roomKey === null) {
+    // Public room: the plaintext envelope is the wire form.
+    deliver(envelope)
+  } else {
+    connection.sendChain = connection.sendChain
+      .then(async () => {
+        const key = await roomKey
+        const sealed = await encryptRoomMessage(key, envelope.body)
+        deliver({ ...envelope, enc: true, iv: sealed.iv, body: sealed.payload })
+      })
+      .catch(() => {
+        // Sealing failure (not expected for string passwords): the message
+        // is not delivered but stays in the local feed (§7.3 silence).
+      })
+  }
+
   useAppStore.getState().appendMessage(roomId, {
     id: envelope.id,
     roomId,
@@ -688,6 +750,7 @@ function createConnection(init: {
   name: string
   password?: string
   hasPassword: boolean
+  roomKey: Promise<CryptoKey> | null
   status: RoomStatus
   trystero: TrysteroRoom
 }): RoomInternals {
@@ -708,6 +771,8 @@ function createConnection(init: {
     name: init.name,
     password: init.password,
     hasPassword: init.hasPassword,
+    roomKey: init.roomKey,
+    sendChain: Promise.resolve(),
     status: init.status,
     trystero: trysteroRoom,
     actions,
@@ -878,24 +943,66 @@ function handleChatEnvelope(
 ): void {
   const envelope = parseEnvelope(data)
   if (envelope === null || envelope.kind !== 'chat') return
-  if (envelope.enc) return // password-room ciphertext is decrypted in M4
+  // Dedup BEFORE the async decrypt tail: full-mesh duplicates of an
+  // encrypted envelope must be dropped exactly once (§7.3).
   if (!shouldProcess(envelope, connection.seenIds)) return
-
-  const message: Message = {
-    id: envelope.id,
-    roomId: connection.roomId,
-    authorId: transportPeerId,
-    authorNick: envelope.nick,
-    text: envelope.body,
-    ts: envelope.ts,
-    encrypted: false,
-    status: 'delivered',
-    kind: 'user',
+  if (envelope.enc) {
+    const roomKey = connection.roomKey
+    if (roomKey === null) return // public room has no key: discard (§7.3)
+    void decryptChatEnvelope(connection, envelope, transportPeerId, roomKey)
+    return
   }
-  useAppStore.getState().appendMessage(connection.roomId, message)
+
+  appendRoomChat(connection, envelope, transportPeerId, envelope.body, false)
 
   // §6.4 step 2 — receipt directed to the author (debounced, ≤50 ids).
   queueReceipt(connection, transportPeerId, envelope.id)
+}
+
+/** Shared store append for the plaintext and placeholder chat paths. */
+function appendRoomChat(
+  connection: RoomInternals,
+  envelope: Envelope,
+  authorId: string,
+  text: string,
+  encrypted: boolean,
+): void {
+  useAppStore.getState().appendMessage(connection.roomId, {
+    id: envelope.id,
+    roomId: connection.roomId,
+    authorId,
+    authorNick: envelope.nick,
+    text,
+    ts: envelope.ts,
+    encrypted,
+    status: 'delivered',
+    kind: 'user',
+  })
+}
+
+/**
+ * M4 — async tail of the encrypted chat receive path (§6.4 step 4). With
+ * the room key the payload opens into plaintext stored with
+ * `encrypted: false`. When the key is missing or the seal fails to open
+ * (theoretical: derivation collision or tampering), the message is stored
+ * as the RF-05 placeholder "🔒 mensaje cifrado" with `encrypted: true` —
+ * the raw ciphertext NEVER lands in the feed as text. The delivery receipt
+ * is emitted either way: receipting is about transport, not readability.
+ */
+async function decryptChatEnvelope(
+  connection: RoomInternals,
+  envelope: Envelope,
+  senderId: string,
+  roomKey: Promise<CryptoKey>,
+): Promise<void> {
+  try {
+    const key = await roomKey
+    const text = await decryptRoomMessage(key, { iv: envelope.iv ?? '', payload: envelope.body })
+    appendRoomChat(connection, envelope, senderId, text, false)
+  } catch {
+    appendRoomChat(connection, envelope, senderId, ENCRYPTED_MESSAGE_PLACEHOLDER, true)
+  }
+  queueReceipt(connection, senderId, envelope.id)
 }
 
 /** Local-only feed line (RF-06): never sent over the wire, no dedup needed. */
@@ -1032,6 +1139,10 @@ export function pruneExpiredDmTyping(now: number): void {
 
 function teardownConnection(connection: RoomInternals): void {
   disarmErrorHeuristic(connection)
+  // M4 (RF-05) — leaving discards the room key: the password and its derived
+  // key exist only for the lifetime of the connection.
+  connection.roomKey = null
+  connection.sendChain = Promise.resolve()
   if (connection.receiptTimer !== null) {
     clearTimeout(connection.receiptTimer)
     connection.receiptTimer = null
