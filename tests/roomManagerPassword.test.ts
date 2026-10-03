@@ -257,6 +257,39 @@ describe('undecryptable receives (RF-05 placeholder, §7.3)', () => {
 })
 
 describe('key lifecycle (RF-05: memory only)', () => {
+  it('reconnectAll re-joins password rooms re-deriving the SAME key (RF-07 + RF-05)', async () => {
+    const first = await joinB()
+    first.room.peerJoin('peer-a')
+
+    // Network settings change, then the RF-07 "Reconectar todo" path.
+    const { useSettingsStore } = await import('../src/stores/useSettingsStore')
+    useSettingsStore.getState().setSettings({ trackers: ['wss://nuevo.example'] })
+    await manager.reconnectAll()
+
+    // The room was left and re-joined through a fresh Trystero room with the
+    // new config, and it is still the same (name+password)-derived room.
+    expect(first.room.leave).toHaveBeenCalledTimes(1)
+    const rejoined = fake.rooms[fake.rooms.length - 1]
+    expect(fake.configs[fake.configs.length - 1]?.roomId).toBe(first.roomId)
+    expect(fake.configs[fake.configs.length - 1]?.config).toEqual({
+      appId: 'gritos-app-v1',
+      relayConfig: { urls: ['wss://nuevo.example'] },
+    })
+    expect(manager.getRoomConnection(first.roomId)?.hasPassword).toBe(true)
+
+    // The in-memory password survived the reconnect: outgoing chat is still
+    // sealed with the key derived from the SAME password.
+    rejoined.peerJoin('peer-a')
+    manager.sendChat(first.roomId, 'tras reconectar')
+    await vi.waitFor(() => expect(rejoined.action('chat').sends).toHaveLength(1))
+    const wire = rejoined.lastSend('chat').data as Envelope
+    expect(wire.enc).toBe(true)
+    const key = await deriveRoomKey(PASSWORD, ROOM)
+    await expect(
+      decryptRoomMessage(key, { iv: wire.iv ?? '', payload: wire.body }),
+    ).resolves.toBe('tras reconectar')
+  })
+
   it('leaveRoom discards the key; rejoining re-derives it from the password', async () => {
     const first = await joinB()
     await manager.leaveRoom(first.roomId)
