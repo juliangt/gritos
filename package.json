@@ -21,7 +21,6 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwindcss": "4.3.3",
-    "trystero": "0.25.4",
     "zustand": "5.0.15"
   },
   "devDependencies": {
