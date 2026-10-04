@@ -138,11 +138,16 @@ describe('JWK export/import roundtrip (spec §8.2 + §9.1)', () => {
     expect(await computeFingerprint(rawAfter)).toBe(await computeFingerprint(rawBefore))
   })
 
-  it('flags records with and without the JWK pair', () => {
-    expect(hasIdentityJwks({ pubJwk: { kty: 'EC' }, privJwk: { kty: 'EC' } })).toBe(true)
+  it('flags records with key material in either storage format (issue #24)', () => {
+    // Current format: public JWK + wrapped envelope.
+    expect(hasIdentityJwks({ pubJwk: { kty: 'EC' }, priv: '{"v":1}' })).toBe(true)
+    // Legacy pre-#24 format: public JWK + plaintext private JWK.
+    expect(hasIdentityJwks({ pubJwk: { kty: 'EC' }, legacyPrivJwk: { kty: 'EC' } })).toBe(true)
+    // Profile-only record, or an envelope without the public key: no pair.
     expect(
       hasIdentityJwks({ nickname: 'x', fingerprint: 'fp', createdAt: 1 }),
     ).toBe(false)
+    expect(hasIdentityJwks({ priv: '{"v":1}' })).toBe(false)
     expect(hasIdentityJwks(null)).toBe(false)
   })
 })

@@ -16,8 +16,8 @@ beforeEach(() => {
 })
 
 describe('identity persistence — M2 profile (§8.2, RF-01)', () => {
-  it('writes the raw profile JSON under gritos:identity', () => {
-    persistIdentity({
+  it('writes the raw profile JSON under gritos:identity', async () => {
+    await persistIdentity({
       nickname: 'zorro-bravo',
       fingerprint: 'A31F 09BC 77D2 4E5A',
       createdAt: 1_700_000_000_000,
@@ -30,23 +30,45 @@ describe('identity persistence — M2 profile (§8.2, RF-01)', () => {
       fingerprint: 'A31F 09BC 77D2 4E5A',
       createdAt: 1_700_000_000_000,
     })
+    // Profile-only record: no key material of any kind (issue #24).
+    expect(parsed.privJwk).toBeUndefined()
+    expect(parsed.priv).toBeUndefined()
   })
 
-  it('roundtrips through loadIdentity', () => {
+  it('roundtrips through loadIdentity', async () => {
     expect(loadIdentity()).toBeNull() // first visit
-    persistIdentity({
+    await persistIdentity({
       nickname: 'luna-cauta',
       fingerprint: 'ABCD EF01 2345 6789',
       createdAt: 1,
       pubJwk: { kty: 'EC' },
     })
+    // loadIdentity surfaces the legacy plaintext `privJwk` (read from
+    // pre-#24 records) as `legacyPrivJwk`; the envelope lives in `priv`.
     expect(loadIdentity()).toEqual({
       nickname: 'luna-cauta',
       fingerprint: 'ABCD EF01 2345 6789',
       createdAt: 1,
       pubJwk: { kty: 'EC' },
-      privJwk: undefined,
+      priv: undefined,
+      legacyPrivJwk: undefined,
     })
+  })
+
+  it('roundtrips a legacy plaintext private JWK through loadIdentity (migration input)', async () => {
+    localStorage.setItem(
+      IDENTITY_STORAGE_KEY,
+      JSON.stringify({
+        nickname: 'luna-cauta',
+        fingerprint: 'ABCD EF01 2345 6789',
+        createdAt: 1,
+        pubJwk: { kty: 'EC' },
+        privJwk: { kty: 'EC', d: 'secret' },
+      }),
+    )
+    const persisted = loadIdentity()
+    expect(persisted?.legacyPrivJwk).toEqual({ kty: 'EC', d: 'secret' })
+    expect(persisted?.priv).toBeUndefined()
   })
 
   it('rejects corrupted or incomplete payloads', () => {

@@ -12,7 +12,8 @@ import { Toggle } from './Toggle'
 
 /**
  * Privacidad tab (RF-07/RF-08): the notifications toggle with its
- * permission request flow, remember-recents, identity regeneration behind
+ * permission request flow, remember-recents, an at-rest storage note for
+ * the wrapped identity key (issue #24), identity regeneration behind
  * a confirming dialog, and the panic button behind a double confirmation.
  */
 
@@ -100,6 +101,12 @@ export function PrivacyTab() {
       />
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
+        <p className="text-xs text-muted">
+          Tu clave privada se guarda cifrada en este navegador: la clave que la
+          descifra vive en IndexedDB y nada viaja por la red. Aun así, si algo
+          compromete por completo este origen (una extensión maliciosa,
+          malware en tu equipo) podría usar esa clave para suplantarte.
+        </p>
         <p className="text-xs text-muted">
           Genera un nuevo par de claves ECDH: tu fingerprint cambiará para todos tus pares.
         </p>

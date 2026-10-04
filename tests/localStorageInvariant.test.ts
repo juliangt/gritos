@@ -11,6 +11,8 @@ import {
   IDENTITY_STORAGE_KEY,
   persistIdentity,
 } from '../src/lib/crypto/identity'
+import { resetKeyVaultForTests } from '../src/lib/crypto/keyVault'
+import { installFakeIndexedDB } from './fakeIndexedDB'
 import { ROOMS_STORAGE_KEY } from '../src/lib/recentRooms'
 import { TOFU_STORAGE_KEY } from '../src/lib/tofu'
 import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
@@ -24,13 +26,18 @@ import { installFakeTrystero } from './fakeTrystero'
  * (names only), ui and the TOFU pins (issue #22: first-seen fingerprints,
  * public values only). Exercised after a full settings/identity/rooms/ui
  * workout and again through the panic wipe; no message content, password or
- * key material may ever appear under other keys.
+ * key material may ever appear under other keys. Since issue #24 the
+ * identity record itself carries no plaintext private material: the
+ * private JWK is an AES-GCM-wrapped envelope (`priv`), its wrapping key
+ * living in IndexedDB (also panic-wiped).
  */
 
 let fake: ReturnType<typeof installFakeTrystero>
 
 beforeEach(() => {
   localStorage.clear()
+  resetKeyVaultForTests()
+  installFakeIndexedDB()
   useAppStore.setState({ ...INITIAL_APP_STATE })
   useSettingsStore.getState().resetSettings()
   useUiStore.setState({ sidebarCollapsed: false })
@@ -40,6 +47,8 @@ beforeEach(() => {
 afterEach(() => {
   manager.resetManagerForTests()
   manager.setJoinRoomFactory(null)
+  resetKeyVaultForTests()
+  vi.unstubAllGlobals()
   localStorage.clear()
 })
 
@@ -49,10 +58,10 @@ function gritosKeys(): string[] {
 
 describe('spec §8.2 — only the documented gritos:* keys', () => {
   it('a full settings + identity + rooms + ui + tofu session leaves exactly the five keys', async () => {
-    // A real post-onboarding identity (JWK pair persisted once).
+    // A real post-onboarding identity (keypair persisted once, wrapped).
     const session = await createSessionIdentity('zorro-bravo')
     const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
-    persistIdentity({
+    await persistIdentity({
       nickname: 'zorro-bravo',
       fingerprint: session.identity.fingerprint,
       createdAt: session.identity.createdAt,
@@ -98,13 +107,15 @@ describe('spec §8.2 — only the documented gritos:* keys', () => {
       recent: string[]
     }
     expect(rooms.recent).toEqual(['dev', 'lobby'])
-    const identity = JSON.parse(localStorage.getItem(IDENTITY_STORAGE_KEY) as string) as Record<
-      string,
-      unknown
-    >
+    const identityRaw = localStorage.getItem(IDENTITY_STORAGE_KEY) as string
+    const identity = JSON.parse(identityRaw) as Record<string, unknown>
     expect(Object.keys(identity).sort()).toEqual(
-      ['createdAt', 'fingerprint', 'nickname', 'privJwk', 'pubJwk'].sort(),
+      ['createdAt', 'fingerprint', 'nickname', 'priv', 'pubJwk'].sort(),
     )
+    // Issue #24 — the private key is not greppable in the stored JSON.
+    expect(identityRaw).not.toContain('"privJwk"')
+    expect(identityRaw).not.toContain(privJwk.d as string)
+    expect(JSON.parse(identity.priv as string)).toMatchObject({ v: 1 })
     // TOFU: a flat {peerId: fingerprint} map — fingerprints are public.
     const tofu = JSON.parse(localStorage.getItem(TOFU_STORAGE_KEY) as string) as Record<
       string,
@@ -117,7 +128,7 @@ describe('spec §8.2 — only the documented gritos:* keys', () => {
   it('even panic leaves no gritos:* keys behind (and nothing else appears)', async () => {
     const session = await createSessionIdentity('zorro-bravo')
     const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
-    persistIdentity({
+    await persistIdentity({
       nickname: 'zorro-bravo',
       fingerprint: session.identity.fingerprint,
       createdAt: session.identity.createdAt,

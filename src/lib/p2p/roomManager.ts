@@ -29,7 +29,7 @@ import {
   type ReceiptPayload,
   type TypingPayload,
 } from './protocol'
-import { computeFingerprint, createSessionIdentity, loadIdentity, persistIdentity, regenerateIdentity, restoreSessionIdentity, type SessionIdentity } from '../crypto/identity'
+import { computeFingerprint, createSessionIdentity, loadIdentity, persistIdentity, regenerateIdentity, restoreSessionIdentity, type PersistedIdentity, type SessionIdentity } from '../crypto/identity'
 import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
 import { mentionsNickname } from '../markdown/parse'
 import {
@@ -216,12 +216,7 @@ export function ensureSessionIdentity(nickname?: string): Promise<SessionIdentit
       const stored = useAppStore.getState().identity
       const persisted =
         stored !== null
-          ? {
-              nickname: stored.nickname,
-              fingerprint: stored.fingerprint,
-              createdAt: stored.createdAt,
-              ...extractPersistedJwks(),
-            }
+          ? persistedFromStoreProfile(stored)
           : loadIdentity()
       if (persisted !== null) {
         const { session } = await restoreSessionIdentity(persisted)
@@ -240,13 +235,23 @@ export function ensureSessionIdentity(nickname?: string): Promise<SessionIdentit
   return identityPromise
 }
 
-/** Reads the optional JWK fields of the persisted record, when readable. */
-function extractPersistedJwks(): { pubJwk?: JsonWebKey; privJwk?: JsonWebKey } {
+/**
+ * Merges the store's display profile with the key material persisted under
+ * `gritos:identity` (public JWK + wrapped envelope, issue #24): the store
+ * is authoritative for the profile, storage for the keys. A missing record
+ * yields a profile-only identity, which the restore path migrates exactly
+ * as before.
+ */
+function persistedFromStoreProfile(stored: { nickname: string; fingerprint: string; createdAt: number }): PersistedIdentity {
   const persisted = loadIdentity()
-  if (persisted?.pubJwk !== undefined && persisted.privJwk !== undefined) {
-    return { pubJwk: persisted.pubJwk, privJwk: persisted.privJwk }
+  return {
+    nickname: stored.nickname,
+    fingerprint: stored.fingerprint,
+    createdAt: stored.createdAt,
+    pubJwk: persisted?.pubJwk,
+    priv: persisted?.priv,
+    legacyPrivJwk: persisted?.legacyPrivJwk,
   }
-  return {}
 }
 
 /**
@@ -299,12 +304,22 @@ function generateEphemeralNick(): string {
 
 /**
  * Re-persists the §8.2 identity record with a new nickname, keeping the
- * keypair material untouched (M5: nickname changes survive reloads).
+ * keypair material untouched (M5: nickname changes survive reloads). The
+ * wrapped envelope is stored verbatim (no re-wrapping, sync write); a
+ * pre-#24 plaintext record is wrapped in the same stroke. The write is
+ * fire-and-forget: nothing reads the record back in this call path.
  */
 function repersistNickname(nickname: string): void {
   const persisted = loadIdentity()
   if (persisted !== null) {
-    persistIdentity({ ...persisted, nickname })
+    void persistIdentity({
+      nickname,
+      fingerprint: persisted.fingerprint,
+      createdAt: persisted.createdAt,
+      pubJwk: persisted.pubJwk,
+      priv: persisted.priv,
+      privJwk: persisted.legacyPrivJwk,
+    })
   }
 }
 

@@ -282,7 +282,7 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
       await import('../src/lib/crypto/identity')
     const session = await createSessionIdentity('zorro-bravo')
     const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
-    persistIdentity({
+    await persistIdentity({
       nickname: 'zorro-bravo',
       fingerprint: session.identity.fingerprint,
       createdAt: session.identity.createdAt,
@@ -405,7 +405,7 @@ describe('nickname change from the modal (RF-01/RF-07)', () => {
       await import('../src/lib/crypto/identity')
     const session = await createSessionIdentity('zorro-bravo')
     const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
-    persistIdentity({
+    await persistIdentity({
       nickname: 'zorro-bravo',
       fingerprint: session.identity.fingerprint,
       createdAt: session.identity.createdAt,
@@ -424,10 +424,15 @@ describe('nickname change from the modal (RF-01/RF-07)', () => {
     fireEvent.blur(input)
 
     expect(useAppStore.getState().identity?.nickname).toBe('luna-cauta')
-    const persisted = JSON.parse(localStorage.getItem('gritos:identity') as string) as {
-      nickname: string
-    }
-    expect(persisted.nickname).toBe('luna-cauta')
+    // Issue #24: persistIdentity is async now — the re-persist keeps the
+    // stored envelope but still lands a microtask after the blur, so the
+    // storage read waits for it.
+    await waitFor(() => {
+      const persisted = JSON.parse(localStorage.getItem('gritos:identity') as string) as {
+        nickname: string
+      }
+      expect(persisted.nickname).toBe('luna-cauta')
+    })
     const lastPresence = fake.rooms[0].action('presence').sends.at(-1)
     expect(lastPresence?.data).toMatchObject({ nick: 'luna-cauta' })
     expect(lastPresence?.options).toBeUndefined() // broadcast to every peer
