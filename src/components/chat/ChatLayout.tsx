@@ -5,6 +5,7 @@ import { MessageFeed } from './MessageFeed'
 import { TypingBar } from './TypingBar'
 import { ChatInput } from './ChatInput'
 import { NetworkErrorBanner } from './NetworkErrorBanner'
+import { JoinRoomPopover } from '../sidebar/JoinRoomPopover'
 import { DmHeader } from '../dm/DmHeader'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
@@ -13,6 +14,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useLatency } from '../../hooks/useLatency'
 import { useNotifications } from '../../hooks/useNotifications'
 import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
+import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
 import { joinRoom } from '../../lib/p2p/roomManager'
 
 /** Spec §10.1 — at this width the sidebar becomes an overlay drawer. */
@@ -40,6 +42,11 @@ export function ChatLayout() {
   const rooms = useAppStore((state) => state.rooms)
   const dms = useAppStore((state) => state.dms)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Issue #41 — name of the room this session entered through a '#sala'
+  // deep link, kept only to offer the password join form when that room
+  // cannot find peers (linked password rooms are indistinguishable from
+  // nonexistent ones until then, RF-05).
+  const [linkedRoomName, setLinkedRoomName] = useState<string | null>(null)
 
   useNotifications()
 
@@ -56,6 +63,28 @@ export function ChatLayout() {
         if (useAppStore.getState().activeView === null) {
           useAppStore.getState().setActiveView({ kind: 'room', id: connection.roomId })
         }
+      })
+      .catch(() => {
+        // Cap reached or invalid name: nothing to auto-join; the sidebar
+        // remains available.
+      })
+  }, [])
+
+  // Issue #41 — '#sala=<name>' deep links: the linked room is the
+  // destination, so it joins on boot and takes the focus even when the
+  // lobby auto-join above also runs. The hash is consumed up front (a
+  // reload must never re-trigger the join) and never carries the password
+  // (RF-05); a failed join (cap, invalid name) degrades to the current
+  // behavior — the sidebar remains available.
+  useEffect(() => {
+    if (!window.isSecureContext) return
+    const name = parseRoomHash(window.location.hash)
+    clearRoomHash()
+    if (name === null) return
+    void joinRoom(name)
+      .then((connection) => {
+        setLinkedRoomName(name)
+        useAppStore.getState().setActiveView({ kind: 'room', id: connection.roomId })
       })
       .catch(() => {
         // Cap reached or invalid name: nothing to auto-join; the sidebar
@@ -156,6 +185,30 @@ export function ChatLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <NetworkErrorBanner />
+        {/* Issue #41 — a room entered through a share link that exhausted
+            the not-found heuristic may simply need its password (RF-05:
+            indistinguishable from a nonexistent room): offer the regular
+            join form, prefilled, so the password can be entered. The form
+            never reaches the URL or storage. */}
+        {activeRoom !== null &&
+          linkedRoomName === activeRoom.name &&
+          activeRoom.status === 'error' && (
+            <section
+              aria-label="Unirse con contraseña"
+              className="flex flex-col items-center gap-2 border-b border-border bg-surface px-3 py-3"
+            >
+              <p className="text-xs text-muted">Si la sala tiene contraseña, únete con ella:</p>
+              <div className="w-full max-w-xs">
+                <JoinRoomPopover
+                  initialName={activeRoom.name}
+                  // Keeping the name on join lets the form come back when a
+                  // wrong password exhausts the heuristic again; only an
+                  // explicit dismiss retires the recovery offer.
+                  onDismiss={() => setLinkedRoomName(null)}
+                />
+              </div>
+            </section>
+          )}
         {activeDm !== null ? (
           <DmHeader
             channel={activeDm}

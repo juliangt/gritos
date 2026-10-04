@@ -9,19 +9,25 @@ import {
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useAppStore } from '../../stores/useAppStore'
+import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
 
 /**
  * First-visit onboarding (RF-01, spec §10.2): centered screen over the
  * theme background with the typographic logo, the nickname field, the
  * 'sorpréndeme' generator and the 'Entrar →' action. Entering persists the
  * identity profile and — when `autoJoinLobby` is on — joins #lobby, which
- * becomes the initial active view. The chat layout takes over as soon as
- * the store holds an identity.
+ * becomes the initial active view. A '#sala' deep link (issue #41) is
+ * carried through: after the nickname is chosen the linked room is joined
+ * and focused, and the hash is consumed. The chat layout takes over as soon
+ * as the store holds an identity.
  */
 export function OnboardingScreen() {
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [entering, setEntering] = useState(false)
+  // Issue #41 — room requested by a share link, read once on mount for the
+  // hint line (the join re-reads the hash on 'Entrar').
+  const [linkedRoom] = useState(() => parseRoomHash(window.location.hash))
   const { enterWithNickname, joinRoomFocused } = useRoomManager({
     // The identity is created on 'Entrar' with the chosen nickname; an
     // anonymous ephemeral identity must not be generated on mount.
@@ -51,6 +57,16 @@ export function OnboardingScreen() {
       await enterWithNickname(nickname)
       if (useSettingsStore.getState().settings.autoJoinLobby) {
         await joinRoomFocused('lobby')
+      }
+      // Issue #41 — a '#sala' deep link survives onboarding: the linked
+      // room is joined and focused after the nickname is chosen (the lobby
+      // above may still join per settings; the link wins the focus). The
+      // hash is consumed so a reload never re-triggers the join. A failed
+      // join (cap) degrades to the lobby default.
+      const linkedName = parseRoomHash(window.location.hash)
+      if (linkedName !== null) {
+        clearRoomHash()
+        await joinRoomFocused(linkedName)
       }
       // Identity in the store switches App to the chat layout.
       if (useAppStore.getState().identity === null) setEntering(false)
@@ -109,6 +125,12 @@ export function OnboardingScreen() {
         {autoJoinLobby && (
           <p className="text-center text-xs text-muted">
             Entrarás en #lobby automáticamente; desde la barra lateral podrás unirte a otras salas.
+          </p>
+        )}
+        {linkedRoom !== null && (
+          <p className="text-center text-xs text-muted">
+            Entrarás en la sala <span className="font-mono text-text">#{linkedRoom}</span> del
+            enlace compartido.
           </p>
         )}
       </form>
