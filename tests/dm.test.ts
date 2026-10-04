@@ -71,6 +71,12 @@ describe('DM key derivation (spec §9.2)', () => {
     expect(canonicalFingerprint('A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678')).toBe(
       'A31F09BC77D24E5A51C0FFEE12345678',
     )
+    // Migration gate (issue #25, spec §12.1): DM_KEY_INFO is the versioned
+    // domain separator of the DM derivation. Changing this string — or the
+    // {iv, payload} envelope shape — is the deliberate v2 migration: bump the
+    // version marker (e.g. 'gritos/dm/v2' / envelope v: 2) so old and new
+    // peers never silently derive different keys from the same envelopes;
+    // mixed-version rooms degrade to silent discard (§7.3) until they converge.
     expect(DM_KEY_INFO).toBe('gritos/dm/v1')
   })
 
