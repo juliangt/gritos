@@ -1,9 +1,8 @@
 name: CI
 
+# Manual-only by policy. Do NOT re-add push/pull_request triggers.
+# See AGENTS.md at the repo root before touching this file.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 jobs:
