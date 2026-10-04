@@ -21,6 +21,10 @@ function stripCspMetaInDev(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), stripCspMetaInDev()],
+  // Relative base (issue #40): the README recommends GitHub Pages, where a
+  // project site is served under /<repo>/. A relative base emits asset URLs
+  // that resolve on GitHub Pages, Netlify and nginx subpaths alike.
+  base: './',
   build: {
     // Vite 8 defaults to the lightningcss minifier, which warns
     // ("Unknown at-rule") about Tailwind 4's @theme/@tailwind at-rules.
