@@ -194,7 +194,9 @@ export function isOversized(sizeBytes: number): boolean {
 
 /**
  * True when a `dm` envelope is addressed to us; foreign `to` values are
- * discarded, never relayed (§7.3 — no relay in v1).
+ * discarded, never relayed (§7.3 — no relay in v1). Since issue #18 sends
+ * are already directed at the recipient, this filter is defense in depth:
+ * peers running older builds may still broadcast their DM envelopes.
  */
 export function filterDmForSelf(
   envelope: Envelope,
