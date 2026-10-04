@@ -646,3 +646,68 @@ describe('M2 recent rooms (§8.2 gritos:rooms)', () => {
     expect(useAppStore.getState().recentRooms).toEqual([])
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #45 — every send is routed through safeSend: a data channel that
+// closes mid-flight must never escape as an unhandled rejection. Vitest
+// fails the run on any unhandled rejection, so a bare `void send(...)`
+// (no .catch) would fail these tests; each one also pins the flow that
+// must keep working when the channel rejects.
+// ---------------------------------------------------------------------------
+
+describe('safeSend routing (issue #45: rejecting sends stay handled)', () => {
+  it('the peer-join presence+keys announce survives a closed channel', async () => {
+    const { room, roomId } = await join('lobby')
+    room.failSends = true
+    room.peerJoin('peer-1')
+    await flushMicrotasks()
+
+    // The join flow completed: the peer landed in the store and both
+    // directed sends were attempted before the channel rejected them.
+    expect(storedRoom(roomId).peers.map((peer) => peer.id)).toEqual(['peer-1'])
+    expect(room.lastSend('presence').options).toEqual({ target: 'peer-1' })
+    expect(room.lastSend('keys').options).toEqual({ target: 'peer-1' })
+  })
+
+  it('sendPing survives a closed channel and still reports the attempt', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    await flushMicrotasks()
+
+    room.failSends = true
+    expect(manager.sendPing(roomId, 'peer-1', 1234)).toBe(true)
+    await flushMicrotasks()
+
+    const ping = room.lastSend('ping')
+    expect(ping.data).toEqual({ t: 1234 })
+    expect(ping.options).toEqual({ target: 'peer-1' })
+  })
+
+  it('the regenerateSessionIdentity keys re-announce survives a closed channel', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    // Make the peer known so the re-announce loop targets it.
+    room.receive('keys', new Uint8Array(65).fill(7), 'peer-1')
+    await flushMicrotasks()
+
+    room.failSends = true
+    const session = await manager.regenerateSessionIdentity()
+    await flushMicrotasks()
+
+    expect(session).not.toBeNull()
+    const reannounce = room.lastSend('keys')
+    expect(reannounce.data).toEqual(session?.rawPublicKey)
+    expect(reannounce.options).toEqual({ target: 'peer-1' })
+  })
+
+  it('a synchronously throwing channel does not break the peer-join flow', async () => {
+    const { room, roomId } = await join('lobby')
+    room.action('keys').send = () => {
+      throw new Error('channel closed synchronously')
+    }
+
+    expect(() => room.peerJoin('peer-1')).not.toThrow()
+    await flushMicrotasks()
+    expect(storedRoom(roomId).peers.map((peer) => peer.id)).toEqual(['peer-1'])
+  })
+})
