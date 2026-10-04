@@ -3,19 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <!--
-      CSP (RNF-05/M6): the inline anti-flash script is allow-listed by its
-      sha256 hash; 'unsafe-inline' in style-src covers Vite's dev-injected
-      styles (the production bundle ships CSS as a file). WebRTC is not
-      governed by CSP; the wss:/ws: entries cover the torrent trackers.
-      frame-ancestors is NOT set here: browsers ignore it in <meta> delivery
-      (verified in Chromium) — serve it as an HTTP header at the host instead
-      (see README deployment notes). The dev server strips this meta (see
+      CSP (RNF-05/M6): the inline bootstrap script (frame-bust + anti-flash)
+      is allow-listed by its sha256 hash; 'unsafe-inline' in style-src covers
+      Vite's dev-injected styles (the production bundle ships CSS as a file).
+      WebRTC is not governed by CSP; the wss:/ws: entries cover the torrent
+      trackers. frame-ancestors is NOT set here: browsers ignore it in <meta>
+      delivery (verified in Chromium), so serve it as an HTTP header at the
+      host for defense in depth — hosts that cannot set headers (GitHub
+      Pages) rely on the inline frame-bust below instead (issue #27; see
+      README deployment notes). The dev server strips this meta (see
       vite.config.ts) because Vite's HMR preamble is an inline module script
       that cannot be hashed.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'sha256-XJRLxFqQlD7zuMSaUacvg1fywU8TxLNZ36vyGXHQ2vM='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; media-src 'none'; object-src 'none'; base-uri 'self'"
+      content="default-src 'self'; script-src 'self' 'sha256-L/0fM7/nm52V0EBeN57Mi3OoMCaxNUN87InOK0k1Hrs='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; media-src 'none'; object-src 'none'; base-uri 'self'"
     />
     <meta name="color-scheme" content="light dark" />
     <!-- Relative href (issue #40): the build uses a relative base, so the
@@ -28,18 +30,56 @@
     />
     <title>gritos — chat p2p sin servidor</title>
     <script>
-      // Anti-flash (spec §10.6): apply the persisted theme before the bundle
-      // loads. Reads the raw Settings JSON stored under 'gritos:settings'.
+      // Frame-bust (issue #27) + anti-flash (spec §10.6). The frame-bust runs
+      // first: browsers ignore frame-ancestors in <meta> CSP (see above), so
+      // an embed inside a frame is refused here — window.stop() halts the
+      // parser, the document is replaced with a warning and the app never
+      // boots (the module bundle below never executes). No break-out
+      // redirect: framing pages can block it and it is hostile to legitimate
+      // embedders. The warning is built with DOM APIs, not a markup string,
+      // and this script must not contain a closing head tag (not even in a
+      // comment): Vite's build injects the entry tags before the first one
+      // it finds, which would corrupt the script.
+      // Anti-flash: apply the persisted theme before the bundle loads. Reads
+      // the raw Settings JSON stored under 'gritos:settings'.
       // NOTE: if this script changes, update its 'sha256-' hash in the CSP
       // meta above.
       ;(function () {
+        if (window.top !== window.self) {
+          // window.stop() halts the parser immediately, so the entry module
+          // below never executes; document.open() is NOT reliable here (it
+          // can throw or be ignored while the parser is active — verified in
+          // Chromium, where the app booted straight through it).
+          window.stop()
+          var html = document.documentElement
+          html.textContent = ''
+          html.setAttribute('lang', 'es')
+          var body = document.createElement('body')
+          body.setAttribute(
+            'style',
+            'margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif',
+          )
+          var box = document.createElement('div')
+          box.setAttribute('style', 'max-width:28rem;padding:2rem;text-align:center')
+          var title = document.createElement('h1')
+          title.textContent = 'gritos no puede ejecutarse en un marco'
+          title.setAttribute('style', 'font-size:1.125rem;margin:0 0 0.5rem')
+          var text = document.createElement('p')
+          text.textContent =
+            'Por seguridad, esta app no puede ejecutarse dentro de un marco o iframe. Ábrela en su propia pestaña para continuar.'
+          text.setAttribute('style', 'margin:0;line-height:1.5')
+          box.appendChild(title)
+          box.appendChild(text)
+          body.appendChild(box)
+          html.appendChild(body)
+          return
+        }
         try {
           var raw = localStorage.getItem('gritos:settings')
           var theme = (raw && JSON.parse(raw).theme) || 'system'
           var dark =
             theme === 'dark' ||
-            (theme === 'system' &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches)
+            (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
           document.documentElement.classList.toggle('dark', dark)
         } catch (error) {
           /* fall back to light */

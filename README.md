@@ -19,7 +19,7 @@
 ## How it works
 
 - **Discovery:** [Trystero](https://github.com/tinychat/trystero) (torrent strategy, pinned exact version) uses public WebTorrent trackers over WebSocket (`wss:`) only to introduce peers and exchange SDP. Application traffic never touches a tracker — it flows over direct WebRTC data channels (DTLS-encrypted by the browser).
-- **Security model:** room chat rides on WebRTC's DTLS transport; password rooms and DMs add payload encryption with the native Web Crypto API (PBKDF2-SHA-256 600k iterations for room keys; ECDH + HKDF + AES-GCM for DMs). The private key is **encrypted at rest** (issue #24): it is AES-GCM-wrapped with a non-extractable key held in IndexedDB, so `gritos:identity` never contains plaintext key material — where IndexedDB is unavailable the app degrades to the old plaintext-at-rest behavior rather than breaking. Room passwords and all message content stay memory-only. The bundle ships a strict CSP (`script-src 'self'` + a hash for the theme bootstrap snippet); there is no server, so there is no server-side trust to audit. Residual risk, stated plainly: a fully compromised same-origin context (malicious extension with host permissions, malware on the device) can still reach both stores and abuse the key — the wrapping only raises the bar against naive `localStorage` dumps.
+- **Security model:** room chat rides on WebRTC's DTLS transport; password rooms and DMs add payload encryption with the native Web Crypto API (PBKDF2-SHA-256 600k iterations for room keys; ECDH + HKDF + AES-GCM for DMs). The private key is **encrypted at rest** (issue #24): it is AES-GCM-wrapped with a non-extractable key held in IndexedDB, so `gritos:identity` never contains plaintext key material — where IndexedDB is unavailable the app degrades to the old plaintext-at-rest behavior rather than breaking. Room passwords and all message content stay memory-only. The bundle ships a strict CSP (`script-src 'self'` + a hash for the inline frame-bust/theme bootstrap snippet); embedding the app in a frame is refused in-page by that bootstrap script, since a `<meta>` CSP cannot deliver `frame-ancestors` (issue #27). There is no server, so there is no server-side trust to audit. Residual risk, stated plainly: a fully compromised same-origin context (malicious extension with host permissions, malware on the device) can still reach both stores and abuse the key — the wrapping only raises the bar against naive `localStorage` dumps.
 - **Limits of the model:** see [Limitations](#limitations).
 
 ## Quickstart
@@ -40,14 +40,14 @@ Requires Node.js ≥ 22 and npm ≥ 11. Browsers must support Web Crypto, WebRTC
 
 ## Scripts
 
-| Script            | What it does                                              |
-| ----------------- | --------------------------------------------------------- |
+| Script            | What it does                                                         |
+| ----------------- | -------------------------------------------------------------------- |
 | `npm run dev`     | Vite dev server with hot reload (CSP meta stripped — see note below) |
-| `npm run build`   | `tsc -b` (strict type-check) + `vite build` → `dist/`     |
-| `npm run preview` | Serves the production build from `dist/`                  |
-| `npm test`        | Runs the Vitest suite (`vitest run`)                      |
-| `npm run lint`    | ESLint (flat config, typescript-eslint + react plugins)   |
-| `npm run format`  | Prettier over the repository                                              |
+| `npm run build`   | `tsc -b` (strict type-check) + `vite build` → `dist/`                |
+| `npm run preview` | Serves the production build from `dist/`                             |
+| `npm test`        | Runs the Vitest suite (`vitest run`)                                 |
+| `npm run lint`    | ESLint (flat config, typescript-eslint + react plugins)              |
+| `npm run format`  | Prettier over the repository                                         |
 
 > The strict CSP `<meta>` in `index.html` targets the **production** build. Vite's dev server injects its own inline HMR preamble that a hash-pinned `script-src` cannot allow, so a tiny dev-only Vite plugin (`stripCspMetaInDev` in `vite.config.ts`) removes the meta while serving in dev. `vite build` output keeps it untouched.
 
@@ -104,7 +104,11 @@ npm run build
 Notes:
 
 - **HTTPS is mandatory** for Web Crypto/WebRTC on non-localhost origins.
-- **Frame-busting:** browsers ignore `frame-ancestors` in a `<meta>` CSP, so serve a `Content-Security-Policy: frame-ancestors 'none'` (or `X-Frame-Options: DENY`) **HTTP header** at the host to forbid embedding.
+- **Frame-busting is built in (issue #27):** the inline bootstrap script in `index.html` detects when the page runs inside a frame and refuses to boot — it replaces the document with a warning ("Esta app no puede ejecutarse dentro de un marco o iframe…") instead of starting the app. This in-page fallback is what keeps header-less hosts such as GitHub Pages usable, because browsers ignore `frame-ancestors` in a `<meta>` CSP (the only CSP delivery GitHub Pages supports).
+- **Recommended host headers** (self-hosters can do better than the in-page fallback — defense in depth):
+  - `Content-Security-Policy: frame-ancestors 'none'` (or `X-Frame-Options: DENY`) — forbids embedding at the HTTP layer.
+  - `X-Content-Type-Options: nosniff`
+  - `Referrer-Policy: no-referrer`
 - Single-page app with no routes: no rewrite rules are needed beyond serving `index.html` at `/`.
 
 ## Public trackers notice
