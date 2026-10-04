@@ -1,0 +1,112 @@
+/**
+ * Schema validation for the persisted `gritos:settings` payload (issue #29).
+ *
+ * `settingsStorage.getItem` used to spread the raw parsed JSON over the
+ * defaults with zero checks, so a corrupted store (or a future
+ * settings-import feature) could push `maxActiveRooms: 1e9`, junk tracker
+ * strings or arbitrary `iceServers` objects straight into Trystero's
+ * `rtcConfig` → `RTCPeerConnection`. Each field is now checked
+ * independently: the valid parts of a record survive and everything else
+ * falls back to the documented defaults (spec §8.1). The pass is total and
+ * never throws — every `new URL` parse is wrapped in try/catch.
+ */
+
+import type { Settings, ThemeChoice } from '../stores/useAppStore'
+
+/** RF-02 active-room cap, enforced by the NetworkTab UI (1–6). */
+export const MIN_ACTIVE_ROOMS = 1
+export const MAX_ACTIVE_ROOMS = 6
+
+/** §8.1 — the only theme values the app knows (RF-10). */
+const THEMES: readonly ThemeChoice[] = ['light', 'dark', 'system']
+
+/** `new URL` that yields null instead of throwing (never trust the store). */
+function parseUrl(value: string): URL | null {
+  try {
+    return new URL(value)
+  } catch {
+    return null
+  }
+}
+
+/** Tracker rule: parses as a URL, `wss:` scheme, something after it. */
+function isValidTrackerUrl(value: string): boolean {
+  const url = parseUrl(value.trim())
+  return url !== null && url.protocol === 'wss:' && url.href !== url.protocol
+}
+
+const ICE_PROTOCOLS: readonly string[] = ['stun:', 'turn:', 'turns:']
+
+/** ICE rule: parses as a URL, stun/turn(s) scheme, something after it. */
+function isValidIceUrl(value: string): boolean {
+  const url = parseUrl(value.trim())
+  return url !== null && ICE_PROTOCOLS.includes(url.protocol) && url.href !== url.protocol
+}
+
+function normalizeTrackers(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((entry): entry is string => typeof entry === 'string' && isValidTrackerUrl(entry))
+    .map((entry) => entry.trim())
+}
+
+/**
+ * Rebuilds one ICE entry from the only fields gritos understands (§6.3):
+ * `urls` as a string or string array of stun:/turn:/turns: URLs, plus
+ * optional string `username`/`credential`. Any other key (or shape) is
+ * dropped so nothing unvetted reaches `RTCPeerConnection`.
+ */
+function normalizeIceServer(raw: unknown): RTCIceServer | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  const rawUrls: unknown = record.urls
+  const candidates: readonly unknown[] = Array.isArray(rawUrls) ? rawUrls : [rawUrls]
+  if (candidates.length === 0) return null
+  const urls: string[] = []
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || !isValidIceUrl(candidate)) return null
+    urls.push(candidate.trim())
+  }
+  const server: RTCIceServer = { urls: urls.length === 1 ? urls[0] : urls }
+  if (typeof record.username === 'string') server.username = record.username
+  if (typeof record.credential === 'string') server.credential = record.credential
+  return server
+}
+
+function normalizeIceServers(raw: unknown): RTCIceServer[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map(normalizeIceServer)
+    .filter((server): server is RTCIceServer => server !== null)
+}
+
+function normalizeMaxActiveRooms(raw: unknown, fallback: Settings): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback.maxActiveRooms
+  return Math.min(MAX_ACTIVE_ROOMS, Math.max(MIN_ACTIVE_ROOMS, Math.trunc(raw)))
+}
+
+/**
+ * Validates a parsed `gritos:settings` value against the `Settings` schema.
+ * Non-object payloads (corrupt shape, `"[]"`, `42`, `null`, arrays) come
+ * back as fresh defaults; objects are validated field by field and unknown
+ * keys never survive. `fallback` supplies the documented defaults (spec
+ * §8.1) so this module stays a pure helper with no store dependency.
+ */
+export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ...fallback }
+  const record = raw as Record<string, unknown>
+  return {
+    autoJoinLobby:
+      typeof record.autoJoinLobby === 'boolean' ? record.autoJoinLobby : fallback.autoJoinLobby,
+    trackers: normalizeTrackers(record.trackers),
+    iceServers: normalizeIceServers(record.iceServers),
+    maxActiveRooms: normalizeMaxActiveRooms(record.maxActiveRooms, fallback),
+    theme: THEMES.includes(record.theme as ThemeChoice)
+      ? (record.theme as ThemeChoice)
+      : fallback.theme,
+    notifications:
+      typeof record.notifications === 'boolean' ? record.notifications : fallback.notifications,
+    rememberRooms:
+      typeof record.rememberRooms === 'boolean' ? record.rememberRooms : fallback.rememberRooms,
+  }
+}
