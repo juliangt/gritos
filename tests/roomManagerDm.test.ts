@@ -203,6 +203,9 @@ describe('incoming DM (RF-04, §9.2)', () => {
     expect(room.action('receipt').sends).toHaveLength(0)
   })
 
+  // Defense in depth (issue #18): sends are now directed at the recipient,
+  // but peers running older builds may still broadcast — a `dm` addressed
+  // to somebody else must still be discarded here (§7.3, never relayed).
   it('discards dms addressed to somebody else (never relayed, §7.3)', async () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
@@ -261,7 +264,7 @@ async function sealFromX(
 }
 
 describe('outgoing DM (RF-04, §9.2)', () => {
-  it('sendDm broadcasts an encrypted envelope and echoes the own message', async () => {
+  it('sendDm sends the encrypted envelope directed at the recipient (issue #18) and echoes the own message', async () => {
     await manager.ensureSessionIdentity()
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
@@ -271,6 +274,9 @@ describe('outgoing DM (RF-04, §9.2)', () => {
     expect(envelope).not.toBeNull()
     const sent = room.lastSend('dm')
     expect(sent.data).toEqual(envelope)
+    // Targeted delivery: the ciphertext reaches A only, never the rest of
+    // the shared room's mesh (metadata leak, issue #18).
+    expect(sent.options).toEqual({ target: A.id })
     const wire = envelope as Envelope
     expect(wire.kind).toBe('dm')
     expect(wire.to).toBe(A.id)

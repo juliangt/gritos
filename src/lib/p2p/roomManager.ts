@@ -701,11 +701,13 @@ export function openDmChannel(peerId: string): boolean {
 }
 
 /**
- * RF-04/§9.2 — encrypts `text` for `peerId` and broadcasts the `dm`
- * Envelope (broadcast with `to`; non-recipients discard, §7.1). Returns the
- * envelope, or null when there is no identity, the peer is unavailable
- * (no shared room), its key is unknown, or the text exceeds the 4000-char
- * protocol limit (§7.3).
+ * RF-04/§9.2 — encrypts `text` for `peerId` and sends the `dm` Envelope
+ * directed at the peer only (issue #18): the ciphertext never reaches other
+ * room members, so they cannot profile who DMs whom. `filterDmForSelf`
+ * stays on the receive path as defense in depth (older peers may still
+ * broadcast, §7.1/§7.3). Returns the envelope, or null when there is no
+ * identity, the peer is unavailable (no shared room), its key is unknown,
+ * or the text exceeds the 4000-char protocol limit (§7.3).
  */
 export function sendDm(peerId: string, text: string): Promise<Envelope | null> {
   const identity = sessionIdentity
@@ -739,7 +741,8 @@ export function sendDm(peerId: string, text: string): Promise<Envelope | null> {
         iv: sealed.iv,
         body: sealed.payload,
       })
-      safeSend(shared.actions.dm, envelope)
+      // Directed send (issue #18): only the recipient gets the ciphertext.
+      safeSend(shared.actions.dm, envelope, { target: peerId })
       const nick = channel.peerNick !== '' ? channel.peerNick : peerId
       syncDmTofuState(peerId, nick, theirFp)
       useAppStore.getState().appendDmMessage(peerId, {
