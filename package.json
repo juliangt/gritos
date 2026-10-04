@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Serverless P2P chat in the browser: no accounts, no backend, ephemeral by design.",
+  "license": "MIT",
   "engines": {
     "node": ">=22.13.0"
   },
