@@ -17,13 +17,17 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * A wrong password is NOT a join error: the room simply never finds peers,
  * and the not-found message appears in the room view once the error
  * heuristic exhausts (lib/rooms roomStatusText). Esc dismisses the popover
- * when an onDismiss handler exists (RNF-05).
+ * when an onDismiss handler exists (RNF-05). `initialName` prefills the
+ * field (issue #41: the deep-link password recovery form).
  */
 export function JoinRoomPopover(props: {
-  onJoined: (roomId: string) => void
+  /** Called with the joined roomId; joinRoomFocused already focuses it. */
+  onJoined?: (roomId: string) => void
   onDismiss?: () => void
+  /** Prefilled room name (issue #41 deep-link password recovery). */
+  initialName?: string
 }) {
-  const [name, setName] = useState('')
+  const [name, setName] = useState(props.initialName ?? '')
   const [encrypted, setEncrypted] = useState(false)
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -66,7 +70,7 @@ export function JoinRoomPopover(props: {
       setError(joinError)
       return
     }
-    if (roomId !== null) props.onJoined(roomId)
+    if (roomId !== null) props.onJoined?.(roomId)
   }
 
   return (
