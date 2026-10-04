@@ -19,6 +19,27 @@ export const MAX_PAYLOAD_BYTES = 64 * 1024
 /** Receipts are batched, max 50 ids per action (§7.1). */
 export const MAX_RECEIPT_BATCH = 50
 
+/**
+ * Issue #19 — maximum age of an incoming envelope relative to the local
+ * clock. Dedup state is memory-only and resets on every reload, rejoin or
+ * (for DMs) connection churn, so a captured envelope replayed later passes
+ * dedup again and resurfaces as a freshly received message — and the UI
+ * renders only HH:MM, hiding the age. That lets an attacker re-inject old
+ * conversation fragments ("send me X" → "ok, here is the code") to
+ * fabricate context: a social-engineering replay. Five minutes bounds any
+ * replay to a short live window while tolerating normal mesh latency.
+ */
+export const MAX_ENVELOPE_AGE_MS = 300_000
+
+/**
+ * Issue #19 — how far into the future an envelope's `ts` may sit relative
+ * to the local clock before it is discarded. Peer clocks are not
+ * synchronized: a small tolerance keeps honest messages from being dropped,
+ * while far-future stamps (which would stay "fresh" for hours, defeating
+ * the age bound above) are rejected.
+ */
+export const MAX_CLOCK_SKEW_MS = 90_000
+
 export type EnvelopeKind = 'chat' | 'dm'
 
 /**
@@ -182,8 +203,29 @@ export function markSeen(seenIds: Set<string>, id: string): boolean {
   return true
 }
 
-/** Validation first, then dedup: true only for first-seen valid envelopes. */
+/**
+ * Issue #19 — true when `ts` falls inside the acceptable window around
+ * `now`: no older than MAX_ENVELOPE_AGE_MS and no further than
+ * MAX_CLOCK_SKEW_MS in the future. Enforced by `shouldProcess` in both
+ * receive paths (chat and DM), before any dedup or store effect.
+ */
+export function isWithinFreshnessWindow(
+  ts: number,
+  now: number = Date.now(),
+): boolean {
+  const delta = now - ts
+  return delta <= MAX_ENVELOPE_AGE_MS && delta >= -MAX_CLOCK_SKEW_MS
+}
+
+/**
+ * Validation first (freshness, issue #19 — `parseEnvelope` did the
+ * structural part), then dedup: true only for first-seen, in-window
+ * envelopes. Freshness runs BEFORE `markSeen` so a stale or future-dated
+ * envelope has zero side effects: no feed message, no receipt, and it does
+ * not even consume its id in the dedup set.
+ */
 export function shouldProcess(envelope: Envelope, seenIds: Set<string>): boolean {
+  if (!isWithinFreshnessWindow(envelope.ts)) return false
   return markSeen(seenIds, envelope.id)
 }
 

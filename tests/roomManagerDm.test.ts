@@ -7,7 +7,7 @@ import {
   generateSessionKeypair,
 } from '../src/lib/crypto/identity'
 import { decryptDm, deriveDmKey, encryptDm, clearDmKeyCache } from '../src/lib/crypto/dm'
-import { createEnvelope, type Envelope } from '../src/lib/p2p/protocol'
+import { createEnvelope, MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
 import { installFakeTrystero, type FakeTrysteroRoom } from './fakeTrystero'
 
 /**
@@ -451,5 +451,108 @@ describe('DM typing (RF-04, §7.1)', () => {
     expect(dmChannel(A.id).typing[A.id]).toBeDefined()
     room.peerLeave(A.id)
     expect(dmChannel(A.id).typing[A.id]).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #19 — replay protection on the DM receive path: a freshness window
+// around the local clock plus a session-wide dedup set (shared across rooms
+// and surviving connection churn). Real timers here: the envelopes are aged
+// by rewriting `ts` — the ciphertext does not cover it, exactly as with a
+// captured envelope an attacker replays.
+// ---------------------------------------------------------------------------
+
+describe('DM freshness and replay (issue #19)', () => {
+  it('discards a DM older than 5 minutes with zero state change', async () => {
+    const { room } = await joinWithPeerA()
+    const mine = await myRawKeyAndFingerprint(room)
+
+    const envelope = await sealFromA('capturada', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS - 1 }, A.id)
+    await flushMicrotasks()
+
+    // No channel, no message, no debounced receipt.
+    expect(useAppStore.getState().dms[A.id]).toBeUndefined()
+    await waitForReceiptDebounce()
+    expect(room.action('receipt').sends).toHaveLength(0)
+  })
+
+  it('discards a DM dated beyond the 90 s future skew tolerance', async () => {
+    const { room } = await joinWithPeerA()
+    const mine = await myRawKeyAndFingerprint(room)
+
+    const envelope = await sealFromA('del futuro', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    room.receive('dm', { ...envelope, ts: Date.now() + MAX_CLOCK_SKEW_MS + 1 }, A.id)
+    await flushMicrotasks()
+
+    expect(useAppStore.getState().dms[A.id]).toBeUndefined()
+  })
+
+  it('keeps a DM just inside the 5-minute edge', async () => {
+    const { room } = await joinWithPeerA()
+    const mine = await myRawKeyAndFingerprint(room)
+
+    const envelope = await sealFromA('al límite', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS }, A.id)
+    await flushMicrotasks()
+
+    expect(dmChannel(A.id).messages).toHaveLength(1)
+    expect(dmChannel(A.id).messages[0]?.text).toBe('al límite')
+  })
+
+  it('drops a still-fresh replay delivered through a fresh connection (session-wide dedup)', async () => {
+    const first = await joinWithPeerA('lobby')
+    const mine = await myRawKeyAndFingerprint(first.room)
+
+    const envelope = await sealFromA('única', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    first.room.receive('dm', envelope, A.id)
+    await flushMicrotasks()
+    expect(dmChannel(A.id).messages).toHaveLength(1)
+
+    // A brand-new connection (new room join): its per-connection dedup set
+    // is empty, but the session-wide DM set still knows the id.
+    await manager.joinRoom('dev')
+    const secondRoom = fake.rooms[fake.rooms.length - 1]
+    secondRoom.receive('dm', envelope, A.id)
+    await flushMicrotasks()
+
+    expect(dmChannel(A.id).messages).toHaveLength(1)
+  })
+
+  it('discards an aged replay by the window; the aged copy burns no dedup id', async () => {
+    const first = await joinWithPeerA('lobby')
+    const mine = await myRawKeyAndFingerprint(first.room)
+
+    const envelope = await sealFromA('vieja', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    // First-ever delivery of this id, already aged beyond the window — a
+    // captured envelope replayed after a reload reset the dedup set.
+    first.room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS - 1 }, A.id)
+    await flushMicrotasks()
+    expect(useAppStore.getState().dms[A.id]).toBeUndefined()
+
+    // Freshness runs before dedup: the rejected stale copy must not block
+    // the same id arriving inside the window.
+    first.room.receive('dm', envelope, A.id)
+    await flushMicrotasks()
+    expect(dmChannel(A.id).messages).toHaveLength(1)
+  })
+
+  it('keeps dropping the replay after leaving and rejoining the room', async () => {
+    const first = await joinWithPeerA('lobby')
+    const mine = await myRawKeyAndFingerprint(first.room)
+
+    const envelope = await sealFromA('insistente', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    first.room.receive('dm', envelope, A.id)
+    await flushMicrotasks()
+    expect(dmChannel(A.id).messages).toHaveLength(1)
+
+    await manager.leaveRoom(first.roomId)
+    const rejoined = await manager.joinRoom('lobby')
+    const room = fake.rooms[fake.rooms.length - 1]
+    expect(rejoined.roomId).toBe(first.roomId)
+    room.receive('dm', envelope, A.id)
+    await flushMicrotasks()
+
+    expect(dmChannel(A.id).messages).toHaveLength(1)
   })
 })

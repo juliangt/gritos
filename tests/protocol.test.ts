@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  MAX_CLOCK_SKEW_MS,
+  MAX_ENVELOPE_AGE_MS,
   MAX_PAYLOAD_BYTES,
   MAX_PLAINTEXT_LENGTH,
   MAX_RECEIPT_BATCH,
@@ -7,6 +9,7 @@ import {
   createEnvelope,
   filterDmForSelf,
   isOversized,
+  isWithinFreshnessWindow,
   markSeen,
   parseEnvelope,
   shouldProcess,
@@ -151,12 +154,78 @@ describe('dedup helpers (spec §7.3)', () => {
     expect(seen.has('id-1')).toBe(true)
   })
 
-  it('shouldProcess gates envelopes through the seen set', () => {
+  it('shouldProcess gates in-window envelopes through the seen set', () => {
     const seen = new Set<string>()
-    const envelope = validChat()
+    // Issue #19 — must be fresh: shouldProcess now also enforces the
+    // freshness window (tested in its own suite below).
+    const envelope = validChat({ ts: Date.now() })
     expect(shouldProcess(envelope, seen)).toBe(true)
     expect(shouldProcess(envelope, seen)).toBe(false) // full-mesh duplicate
     expect(seen.size).toBe(1)
+  })
+})
+
+describe('freshness window (issue #19: replay protection)', () => {
+  const NOW = 1_800_000_000_000
+
+  it('pins the window constants: 5 min past, 90 s future', () => {
+    expect(MAX_ENVELOPE_AGE_MS).toBe(300_000)
+    expect(MAX_CLOCK_SKEW_MS).toBe(90_000)
+  })
+
+  it('accepts timestamps up to the window edges around the clock', () => {
+    expect(isWithinFreshnessWindow(NOW, NOW)).toBe(true)
+    expect(isWithinFreshnessWindow(NOW - MAX_ENVELOPE_AGE_MS, NOW)).toBe(true)
+    expect(isWithinFreshnessWindow(NOW + MAX_CLOCK_SKEW_MS, NOW)).toBe(true)
+  })
+
+  it('rejects stale and over-skewed future timestamps', () => {
+    expect(isWithinFreshnessWindow(NOW - MAX_ENVELOPE_AGE_MS - 1, NOW)).toBe(false)
+    expect(isWithinFreshnessWindow(NOW + MAX_CLOCK_SKEW_MS + 1, NOW)).toBe(false)
+    expect(isWithinFreshnessWindow(0, NOW)).toBe(false)
+  })
+
+  describe('shouldProcess gating (fake clock)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+      vi.setSystemTime(NOW)
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('still accepts and dedups in-window envelopes', () => {
+      const seen = new Set<string>()
+      const envelope = validChat({ ts: NOW - 1_000 })
+      expect(shouldProcess(envelope, seen)).toBe(true)
+      expect(shouldProcess(envelope, seen)).toBe(false)
+      expect(seen.size).toBe(1)
+    })
+
+    it('discards stale envelopes without consuming the dedup id', () => {
+      const seen = new Set<string>()
+      const stale = validChat({ ts: NOW - MAX_ENVELOPE_AGE_MS - 1 })
+      expect(shouldProcess(stale, seen)).toBe(false)
+      // Zero side effects: freshness runs BEFORE markSeen, so a later
+      // in-window copy of the same id is not blocked by the rejected one.
+      expect(seen.size).toBe(0)
+      expect(shouldProcess({ ...stale, ts: NOW }, seen)).toBe(true)
+    })
+
+    it('discards future-dated envelopes beyond the skew tolerance', () => {
+      const seen = new Set<string>()
+      const future = validChat({ ts: NOW + MAX_CLOCK_SKEW_MS + 1 })
+      expect(shouldProcess(future, seen)).toBe(false)
+      expect(seen.size).toBe(0)
+    })
+
+    it('keeps boundary envelopes just inside both edges', () => {
+      expect(shouldProcess(validChat({ ts: NOW - MAX_ENVELOPE_AGE_MS }), new Set())).toBe(true)
+      expect(
+        shouldProcess(validChat({ id: '22222222-2222-4222-8222-222222222222', ts: NOW + MAX_CLOCK_SKEW_MS }), new Set()),
+      ).toBe(true)
+    })
   })
 })
 
