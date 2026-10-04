@@ -9,6 +9,12 @@ import {
   IDENTITY_STORAGE_KEY,
   persistIdentity,
 } from '../src/lib/crypto/identity'
+import {
+  resetKeyVaultForTests,
+  wipeKeyVault,
+  wrapPrivateKey,
+} from '../src/lib/crypto/keyVault'
+import { installFakeIndexedDB } from './fakeIndexedDB'
 import { ROOMS_STORAGE_KEY } from '../src/lib/recentRooms'
 import { pinTofuFingerprint, TOFU_STORAGE_KEY } from '../src/lib/tofu'
 import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
@@ -24,20 +30,22 @@ import { installFakeTrystero } from './fakeTrystero'
 /**
  * RF-08 — panic wipe: every WebRTC connection aborted, the FIVE documented
  * `gritos:*` keys (spec §8.2) removed (plus stray `gritos:*` defensively),
- * in-memory stores reset, and the app reloads. Keys outside the app
- * namespace are never touched.
+ * the IndexedDB key vault cleared (issue #24), in-memory stores reset, and
+ * the app reloads. Keys outside the app namespace are never touched.
  */
 
 let fake: ReturnType<typeof installFakeTrystero>
 
 beforeEach(() => {
   localStorage.clear()
+  resetKeyVaultForTests()
   fake = installFakeTrystero()
 })
 
 afterEach(() => {
   manager.resetManagerForTests()
   manager.setJoinRoomFactory(null)
+  resetKeyVaultForTests()
   vi.unstubAllGlobals()
   localStorage.clear()
 })
@@ -46,7 +54,7 @@ async function seedActiveSession(): Promise<void> {
   // A real post-onboarding session: the identity was persisted with its JWKs.
   const session = await createSessionIdentity('zorro-bravo')
   const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
-  persistIdentity({
+  await persistIdentity({
     nickname: 'zorro-bravo',
     fingerprint: session.identity.fingerprint,
     createdAt: session.identity.createdAt,
@@ -147,6 +155,42 @@ describe('panicWipe (RF-08)', () => {
     expect(localStorage.getItem('other-app:data')).toBe('keep-me')
     expect(localStorage.getItem('gritos:identity')).toBeNull()
     expect(localStorage.getItem('gritos:settings')).toBeNull()
+  })
+})
+
+describe('IndexedDB key vault wipe (RF-08, issue #24)', () => {
+  it('never throws where IndexedDB does not exist (plain jsdom)', async () => {
+    // jsdom ships no indexedDB: the vault wipe is a silent no-op and the
+    // panic flow (which calls it fire-and-forget) keeps working — the
+    // panicWipe suites above run in exactly this environment.
+    await expect(wipeKeyVault()).resolves.toBeUndefined()
+  })
+
+  it('panicWipe clears the wrapping key along with the localStorage keys', async () => {
+    const fakeDb = installFakeIndexedDB()
+    // Seed a wrapping key + envelope through the vault itself.
+    await wrapPrivateKey('{"kty":"EC","d":"secret"}')
+    expect(fakeDb.databases.get('gritos')?.get('keys')?.has('identity-wrap')).toBe(true)
+    await seedActiveSession()
+    vi.stubGlobal('location', { reload: vi.fn() })
+
+    panicWipe()
+
+    // The vault wipe is fire-and-forget: wait for the async tail to land.
+    await vi.waitFor(() => {
+      expect(fakeDb.databases.get('gritos')?.get('keys')?.size ?? 0).toBe(0)
+    })
+    expect(Object.keys(localStorage)).toEqual(['other-app:data'])
+  })
+
+  it('wipeKeyVault clears the vault without a full panic', async () => {
+    const fakeDb = installFakeIndexedDB()
+    await wrapPrivateKey('{"kty":"EC","d":"secret"}')
+    expect(fakeDb.databases.get('gritos')?.get('keys')?.size).toBe(1)
+
+    await wipeKeyVault()
+
+    expect(fakeDb.databases.get('gritos')?.get('keys')?.size).toBe(0)
   })
 })
 

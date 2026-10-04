@@ -370,12 +370,14 @@ interface AppState {
 | Clave | Contenido | Se borra con panic |
 |---|---|---|
 | `gritos:settings` | `Settings` (JSON) | ✅ |
-| `gritos:identity` | `{nickname, fingerprint, createdAt, pubJwk, privJwk}` (JSON) | ✅ |
+| `gritos:identity` | `{nickname, fingerprint, createdAt, pubJwk, priv}` (JSON) — `priv` es un sobre cifrado (issue #24), nunca la JWK privada en claro | ✅ |
 | `gritos:rooms` | `{recent: string[]}` — solo nombres si `rememberRooms` | ✅ |
 | `gritos:ui` | `{sidebarCollapsed: boolean}` | ✅ |
 | `gritos:tofu` | `{peerId: fingerprint}` — primera huella vista por par; detecta la rotación de claves (issue #22, TOFU) | ✅ |
 
-**No se persiste jamás**: mensajes, contraseñas de sala, claves DM derivadas, presencia, latencias, peerIds.
+Además de `localStorage`, desde la issue #24 existe un pequeño almacén en **IndexedDB** (base de datos `gritos`, almacén `keys`, registro `identity-wrap`): la clave AES-GCM-256 **no exportable** que envuelve la JWK privada. Se borra con panic. Sin IndexedDB (o si falla al abrir), el sobre degrada a `{v:0, plain}` — texto en claro, comportamiento idéntico al previo a #24.
+
+**No se persiste jamás**: mensajes, contraseñas de sala, claves DM derivadas, presencia, latencias, peerIds — ni la JWK privada sin envolver (issue #24: `gritos:identity` guarda `priv = {v:1, iv, ct}` cifrado con AES-GCM; los registros previos con `privJwk` en claro se migran al sobre en cuanto se restauran).
 
 ## 9. Diseño criptográfico
 
@@ -384,7 +386,7 @@ Todo con Web Crypto (`crypto.subtle`). Ninguna primitiva implementada a mano.
 ### 9.1 Identidad
 
 - Par de claves **ECDH P-256** generado localmente en el primer arranque (o al regenerar identidad).
-- Clave pública exportada en crudo (65 B) para el intercambio; JWK pública y privada persistidas en `localStorage` (compromiso asumido: mismo origen, sin servidor; ver modelo de amenazas).
+- Clave pública exportada en crudo (65 B) para el intercambio; JWK pública persistida en claro y **JWK privada cifrada en reposo** (issue #24): envuelta con AES-GCM mediante una clave no exportable guardada en IndexedDB — distinto almacén que `localStorage`, de modo que un volcado de este último ya no basta para robar la identidad. Sin IndexedDB el sobre degrada a texto en claro (compromiso asumido: mismo origen, sin servidor; ver modelo de amenazas).
 - **Fingerprint** = SHA-256(clave pública cruda) → hex, primeros 16 bytes (128 bits) en 8 grupos: `A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678`. Sirve para verificación manual de identidad en DMs (TOFU). Issue #23: 128 bits elevan el coste de una colisión de cumpleaños de ~2³² a ~2⁶⁴ pruebas. La ampliación es solo de presentación: la clave ECDH y las identidades persistidas no cambian (el fingerprint se recalcula desde la clave al restaurar).
 
 ### 9.2 Clave DM (1:1)
@@ -418,7 +420,7 @@ La derivación con contraseña hace que la sala sea **indescubrible** en el trac
 
 **No cubierto (documentado, aceptado)**
 - Suplantación de apodo: cualquier par puede usar el apodo de otro; la defensa es comparar fingerprints en DMs (TOFU — *trust on first use*), sin base de identidad persistente global.
-- Compromiso del dispositivo o del origen (XSS): `localStorage` con la clave privada es legible por script del propio origen. Mitigación: renderer Markdown propio con tests de XSS y superficie mínima de dependencias.
+- Compromiso del dispositivo o del origen (XSS): la clave privada se guarda cifrada en reposo (issue #24), pero un script del propio origen tiene acceso a `localStorage` **y** a IndexedDB, por lo que un contexto totalmente comprometido sigue pudiendo usar la clave (suplantar al usuario). Mitigación: la envoltura eleva el listón frente a volcados ingenuos de `localStorage` (extensiones con permisos de lectura, acceso físico al disco); contra el compromiso del propio origen no hay defensa local. El renderer Markdown propio con tests de XSS y la superficie mínima de dependencias siguen siendo la primera barrera.
 - Metadatos: los pares conectados ven tu IP (naturaleza de WebRTC); usar TURN mitiga parcialmente.
 - Avances criptoanalíticos / contraseña de sala débil: PBKDF2 eleva el coste, pero una contraseña trivial es comprometible por fuerza bruta offline por quien conozca el nombre de sala.
 

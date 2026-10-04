@@ -144,7 +144,10 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
   const enterWithNickname = useCallback(async (nickname: string) => {
     const session = await createSessionIdentity(nickname)
     const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
-    persistIdentity({
+    // Awaited on purpose (issue #24: the write wraps the private key): once
+    // the identity shows up in the store, `gritos:identity` is already on
+    // disk for the next reload.
+    await persistIdentity({
       nickname,
       fingerprint: session.identity.fingerprint,
       createdAt: session.identity.createdAt,

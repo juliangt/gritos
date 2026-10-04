@@ -13,13 +13,13 @@
 - **End-to-end encrypted direct messages** — ECDH P-256 key agreement + AES-256-GCM per peer, with a 128-bit fingerprint (8 groups of 4 hex chars, issue #23) both sides can compare out-of-band (TOFU verification).
 - **Markdown subset** — bold, italic, inline code, links (http/https only), rendered by a home-grown safe renderer; raw HTML, script injection and `javascript:` URLs are escaped. Mentions highlight and can raise desktop notifications.
 - **Presence & latency** — live peer list with 🟢/🟡/🔴/⚪ RTT dots, typing indicators, join/leave system lines, ✓/✓✓ receipts.
-- **Privacy controls** — panic button (wipe everything and reload), identity regeneration, recent-rooms toggle, notification toggle; only four `gritos:*` keys ever touch `localStorage`, and messages/typing/passwords are never persisted.
+- **Privacy controls** — panic button (wipe everything and reload, including the IndexedDB key vault), identity regeneration, recent-rooms toggle, notification toggle; only five `gritos:*` keys ever touch `localStorage` (plus the small IndexedDB vault that wraps the private key), and messages/typing/passwords are never persisted.
 - **Connection transparency** — exact status text for searching / connecting / connected / tracker-error states, plus a non-blocking banner with a shortcut to network settings when trackers are unreachable.
 
 ## How it works
 
 - **Discovery:** [Trystero](https://github.com/tinychat/trystero) (torrent strategy, pinned exact version) uses public WebTorrent trackers over WebSocket (`wss:`) only to introduce peers and exchange SDP. Application traffic never touches a tracker — it flows over direct WebRTC data channels (DTLS-encrypted by the browser).
-- **Security model:** room chat rides on WebRTC's DTLS transport; password rooms and DMs add payload encryption with the native Web Crypto API (PBKDF2-SHA-256 600k iterations for room keys; ECDH + HKDF + AES-GCM for DMs). The local keypair persists as JWK under `gritos:identity`; room passwords and all message content stay memory-only. The bundle ships a strict CSP (`script-src 'self'` + a hash for the theme bootstrap snippet); there is no server, so there is no server-side trust to audit.
+- **Security model:** room chat rides on WebRTC's DTLS transport; password rooms and DMs add payload encryption with the native Web Crypto API (PBKDF2-SHA-256 600k iterations for room keys; ECDH + HKDF + AES-GCM for DMs). The private key is **encrypted at rest** (issue #24): it is AES-GCM-wrapped with a non-extractable key held in IndexedDB, so `gritos:identity` never contains plaintext key material — where IndexedDB is unavailable the app degrades to the old plaintext-at-rest behavior rather than breaking. Room passwords and all message content stay memory-only. The bundle ships a strict CSP (`script-src 'self'` + a hash for the theme bootstrap snippet); there is no server, so there is no server-side trust to audit. Residual risk, stated plainly: a fully compromised same-origin context (malicious extension with host permissions, malware on the device) can still reach both stores and abuse the key — the wrapping only raises the bar against naive `localStorage` dumps.
 - **Limits of the model:** see [Limitations](#limitations).
 
 ## Quickstart
@@ -53,14 +53,14 @@ Requires Node.js ≥ 22 and npm ≥ 11. Browsers must support Web Crypto, WebRTC
 
 ## Architecture
 
-Gritos is a 100 % client-side static bundle: React 19 + TypeScript (strict) for the UI, Zustand for in-memory state, Tailwind CSS 4 for styling, and Trystero for decentralized WebRTC signaling. All cryptography uses the native Web Crypto API (no hand-rolled primitives, no crypto dependencies), and the only persisted data are settings, the local keypair, recent room names and UI state under the four `gritos:*` keys in `localStorage`.
+Gritos is a 100 % client-side static bundle: React 19 + TypeScript (strict) for the UI, Zustand for in-memory state, Tailwind CSS 4 for styling, and Trystero for decentralized WebRTC signaling. All cryptography uses the native Web Crypto API (no hand-rolled primitives, no crypto dependencies), and the only persisted data are settings, the local keypair (private key encrypted at rest), recent room names and UI state under the five `gritos:*` keys in `localStorage` plus a small IndexedDB vault holding the wrapping key.
 
 ```
 src/
 ├── components/     onboarding · sidebar · chat · dm · settings · common · debug (?debug only)
 ├── lib/
 │   ├── p2p/        roomManager (sole Trystero surface), protocol (Envelope §7)
-│   ├── crypto/     identity, dm (E2EE), roomKey (PBKDF2), hashes (roomId)
+│   ├── crypto/     identity, keyVault (at-rest wrapping), dm (E2EE), roomKey (PBKDF2), hashes (roomId)
 │   ├── markdown/   safe Markdown-subset renderer (no raw HTML)
 │   └── nickname.ts es-ES 'adjetivo-sustantivo' generator
 ├── stores/         useAppStore (AppState §8.1), useSettingsStore, useUiStore
