@@ -291,7 +291,7 @@ export async function regenerateSessionIdentity(): Promise<SessionIdentity | nul
   // The `keys` action carries the new public key to every peer we know of.
   for (const connection of connections.values()) {
     for (const peerId of connection.peerKeys.keys()) {
-      void connection.actions.keys.send(session.rawPublicKey, { target: peerId })
+      safeSend(connection.actions.keys, session.rawPublicKey, { target: peerId })
     }
   }
   return session
@@ -350,7 +350,7 @@ export function broadcastPresence(): void {
     fp: identity.identity.fingerprint,
   }
   for (const connection of connections.values()) {
-    void connection.actions.presence.send(payload)
+    safeSend(connection.actions.presence, payload)
   }
 }
 
@@ -810,7 +810,7 @@ function flushReceipts(connection: RoomInternals): void {
 export function sendPing(roomId: string, peerId: string, t: number): boolean {
   const connection = connections.get(roomId)
   if (connection === undefined) return false
-  void connection.actions.ping.send({ t }, { target: peerId })
+  safeSend(connection.actions.ping, { t }, { target: peerId })
   return true
 }
 
@@ -1012,9 +1012,7 @@ function createConnection(init: {
   }
   actions.ping.onMessage = (payload, { peerId }) => {
     if (typeof payload?.t !== 'number' || !Number.isFinite(payload.t)) return
-    void connection.actions.pong.send({ t: payload.t } satisfies PongPayload, {
-      target: peerId,
-    })
+    safeSend(connection.actions.pong, { t: payload.t } satisfies PongPayload, { target: peerId })
   }
 
   actions.pong.onMessage = (payload, { peerId }) => {
@@ -1041,11 +1039,12 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
 
   const identity = sessionIdentity
   if (identity !== null) {
-    void connection.actions.presence.send(
+    safeSend(
+      connection.actions.presence,
       { nick: identity.identity.nickname, fp: identity.identity.fingerprint },
       { target: peerId },
     )
-    void connection.actions.keys.send(identity.rawPublicKey, { target: peerId })
+    safeSend(connection.actions.keys, identity.rawPublicKey, { target: peerId })
   }
 
   const peer: Peer = {

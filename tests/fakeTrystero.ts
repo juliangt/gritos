@@ -26,6 +26,11 @@ export class FakeTrysteroRoom {
   onPeerJoin: ((peerId: string) => void) | null = null
   onPeerLeave: ((peerId: string) => void) | null = null
   readonly leave = vi.fn(async () => {})
+  /**
+   * Test-only hook (issue #45): when true, every send still records its
+   * attempt but rejects, simulating a data channel that closed mid-flight.
+   */
+  failSends = false
 
   makeAction(name: string): FakeAction {
     if (this.actions.has(name)) throw new Error(`action re-registered: ${name}`)
@@ -34,6 +39,7 @@ export class FakeTrysteroRoom {
       sends: [],
       send: async (data, options) => {
         action.sends.push({ data, options })
+        if (this.failSends) throw new Error(`fake channel closed: ${name}`)
       },
       onMessage: null,
     }
