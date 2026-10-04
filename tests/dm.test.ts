@@ -14,6 +14,7 @@ import {
   orderedFingerprints,
 } from '../src/lib/crypto/dm'
 import { MAX_PLAINTEXT_LENGTH } from '../src/lib/p2p/protocol'
+import { sha256Hex } from '../src/lib/crypto/hashes'
 import { computeFingerprint, exportRawPublicKey, generateSessionKeypair } from '../src/lib/crypto/identity'
 
 interface Peer {
@@ -67,8 +68,39 @@ describe('DM key derivation (spec §9.2)', () => {
 
     expect(orderedFingerprints('BB', 'AA')).toEqual(['AA', 'BB'])
     expect(orderedFingerprints('aa', 'BB')).toEqual(['AA', 'BB']) // canonical: uppercase, no spaces
-    expect(canonicalFingerprint('A31F 09BC 77D2 4E5A')).toBe('A31F09BC77D24E5A')
+    expect(canonicalFingerprint('A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678')).toBe(
+      'A31F09BC77D24E5A51C0FFEE12345678',
+    )
     expect(DM_KEY_INFO).toBe('gritos/dm/v1')
+  })
+
+  it('hashes the 128-bit canonical fingerprints into the salt (issue #23)', async () => {
+    // The salt is SHA-256 over the first 32 hex chars of each digest (the
+    // displayed fingerprint), NOT the old 64-bit truncation: pinning it so a
+    // format regression cannot sneak back in.
+    const [first, second] = orderedFingerprints(
+      (await sha256Hex(A.rawPublicKey)).slice(0, 32),
+      (await sha256Hex(B.rawPublicKey)).slice(0, 32),
+    )
+    const manual = new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(first + second)),
+    )
+    await expect(deriveDmSalt(A.fingerprint, B.fingerprint)).resolves.toEqual(manual)
+  })
+
+  it('derives the same key from fingerprints of different code-path origins', async () => {
+    // A uses its locally computed fingerprint; B receives A's as an
+    // announced display string that traveled through presence/storage (any
+    // case, any whitespace). canonicalFingerprint normalizes both, so both
+    // ends land on the same salt and the same AES key.
+    const announced = canonicalFingerprint(A.fingerprint).toLowerCase()
+    expect(announced).not.toBe(A.fingerprint) // genuinely a different string form
+
+    const keyA = await deriveDmKey(A.keypair.privateKey, B.rawPublicKey, A.fingerprint, B.fingerprint)
+    const keyB = await deriveDmKey(B.keypair.privateKey, A.rawPublicKey, B.fingerprint, announced)
+
+    const sealed = await encryptDm(keyA, 'mismos orígenes')
+    await expect(decryptDm(keyB, sealed)).resolves.toBe('mismos orígenes')
   })
 
   it('derives different keys for different fingerprint pairs', async () => {

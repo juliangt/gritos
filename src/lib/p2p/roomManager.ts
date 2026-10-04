@@ -39,7 +39,7 @@ import {
 } from '../crypto/roomKey'
 import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
 import { pushRecentRoom, saveRecentRooms } from '../recentRooms'
-import { getTofuFingerprint, pinTofuFingerprint } from '../tofu'
+import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '../tofu'
 import { joinSystemLine, leaveSystemLine } from '../feed'
 
 /**
@@ -828,16 +828,23 @@ function livePeerFingerprint(peerId: string): string | null {
  * first-seen fingerprint (`gritos:tofu`) is authoritative for display, and
  * a live fingerprint that differs flags the channel `keyChanged` (advisory)
  * instead of silently rotating the shown identity. Creates the channel when
- * missing — the open/send/receive path.
+ * missing — the open/send/receive path. A pin persisted by the previous
+ * 64-bit format (issue #23) is the same key: the live 128-bit fingerprint
+ * is displayed and nothing is flagged.
  */
 function syncDmTofuState(peerId: string, peerNick: string, liveFingerprint: string | null): void {
   const state = useAppStore.getState()
   const pinned = getTofuFingerprint(peerId)
-  state.ensureDmChannel(peerId, peerNick, pinned ?? liveFingerprint)
-  state.setDmKeyChanged(
+  const pinStaleForLive =
+    pinned !== null &&
+    liveFingerprint !== null &&
+    !pinMatchesFingerprint(pinned, liveFingerprint)
+  state.ensureDmChannel(
     peerId,
-    pinned !== null && liveFingerprint !== null && pinned !== liveFingerprint,
+    peerNick,
+    pinStaleForLive ? pinned : (liveFingerprint ?? pinned),
   )
+  state.setDmKeyChanged(peerId, pinStaleForLive)
 }
 
 /**
@@ -942,8 +949,14 @@ function createConnection(init: {
         // `keyChanged` instead. Without storage the pin is a no-op and
         // everything keeps working per session.
         pinTofuFingerprint(peerId, fingerprint)
+        // Issue #23 — a pin persisted by the previous 64-bit format is the
+        // same key: the live 128-bit fingerprint wins on display too.
+        const pinned = getTofuFingerprint(peerId)
         useAppStore.getState().updatePeer(connection.roomId, peerId, {
-          fingerprint: getTofuFingerprint(peerId) ?? fingerprint,
+          fingerprint:
+            pinned !== null && !pinMatchesFingerprint(pinned, fingerprint)
+              ? pinned
+              : fingerprint,
         })
         // Refresh the DM header fingerprint of an existing channel (RF-04);
         // channels are only created on demand (open/send/receive).

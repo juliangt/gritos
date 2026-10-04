@@ -385,13 +385,13 @@ Todo con Web Crypto (`crypto.subtle`). Ninguna primitiva implementada a mano.
 
 - Par de claves **ECDH P-256** generado localmente en el primer arranque (o al regenerar identidad).
 - Clave pública exportada en crudo (65 B) para el intercambio; JWK pública y privada persistidas en `localStorage` (compromiso asumido: mismo origen, sin servidor; ver modelo de amenazas).
-- **Fingerprint** = SHA-256(clave pública cruda) → hex, primeros 8 bytes en 4 grupos: `A31F 09BC 77D2 4E5A`. Sirve para verificación manual de identidad en DMs (TOFU).
+- **Fingerprint** = SHA-256(clave pública cruda) → hex, primeros 16 bytes (128 bits) en 8 grupos: `A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678`. Sirve para verificación manual de identidad en DMs (TOFU). Issue #23: 128 bits elevan el coste de una colisión de cumpleaños de ~2³² a ~2⁶⁴ pruebas. La ampliación es solo de presentación: la clave ECDH y las identidades persistidas no cambian (el fingerprint se recalcula desde la clave al restaurar).
 
 ### 9.2 Clave DM (1:1)
 
 1. Al conectar dos pares en una sala, ambos emiten `keys` con su clave pública cruda.
 2. Cada extremo computa `secreto = ECDH(miPriv, suPub)` → 256 bits.
-3. `claveDM = HKDF-SHA256(secreto, salt = SHA-256(fpA ‖ fpB ordenados), info = "gritos/dm/v1", 32 B)` → clave AES-GCM-256.
+3. `claveDM = HKDF-SHA256(secreto, salt = SHA-256(fpA ‖ fpB ordenados), info = "gritos/dm/v1", 32 B)` → clave AES-GCM-256. Los `fp` son los fingerprints de 9.1 en forma canónica (sin espacios, mayúsculas); cada extremo calcula los suyos desde las claves crudas anunciadas. Issue #23: la ampliación a 128 bits cambia la sal de forma deliberada y uniforme — los DMs entre builds de formatos distintos no interoperan, y no hay migración de claves porque canales y claves DM viven solo en memoria.
 4. Cada mensaje DM: IV aleatorio de 12 B; se transmite `base64(IV ‖ AES-GCM(texto))`.
 5. La clave vive solo en memoria por sesión y por par; no se persiste.
 

@@ -3,8 +3,9 @@ import { sha256Hex } from './hashes'
 
 /**
  * Local identity — spec.md §9.1 + §8.2: ECDH P-256 keypair generated on the
- * first run (or when regenerating), raw 65-byte public key hashed into a
- * 4×4-hex fingerprint (TOFU verification in DMs). The JWK pair is persisted
+ * first run (or when regenerating), raw 65-byte public key hashed into an
+ * 8×4-hex fingerprint (issue #23: 128 displayed bits, TOFU verification in
+ * DMs). The JWK pair is persisted
  * under `gritos:identity` as `{nickname, fingerprint, createdAt, pubJwk,
  * privJwk}` so the same keypair survives reloads; identities persisted by
  * M2 (profile only, no JWKs) are migrated in place preserving the nickname.
@@ -95,12 +96,14 @@ export function hasIdentityJwks(
 }
 
 /**
- * Pure formatter for the fingerprint digest (§9.1): first 8 bytes of the
- * SHA-256 hex digest, uppercased, in 4 space-separated groups of 4 —
- * e.g. 'A31F 09BC 77D2 4E5A'.
+ * Pure formatter for the fingerprint digest (§9.1, issue #23): first 16
+ * bytes (128 bits) of the SHA-256 hex digest, uppercased, in 8
+ * space-separated groups of 4 — e.g.
+ * 'A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678'. Display-only: anything past
+ * the 32nd hex char is ignored, so a full 64-hex digest is accepted too.
  */
 export function formatFingerprint(digestHex: string): string {
-  const bytes = digestHex.slice(0, 16)
+  const bytes = digestHex.slice(0, 32)
   return bytes.toUpperCase().replace(/(.{4})(?=.)/g, '$1 ')
 }
 

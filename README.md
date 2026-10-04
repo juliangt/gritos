@@ -10,7 +10,7 @@
 
 - **Public rooms** — join by name (`#lobby`, `#general`…), multiple simultaneous rooms (cap 1–6), per-room unread badges, leave/rejoin without losing other connections.
 - **Password-protected rooms** — the room name only hashes to the same discovery id for people with the same password; room chat is AES-GCM encrypted on top of the transport, and the password never persists.
-- **End-to-end encrypted direct messages** — ECDH P-256 key agreement + AES-256-GCM per peer, with a 4×4 fingerprint both sides can compare out-of-band (TOFU verification).
+- **End-to-end encrypted direct messages** — ECDH P-256 key agreement + AES-256-GCM per peer, with a 128-bit fingerprint (8 groups of 4 hex chars, issue #23) both sides can compare out-of-band (TOFU verification).
 - **Markdown subset** — bold, italic, inline code, links (http/https only), rendered by a home-grown safe renderer; raw HTML, script injection and `javascript:` URLs are escaped. Mentions highlight and can raise desktop notifications.
 - **Presence & latency** — live peer list with 🟢/🟡/🔴/⚪ RTT dots, typing indicators, join/leave system lines, ✓/✓✓ receipts.
 - **Privacy controls** — panic button (wipe everything and reload), identity regeneration, recent-rooms toggle, notification toggle; only four `gritos:*` keys ever touch `localStorage`, and messages/typing/passwords are never persisted.

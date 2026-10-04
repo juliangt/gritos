@@ -146,7 +146,7 @@ Cubre (spec): RF-01, RF-02 (sin contraseña), RF-03, RF-06 (UI de pares), 10.1�
 
 Cubre (spec): RF-04, 9.1, 9.2, 10.1 (menú de pares).
 
-- [ ] `identity.ts` completo: keypair ECDH P-256 en primer arranque, export/import JWK en `localStorage`, fingerprint (formato 4×4 hex), regeneración.
+- [ ] `identity.ts` completo: keypair ECDH P-256 en primer arranque, export/import JWK en `localStorage`, fingerprint (formato 8×4 hex, 128 bits — issue #23), regeneración.
 - [ ] `keys`/`presence` ya enviados en M1; aquí se consumen: `dm.ts` deriva `claveDM` (ECDH → HKDF-SHA256 con sal por par ordenado) con tests de que ambos extremos derivan la misma clave.
 - [ ] Acción `dm` con `to`; destinatarios ajenos descartan (test unitario del filtrado).
 - [ ] Cifrado AES-GCM 256, IV 12 B por mensaje, `base64(IV‖ct)`, rechazo de ciphertext manipulado (test de tamper → GCM tag inválido).
