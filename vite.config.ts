@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 /**
  * Dev-only (M6): the strict CSP meta in index.html targets the production
@@ -19,7 +20,7 @@ function stripCspMetaInDev(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), stripCspMetaInDev()],
+  plugins: [react(), tailwindcss(), stripCspMetaInDev()],
   build: {
     // Vite 8 defaults to the lightningcss minifier, which warns
     // ("Unknown at-rule") about Tailwind 4's @theme/@tailwind at-rules.
