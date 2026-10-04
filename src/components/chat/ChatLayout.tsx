@@ -45,7 +45,11 @@ export function ChatLayout() {
 
   // RF-01/RF-07 — auto-join #lobby on start when the setting is on. The
   // manager dedups concurrent/in-flight joins (StrictMode, onboarding race).
+  // Outside a secure context (plain HTTP on a LAN IP) Web Crypto is
+  // unavailable and every join would reject: skip the attempt entirely —
+  // NetworkErrorBanner explains why (issue #43).
   useEffect(() => {
+    if (!window.isSecureContext) return
     if (!useSettingsStore.getState().settings.autoJoinLobby) return
     void joinRoom('lobby')
       .then((connection) => {

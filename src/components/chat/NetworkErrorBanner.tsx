@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAppStore, type AppState } from '../../stores/useAppStore'
 import { SettingsModal } from '../settings/SettingsModal'
 import { StatusDot } from '../common/StatusDot'
-import { NETWORK_ERROR_BANNER_TEXT } from '../../lib/rooms'
+import { INSECURE_CONTEXT_BANNER_TEXT, NETWORK_ERROR_BANNER_TEXT } from '../../lib/rooms'
 
 /**
  * Network error banner (RNF-07 — never an indistinguishable silence):
@@ -12,6 +12,11 @@ import { NETWORK_ERROR_BANNER_TEXT } from '../../lib/rooms'
  * (RF-07) and a dismiss control. A dismissal only hides the CURRENT set of
  * erroring rooms — a different room erroring (or the same room again after
  * recovering) brings the banner back.
+ *
+ * The same spot also surfaces the insecure-context notice (issue #43):
+ * outside a secure context (plain HTTP on a LAN IP) Web Crypto and WebRTC
+ * are unavailable, ChatLayout skips the #lobby auto-join up front instead
+ * of letting it reject silently, and this banner explains why.
  */
 
 /** Fine selector: erroring room ids as a primitive (comma-joined). */
@@ -33,6 +38,10 @@ export function NetworkErrorBanner() {
   const joinedErrorIds = useAppStore(selectErrorRoomIds)
   const [state, setState] = useState<BannerState>({ lastJoined: joinedErrorIds, dismissed: [] })
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // `isSecureContext` cannot flip without a reload, so a plain flag keeps
+  // the insecure-context notice dismissed for the whole session.
+  const [contextNoticeDismissed, setContextNoticeDismissed] = useState(false)
+  const contextNoticeVisible = !window.isSecureContext && !contextNoticeDismissed
 
   const errorIds = joinedErrorIds === '' ? [] : joinedErrorIds.split(',')
 
@@ -48,7 +57,7 @@ export function NetworkErrorBanner() {
   }
 
   const visibleIds = errorIds.filter((id) => !state.dismissed.includes(id))
-  if (visibleIds.length === 0 && !settingsOpen) return null
+  if (visibleIds.length === 0 && !settingsOpen && !contextNoticeVisible) return null
 
   const dismiss = () => {
     setState({ lastJoined: joinedErrorIds, dismissed: [...visibleIds] })
@@ -56,6 +65,25 @@ export function NetworkErrorBanner() {
 
   return (
     <>
+      {contextNoticeVisible && (
+        <div
+          role="status"
+          aria-label="Estado de la red"
+          className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
+        >
+          <StatusDot status="error" />
+          <p className="min-w-0 flex-1 text-muted">{INSECURE_CONTEXT_BANNER_TEXT}</p>
+          <button
+            type="button"
+            onClick={() => setContextNoticeDismissed(true)}
+            aria-label="Descartar el aviso"
+            title="Descartar el aviso"
+            className="shrink-0 rounded px-1 text-muted hover:text-text"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {visibleIds.length > 0 && (
         <div
           role="status"

@@ -12,3 +12,15 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
     dispatchEvent: () => false,
   })
 }
+
+// jsdom (30.x) does not implement window.isSecureContext either; default to
+// the browser-realistic `true` (every jsdom test URL counts as secure) so
+// the insecure-context banner stays out of unrelated suites. Configurable
+// on purpose: tests pin it to `false` via Object.defineProperty (issue #43).
+if (typeof window !== 'undefined' && typeof window.isSecureContext === 'undefined') {
+  Object.defineProperty(window, 'isSecureContext', {
+    value: true,
+    configurable: true,
+    writable: true,
+  })
+}
