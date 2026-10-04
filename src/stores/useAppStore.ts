@@ -39,7 +39,12 @@ export interface Peer {
   /** Trystero peerId (stable per session). */
   id: string
   nickname: string
-  /** Set once their `keys` action has been received. */
+  /**
+   * Set once their `keys` action has been received. Issue #22 (TOFU): when
+   * the peer's live key diverges from the pinned first-seen fingerprint
+   * (`gritos:tofu`), this holds the pinned value — the authoritative
+   * displayed identity.
+   */
   fingerprint: string | null
   /** Last known RTT in ms. */
   latencyMs: number | null
@@ -111,6 +116,12 @@ export interface DmChannel {
    * (RF-04: DMs inherit typing); expires after 4 s like room typing.
    */
   typing: Record<string, number>
+  /**
+   * Issue #22 (TOFU): true while the peer's live fingerprint differs from
+   * the pinned first-seen one (`gritos:tofu`). Advisory only — messages
+   * keep flowing; the header warns and `peerFingerprint` stays pinned.
+   */
+  keyChanged: boolean
 }
 
 export type ActiveView = { kind: 'room'; id: string } | { kind: 'dm'; peerId: string }
@@ -241,6 +252,12 @@ export interface AppActions {
   setDmAvailable: (peerId: string, available: boolean) => void
   /** M3 — DM typing signal (ts = null clears); expires after 4 s. */
   setDmTyping: (peerId: string, ts: number | null) => void
+  /**
+   * Issue #22 — flips the channel's TOFU divergence flag. While true, the
+   * pinned fingerprint is authoritative for display: `ensureDmChannel`
+   * never overwrites it with the live one.
+   */
+  setDmKeyChanged: (peerId: string, keyChanged: boolean) => void
 }
 
 export const useAppStore = create<AppState & AppActions>()((set) => ({
@@ -401,10 +418,14 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
               unread: 0,
               available: false,
               typing: {},
+              keyChanged: false,
             },
           },
         }
       }
+      // Issue #22 (TOFU): a flagged channel keeps its pinned fingerprint —
+      // a rotated live value never silently overwrites the verified one.
+      if (existing.keyChanged) return state
       if (peerFingerprint !== null && existing.peerFingerprint !== peerFingerprint) {
         return {
           dms: { ...state.dms, [peerId]: { ...existing, peerFingerprint } },
@@ -467,5 +488,12 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       if (ts === null) delete typing[peerId]
       else typing[peerId] = ts
       return { dms: { ...state.dms, [peerId]: { ...channel, typing } } }
+    }),
+
+  setDmKeyChanged: (peerId, keyChanged) =>
+    set((state) => {
+      const channel = state.dms[peerId]
+      if (channel === undefined || channel.keyChanged === keyChanged) return state
+      return { dms: { ...state.dms, [peerId]: { ...channel, keyChanged } } }
     }),
 }))

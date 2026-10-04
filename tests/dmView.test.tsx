@@ -114,9 +114,28 @@ describe('DM view (RF-04)', () => {
     expect(
       screen.getByText('Compáralo con tu interlocutor para verificar su identidad'),
     ).toBeInTheDocument()
+    // Issue #22 — a clean channel shows no TOFU divergence warning.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     // Available: the header mirrors the room peer count.
     expect(screen.getByText('1 par')).toBeInTheDocument()
     expect(screen.queryByText('El par se ha desconectado')).not.toBeInTheDocument()
+  })
+
+  it('warns in the header when the peer key changed (issue #22, TOFU)', () => {
+    useAppStore.getState().setDmKeyChanged('peer-9', true)
+    render(<ChatLayout />)
+
+    // The visible warning with the reinstallation/impersonation explanation.
+    expect(
+      screen.getByText('⚠ El fingerprint cambió desde tu última verificación'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'El par puede haber reinstalado la app o podría tratarse de una suplantación',
+    )
+    // The pinned first-seen fingerprint stays displayed (never rotated away).
+    expect(screen.getByText(/A31F 09BC 77D2 4E5A/)).toBeInTheDocument()
+    // Advisory only: the conversation keeps working.
+    expect(screen.getByLabelText('Escribe un mensaje')).toBeEnabled()
   })
 
   it('reuses the room feed and composer: messages render with receipts', () => {

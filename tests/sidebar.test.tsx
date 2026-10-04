@@ -204,6 +204,33 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
+  it('marks peers with a changed key and displays the pinned fingerprint (issue #22)', () => {
+    seedStore()
+    const store = useAppStore.getState()
+    // The live (rotated) key sits on the peer entry; the flagged channel
+    // keeps the pinned first-seen fingerprint.
+    store.updatePeer('room-lobby', 'peer-aaaa3f1', { fingerprint: 'DEAD BEEF DEAD BEEF' })
+    store.ensureDmChannel('peer-aaaa3f1', 'luna-cauta', 'A31F 09BC 77D2 4E5A')
+    store.setDmKeyChanged('peer-aaaa3f1', true)
+    render(<Sidebar />)
+
+    // Visible ⚠ marker on the peer entry.
+    expect(screen.getByLabelText('fingerprint cambiado')).toBeInTheDocument()
+    // The tooltip carries the pinned fingerprint, not the rotated one.
+    expect(screen.getByText('luna-cauta·a3f1').closest('button')).toHaveAttribute(
+      'title',
+      'A31F 09BC 77D2 4E5A',
+    )
+
+    // The menu shows the rotation warning.
+    fireEvent.click(screen.getByText('luna-cauta·a3f1').closest('button') as HTMLElement)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '⚠ El fingerprint cambió desde tu última verificación',
+    )
+    // Only the flagged peer is marked; the clean one is untouched.
+    expect(screen.getAllByLabelText('fingerprint cambiado')).toHaveLength(1)
+  })
+
   it('lists open DM channels with unread badges and clears on open (RF-04)', () => {
     seedStore()
     const store = useAppStore.getState()

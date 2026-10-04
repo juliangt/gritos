@@ -5,6 +5,7 @@ import {
 import { clearDmKeyCache } from './crypto/dm'
 import { IDENTITY_STORAGE_KEY } from './crypto/identity'
 import { ROOMS_STORAGE_KEY } from './recentRooms'
+import { TOFU_STORAGE_KEY } from './tofu'
 import { INITIAL_APP_STATE, useAppStore } from '../stores/useAppStore'
 import {
   DEFAULT_SETTINGS,
@@ -15,7 +16,7 @@ import { DEFAULT_UI, UI_STORAGE_KEY, useUiStore } from '../stores/useUiStore'
 
 /**
  * Panic button — spec RF-08. One call leaves nothing behind: every WebRTC
- * connection is aborted, the FOUR documented `gritos:*` localStorage keys
+ * connection is aborted, the FIVE documented `gritos:*` localStorage keys
  * (spec §8.2) are removed — plus any other `gritos:*` key defensively —
  * in-memory stores return to their initial state and the app reloads into a
  * clean onboarding.
@@ -25,16 +26,17 @@ import { DEFAULT_UI, UI_STORAGE_KEY, useUiStore } from '../stores/useUiStore'
  * localStorage genuinely empty.
  */
 
-/** The only four persistent keys of v1 (spec §8.2). */
+/** The five documented persistent keys of v1 (spec §8.2, incl. issue #22). */
 export const PANIC_STORAGE_KEYS: readonly string[] = [
   SETTINGS_STORAGE_KEY,
   IDENTITY_STORAGE_KEY,
   ROOMS_STORAGE_KEY,
   UI_STORAGE_KEY,
+  TOFU_STORAGE_KEY,
 ]
 
 /**
- * Removes the four documented keys and, defensively, every other
+ * Removes the five documented keys and, defensively, every other
  * `gritos:*` key. Never touches keys outside the `gritos:` namespace.
  * Returns the removed key names.
  */

@@ -84,6 +84,16 @@ export const DM_DISCONNECTED_TEXT = 'El par se ha desconectado'
 /** RF-04 — TOFU verification notice shown under the peer's fingerprint. */
 export const DM_VERIFY_NOTICE = 'Compáralo con tu interlocutor para verificar su identidad'
 
+/**
+ * Issue #22 — TOFU divergence warning: the peer's live fingerprint differs
+ * from the pinned first-seen one. Advisory only (messages keep flowing).
+ */
+export const DM_KEY_CHANGED_WARNING = '⚠ El fingerprint cambió desde tu última verificación'
+
+/** Issue #22 — explanation shown with the TOFU divergence warning. */
+export const DM_KEY_CHANGED_HINT =
+  'El par puede haber reinstalado la app o podría tratarse de una suplantación: verifica su identidad por otro canal antes de confiar.'
+
 /** Accessible label of the DM message feed. */
 export function dmFeedLabel(peerNick: string): string {
   return `Mensajes directos con ${peerNick}`

@@ -6,10 +6,13 @@ import { panicWipe } from '../src/lib/panic'
 import {
   createSessionIdentity,
   exportIdentityJwks,
+  exportRawPublicKey,
+  generateSessionKeypair,
   IDENTITY_STORAGE_KEY,
   persistIdentity,
 } from '../src/lib/crypto/identity'
 import { ROOMS_STORAGE_KEY } from '../src/lib/recentRooms'
+import { TOFU_STORAGE_KEY } from '../src/lib/tofu'
 import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
 import { UI_STORAGE_KEY, useUiStore } from '../src/stores/useUiStore'
 import { useAppStore, INITIAL_APP_STATE } from '../src/stores/useAppStore'
@@ -17,10 +20,11 @@ import { installFakeTrystero } from './fakeTrystero'
 
 /**
  * Spec §8.2 invariant: `localStorage` is the ONLY persistence of v1 and it
- * holds EXACTLY the four documented `gritos:*` keys — settings, identity,
- * rooms (names only) and ui. Exercised after a full settings/identity/
- * rooms/ui workout and again through the panic wipe; no message content,
- * password or key material may ever appear under other keys.
+ * holds EXACTLY the documented `gritos:*` keys — settings, identity, rooms
+ * (names only), ui and the TOFU pins (issue #22: first-seen fingerprints,
+ * public values only). Exercised after a full settings/identity/rooms/ui
+ * workout and again through the panic wipe; no message content, password or
+ * key material may ever appear under other keys.
  */
 
 let fake: ReturnType<typeof installFakeTrystero>
@@ -43,8 +47,8 @@ function gritosKeys(): string[] {
   return Object.keys(localStorage).filter((key) => key.startsWith('gritos:'))
 }
 
-describe('spec §8.2 — only the four documented gritos:* keys', () => {
-  it('a full settings + identity + rooms + ui session leaves exactly the four keys', async () => {
+describe('spec §8.2 — only the documented gritos:* keys', () => {
+  it('a full settings + identity + rooms + ui + tofu session leaves exactly the five keys', async () => {
     // A real post-onboarding identity (JWK pair persisted once).
     const session = await createSessionIdentity('zorro-bravo')
     const { pubJwk, privJwk } = await exportIdentityJwks(session.keypair)
@@ -60,6 +64,12 @@ describe('spec §8.2 — only the four documented gritos:* keys', () => {
     await manager.joinRoom('lobby')
     await manager.joinRoom('dev')
     fake.rooms[0].peerJoin('peer-1')
+    // Issue #22 — a received `keys` action pins the peer's fingerprint
+    // (public value only) under `gritos:tofu`.
+    const peerKeypair = await generateSessionKeypair()
+    fake.rooms[0].receive('keys', await exportRawPublicKey(peerKeypair.publicKey), 'peer-1')
+    // The pin happens on the async computeFingerprint tail.
+    await new Promise((resolve) => setTimeout(resolve, 60))
     manager.setNickname('luna-cauta')
 
     // Settings + UI changes through the stores.
@@ -78,6 +88,7 @@ describe('spec §8.2 — only the four documented gritos:* keys', () => {
         IDENTITY_STORAGE_KEY,
         ROOMS_STORAGE_KEY,
         UI_STORAGE_KEY,
+        TOFU_STORAGE_KEY,
       ].sort(),
     )
 
@@ -94,6 +105,13 @@ describe('spec §8.2 — only the four documented gritos:* keys', () => {
     expect(Object.keys(identity).sort()).toEqual(
       ['createdAt', 'fingerprint', 'nickname', 'privJwk', 'pubJwk'].sort(),
     )
+    // TOFU: a flat {peerId: fingerprint} map — fingerprints are public.
+    const tofu = JSON.parse(localStorage.getItem(TOFU_STORAGE_KEY) as string) as Record<
+      string,
+      unknown
+    >
+    expect(Object.keys(tofu)).toEqual(['peer-1'])
+    expect(typeof tofu['peer-1']).toBe('string')
   })
 
   it('even panic leaves no gritos:* keys behind (and nothing else appears)', async () => {
