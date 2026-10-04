@@ -11,6 +11,7 @@ import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useUiStore } from '../../stores/useUiStore'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useLatency } from '../../hooks/useLatency'
 import { useNotifications } from '../../hooks/useNotifications'
 import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
@@ -111,18 +112,21 @@ export function ChatLayout() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isMobile, toggleSidebar])
 
-  // RNF-05 — the mobile drawer closes with Esc and takes focus when opened
-  // so keyboard users land inside it (the backdrop click covers pointers).
+  // RNF-05/issue #48 — the mobile drawer closes with Esc, moves the focus
+  // into itself when opened and traps Tab inside (issue #48: with
+  // role="dialog" aria-modal="true" the focus must never reach the chat
+  // behind it); on close the focus returns to the ☰ toggle.
+  const drawerVisible = isMobile && drawerOpen
   const drawerPanelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!drawerOpen) return
-    drawerPanelRef.current?.focus()
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setDrawerOpen(false)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [drawerOpen])
+  useFocusTrap({ open: drawerVisible, panelRef: drawerPanelRef })
 
   const activeRoom = activeView?.kind === 'room' ? (rooms[activeView.id] ?? null) : null
   const activeDm =
@@ -149,7 +153,6 @@ export function ChatLayout() {
   const sidebar = <Sidebar onRoomOpened={() => setDrawerOpen(false)} />
 
   const desktopAsideVisible = !isMobile && !sidebarCollapsed
-  const drawerVisible = isMobile && drawerOpen
 
   return (
     <div className="flex h-screen overflow-hidden">
