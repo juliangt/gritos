@@ -5,6 +5,7 @@ import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
 import { formatFingerprint } from '../src/lib/crypto/identity'
 import { MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
+import { PENDING_CHATS_CAP } from '../src/lib/p2p/roomManager'
 import { installFakeTrystero } from './fakeTrystero'
 
 let fake: ReturnType<typeof installFakeTrystero>
@@ -554,6 +555,35 @@ describe('M2 outgoing chat (RF-03, §10.3)', () => {
     }
     await vi.advanceTimersByTimeAsync(300)
     expect(storedRoom(roomId).fifoTrimmed).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #20 — the §10.3 offline chat queue is capped at PENDING_CHATS_CAP:
+// a room that never reaches `connected` must not grow it without bound.
+// ---------------------------------------------------------------------------
+
+describe('pendingChats cap (issue #20)', () => {
+  it('caps the offline queue at 100 envelopes, dropping the oldest', async () => {
+    const { room, roomId } = await join('lobby')
+    expect(manager.getRoomConnection(roomId)?.status).toBe('searching')
+
+    // The room never connects while typing: every envelope is queued.
+    for (let i = 0; i < PENDING_CHATS_CAP + 20; i += 1) {
+      expect(manager.sendChat(roomId, `msg-${i}`)).not.toBeNull()
+    }
+    expect(room.action('chat').sends).toHaveLength(0)
+
+    // The flush still delivers what remains, oldest-first in send order.
+    room.peerJoin('peer-1')
+    await flushMicrotasks()
+    const sends = room.action('chat').sends
+    expect(sends).toHaveLength(PENDING_CHATS_CAP)
+    expect(sends[0]?.data).toMatchObject({ body: 'msg-20' })
+    expect(sends[PENDING_CHATS_CAP - 1]?.data).toMatchObject({ body: 'msg-119' })
+    expect(sends.map((send) => (send.data as Envelope).body)).toEqual(
+      Array.from({ length: PENDING_CHATS_CAP }, (_, i) => `msg-${i + 20}`),
+    )
   })
 })
 

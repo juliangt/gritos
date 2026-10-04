@@ -15,6 +15,7 @@ import {
 import { DEFAULT_SETTINGS, useSettingsStore } from '../../stores/useSettingsStore'
 import { createEnvelope } from './protocol'
 import {
+  BoundedSeenIds,
   MAX_PLAINTEXT_LENGTH,
   filterDmForSelf,
   isOversized,
@@ -92,6 +93,12 @@ export const TYPING_TTL_MS = 4_000
 /** §7.1 — receiver receipts are batched with this debounce before sending. */
 export const RECEIPT_DEBOUNCE_MS = 300
 
+/**
+ * Issue #20 — the §10.3 local chat queue (envelopes typed while the room has
+ * no DataChannel) holds at most this many envelopes; the oldest is dropped.
+ */
+export const PENDING_CHATS_CAP = 100
+
 /** Uncompressed ECDH P-256 public key: 0x04 ‖ X ‖ Y = 65 bytes (§9.1). */
 export const RAW_PUBLIC_KEY_LENGTH = 65
 
@@ -158,17 +165,33 @@ interface RoomInternals extends RoomConnection {
   sendChain: Promise<void>
   readonly trystero: TrysteroRoom
   readonly actions: RoomActions
-  /** Per-room dedup window — spec §7.3. */
-  readonly seenIds: Set<string>
+  /**
+   * Per-room dedup window — spec §7.3. Issue #20: bounded with FIFO
+   * eviction at SEEN_IDS_CAP entries, so a flood of unique envelope ids
+   * cannot grow it without bound.
+   */
+  readonly seenIds: BoundedSeenIds
   /** Raw ECDH public keys per peer, in memory only (§7.1). */
   readonly peerKeys: Map<string, Uint8Array>
   /** Fingerprints derived from the received keys — the crypto-trusted ones. */
   readonly peerKeyFps: Map<string, string>
   /** Peers whose presence was already announced in the feed (join lines). */
   readonly announcedPeers: Set<string>
-  /** Chat envelopes awaiting the first DataChannel (§10.3 local queue). */
+  /**
+   * Chat envelopes awaiting the first DataChannel (§10.3 local queue).
+   * Issue #20 — capped at PENDING_CHATS_CAP, oldest dropped on overflow:
+   * a room that never reaches `connected` cannot grow it without bound
+   * (only the user's typing rate bounded it before).
+   */
   pendingChats: Envelope[]
-  /** Receipt ids per author peerId, flushed debounced in ≤50 batches. */
+  /**
+   * Receipt ids per author peerId, flushed debounced in ≤50 batches.
+   * Issue #20 audit: bounded without a cap — every entry lives at most one
+   * RECEIPT_DEBOUNCE_MS window (flushReceipts deletes each key after the
+   * debounced send, even for a peer that already left: safeSend swallows
+   * the dead-channel error), keys only exist for known author peers, and
+   * teardownConnection clears the whole map.
+   */
   readonly pendingReceipts: Map<string, string[]>
   receiptTimer: ReturnType<typeof setTimeout> | null
   errorTimer: ReturnType<typeof setTimeout> | null
@@ -186,11 +209,12 @@ const connections = new Map<string, RoomInternals>()
  * and surviving connection churn (leave/rejoin, reconnectAll): a replayed
  * DM envelope that is still within the freshness window must be dropped
  * even when it arrives through a different room or a fresh DataChannel
- * whose per-connection dedup set is empty. Like every dedup window it is
- * memory-only and resets on reload (the freshness window bounds what a
- * reset can resurface). No size cap here — tracked separately in #20.
+ * whose per-connection dedup set is empty. Issue #20 — bounded with FIFO
+ * eviction at SEEN_IDS_CAP entries: a flood shrinks the dedup window but
+ * never exhausts memory. Like every dedup window it is memory-only and
+ * resets on reload (the freshness window bounds what a reset can resurface).
  */
-const seenDmIds = new Set<string>()
+const seenDmIds = new BoundedSeenIds()
 
 let joinRoomImpl: TrysteroJoinRoom = trysteroJoinRoom
 
@@ -568,7 +592,7 @@ export function sendChat(roomId: string, text: string): Envelope | null {
 
   const deliver = (wire: Envelope): void => {
     if (connection.status !== 'connected') {
-      connection.pendingChats.push(wire)
+      queuePendingChat(connection, wire)
     } else {
       safeSend(connection.actions.chat, wire)
     }
@@ -779,6 +803,18 @@ export function sendDmTyping(peerId: string, on: boolean): void {
   safeSend(shared.actions.typing, { on, dm: true } satisfies TypingPayload, { target: peerId })
 }
 
+/**
+ * Issue #20 — queues a chat envelope for the §10.3 flush, dropping the
+ * oldest beyond PENDING_CHATS_CAP. The flush semantics are preserved:
+ * whatever remains is delivered oldest-first, in send order.
+ */
+function queuePendingChat(connection: RoomInternals, envelope: Envelope): void {
+  connection.pendingChats.push(envelope)
+  if (connection.pendingChats.length > PENDING_CHATS_CAP) {
+    connection.pendingChats.shift()
+  }
+}
+
 /** Flushes chat envelopes queued while the room had no DataChannel yet. */
 function flushPendingChats(connection: RoomInternals): void {
   const pending = connection.pendingChats
@@ -930,7 +966,7 @@ function createConnection(init: {
     status: init.status,
     trystero: trysteroRoom,
     actions,
-    seenIds: new Set<string>(),
+    seenIds: new BoundedSeenIds(),
     peerKeys: new Map<string, Uint8Array>(),
     peerKeyFps: new Map<string, string>(),
     announcedPeers: new Set<string>(),
