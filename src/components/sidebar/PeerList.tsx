@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { latencyDot, type Peer, type Room } from '../../stores/useAppStore'
+import { latencyDot, type Peer, type Room, useAppStore } from '../../stores/useAppStore'
 import { disambiguatedNickname } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
 
@@ -9,13 +9,16 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * Duplicate nicknames get a short peerId suffix ('nick·a3f1'). Clicking a
  * peer opens the menu (§10.1): 'Mensaje directo' (M3, RF-04) opens the
  * E2EE DM view; 'Copiar fingerprint' uses the clipboard. The menu closes
- * on Esc, outside clicks and after any action.
+ * on Esc, outside clicks and after any action. Issue #22 (TOFU): peers
+ * whose DM channel is flagged `keyChanged` show the pinned first-seen
+ * fingerprint (tooltip and copy) plus a visible rotation warning.
  */
 export function PeerList({ room }: { room: Room | null }) {
   const [menuPeerId, setMenuPeerId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)
   const { openDm } = useRoomManager()
+  const dms = useAppStore((state) => state.dms)
 
   // Menu closes on Esc and on any click outside the section (§10.1).
   useEffect(() => {
@@ -38,11 +41,22 @@ export function PeerList({ room }: { room: Room | null }) {
 
   if (room === null) return null
 
+  // Issue #22 — for a flagged peer the DM channel holds the pinned
+  // first-seen fingerprint; it is what gets displayed and copied.
+  const displayedFingerprint = (peer: Peer): string | null => {
+    const channel = dms[peer.id]
+    if (channel !== undefined && channel.keyChanged && channel.peerFingerprint !== null) {
+      return channel.peerFingerprint
+    }
+    return peer.fingerprint
+  }
+
   const copyFingerprint = (peer: Peer) => {
     setMenuPeerId(null)
-    if (peer.fingerprint === null) return
+    const fingerprint = displayedFingerprint(peer)
+    if (fingerprint === null) return
     void navigator.clipboard
-      ?.writeText(peer.fingerprint)
+      ?.writeText(fingerprint)
       .then(() => {
         setCopied(true)
         window.setTimeout(() => setCopied(false), 1_500)
@@ -70,6 +84,8 @@ export function PeerList({ room }: { room: Room | null }) {
       <ul className="flex flex-col">
         {room.peers.map((peer) => {
           const displayName = disambiguatedNickname(peer.nickname, peer.id, room.peers)
+          const fingerprint = displayedFingerprint(peer)
+          const keyChanged = dms[peer.id]?.keyChanged === true
           return (
             <li key={peer.id} className="relative flex flex-col">
               <button
@@ -77,12 +93,17 @@ export function PeerList({ room }: { room: Room | null }) {
                 onClick={() => setMenuPeerId((current) => (current === peer.id ? null : peer.id))}
                 aria-expanded={menuPeerId === peer.id}
                 className="flex items-center gap-1.5 truncate rounded px-1.5 py-1 text-left hover:bg-surface"
-                title={peer.fingerprint ?? undefined}
+                title={fingerprint ?? undefined}
               >
                 <span role="img" aria-label="latencia">
                   {latencyDot(peer.latencyMs, peer.degraded)}
                 </span>
                 <span className="truncate">{displayName}</span>
+                {keyChanged && (
+                  <span role="img" aria-label="fingerprint cambiado" className="text-accent">
+                    ⚠
+                  </span>
+                )}
               </button>
               {menuPeerId === peer.id && (
                 <div
@@ -90,6 +111,11 @@ export function PeerList({ room }: { room: Room | null }) {
                   aria-label={`Acciones para ${displayName}`}
                   className="absolute left-2 top-7 z-10 flex flex-col rounded-md border border-border bg-surface p-1 text-xs shadow-lg"
                 >
+                  {keyChanged && (
+                    <p role="alert" className="px-2 py-1 text-accent">
+                      ⚠ El fingerprint cambió desde tu última verificación
+                    </p>
+                  )}
                   <button
                     type="button"
                     role="menuitem"
@@ -101,7 +127,7 @@ export function PeerList({ room }: { room: Room | null }) {
                   <button
                     type="button"
                     role="menuitem"
-                    disabled={peer.fingerprint === null}
+                    disabled={fingerprint === null}
                     onClick={() => copyFingerprint(peer)}
                     className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
                   >

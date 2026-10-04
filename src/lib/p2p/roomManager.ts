@@ -39,6 +39,7 @@ import {
 } from '../crypto/roomKey'
 import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
 import { pushRecentRoom, saveRecentRooms } from '../recentRooms'
+import { getTofuFingerprint, pinTofuFingerprint } from '../tofu'
 import { joinSystemLine, leaveSystemLine } from '../feed'
 
 /**
@@ -65,6 +66,12 @@ import { joinSystemLine, leaveSystemLine } from '../feed'
  * "🔒 mensaje cifrado" placeholder when they cannot be opened — never as
  * raw ciphertext. Typing, receipts and presence stay plaintext. Leaving
  * discards the key; a reload re-derives it from the re-entered password.
+ *
+ * Issue #22 enforces TOFU on the `keys` path: the first fingerprint seen
+ * per peer is pinned under `gritos:tofu` (lib/tofu); a later, different
+ * one keeps the pin as the displayed identity and flags the DM channel
+ * (`keyChanged`) instead of silently rotating the shown fingerprint. The
+ * live key still feeds the DM crypto so conversations keep working.
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -672,9 +679,8 @@ function peerNicknameOf(peerId: string): { nickname: string; fingerprint: string
 export function openDmChannel(peerId: string): boolean {
   const peer = peerNicknameOf(peerId)
   if (peer === null || peer.nickname.trim() === '') return false
-  const state = useAppStore.getState()
-  state.ensureDmChannel(peerId, peer.nickname, peer.fingerprint)
-  state.setActiveView({ kind: 'dm', peerId })
+  syncDmTofuState(peerId, peer.nickname, livePeerFingerprint(peerId) ?? peer.fingerprint)
+  useAppStore.getState().setActiveView({ kind: 'dm', peerId })
   refreshDmAvailability()
   return true
 }
@@ -720,7 +726,7 @@ export function sendDm(peerId: string, text: string): Promise<Envelope | null> {
       })
       safeSend(shared.actions.dm, envelope)
       const nick = channel.peerNick !== '' ? channel.peerNick : peerId
-      useAppStore.getState().ensureDmChannel(peerId, nick, theirFp)
+      syncDmTofuState(peerId, nick, theirFp)
       useAppStore.getState().appendDmMessage(peerId, {
         id: envelope.id,
         roomId: `dm:${peerId}`,
@@ -802,6 +808,46 @@ export function pruneExpiredTyping(roomId: string, now: number): void {
       useAppStore.getState().setTyping(roomId, peerId, null)
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// TOFU pinning (issue #22) — fingerprint pin + DM channel reconciliation
+// ---------------------------------------------------------------------------
+
+/** Live keys-derived fingerprint of a peer in any active room, when known. */
+function livePeerFingerprint(peerId: string): string | null {
+  for (const connection of connections.values()) {
+    const fingerprint = connection.peerKeyFps.get(peerId)
+    if (fingerprint !== undefined) return fingerprint
+  }
+  return null
+}
+
+/**
+ * Reconciles the DM channel of `peerId` with its TOFU pin: the pinned
+ * first-seen fingerprint (`gritos:tofu`) is authoritative for display, and
+ * a live fingerprint that differs flags the channel `keyChanged` (advisory)
+ * instead of silently rotating the shown identity. Creates the channel when
+ * missing — the open/send/receive path.
+ */
+function syncDmTofuState(peerId: string, peerNick: string, liveFingerprint: string | null): void {
+  const state = useAppStore.getState()
+  const pinned = getTofuFingerprint(peerId)
+  state.ensureDmChannel(peerId, peerNick, pinned ?? liveFingerprint)
+  state.setDmKeyChanged(
+    peerId,
+    pinned !== null && liveFingerprint !== null && pinned !== liveFingerprint,
+  )
+}
+
+/**
+ * Same reconciliation for an EXISTING channel only — the `keys` receive
+ * path must not open channels (they are created on demand: open/send/
+ * receive, RF-04).
+ */
+function syncExistingDmTofuState(peerId: string, liveFingerprint: string): void {
+  if (useAppStore.getState().dms[peerId] === undefined) return
+  syncDmTofuState(peerId, '', liveFingerprint)
 }
 
 // ---------------------------------------------------------------------------
@@ -890,12 +936,18 @@ function createConnection(init: {
       // The peer may have left while the hash was being computed.
       if (connection.peerKeys.has(peerId)) {
         connection.peerKeyFps.set(peerId, fingerprint)
-        useAppStore.getState().updatePeer(connection.roomId, peerId, { fingerprint })
+        // Issue #22 (TOFU): the first fingerprint seen per peer is pinned
+        // under `gritos:tofu` (first write wins) and stays the displayed
+        // identity even when a later key differs — the channel is flagged
+        // `keyChanged` instead. Without storage the pin is a no-op and
+        // everything keeps working per session.
+        pinTofuFingerprint(peerId, fingerprint)
+        useAppStore.getState().updatePeer(connection.roomId, peerId, {
+          fingerprint: getTofuFingerprint(peerId) ?? fingerprint,
+        })
         // Refresh the DM header fingerprint of an existing channel (RF-04);
         // channels are only created on demand (open/send/receive).
-        if (useAppStore.getState().dms[peerId] !== undefined) {
-          useAppStore.getState().ensureDmChannel(peerId, '', fingerprint)
-        }
+        syncExistingDmTofuState(peerId, fingerprint)
       }
     })
   }
@@ -1140,9 +1192,8 @@ async function decryptDmEnvelope(
       theirFp,
     )
     const text = await decryptDm(key, { iv: envelope.iv ?? '', payload: envelope.body })
-    const state = useAppStore.getState()
-    state.ensureDmChannel(senderId, envelope.nick, theirFp)
-    state.appendDmMessage(senderId, {
+    syncDmTofuState(senderId, envelope.nick, theirFp)
+    useAppStore.getState().appendDmMessage(senderId, {
       id: envelope.id,
       roomId: `dm:${senderId}`,
       authorId: senderId,

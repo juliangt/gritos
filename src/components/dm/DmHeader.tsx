@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import type { DmChannel } from '../../stores/useAppStore'
-import { DM_DISCONNECTED_TEXT, DM_VERIFY_NOTICE } from '../../lib/feed'
+import {
+  DM_DISCONNECTED_TEXT,
+  DM_KEY_CHANGED_HINT,
+  DM_KEY_CHANGED_WARNING,
+  DM_VERIFY_NOTICE,
+} from '../../lib/feed'
 import { SettingsModal } from '../settings/SettingsModal'
 
 /**
@@ -8,7 +13,10 @@ import { SettingsModal } from '../settings/SettingsModal'
  * 4×4 format with the exact TOFU verification notice, and the connection
  * state — while the peer shares a room the header mirrors the room peer
  * count; once it left every shared room it shows the exact disconnected
- * text instead.
+ * text instead. Issue #22: when the channel is flagged `keyChanged` (the
+ * peer's live fingerprint differs from the pinned first-seen one) a visible
+ * warning replaces the verification notice; it is advisory — the pinned
+ * fingerprint stays displayed and messages keep flowing.
  */
 export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: () => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -42,8 +50,13 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
           <p className="truncate text-xs text-muted">
             <span className="font-mono">{channel.peerFingerprint ?? '— — —'}</span>
             <span>{' · '}</span>
-            <span>{DM_VERIFY_NOTICE}</span>
+            <span>{channel.keyChanged ? DM_KEY_CHANGED_WARNING : DM_VERIFY_NOTICE}</span>
           </p>
+          {channel.keyChanged && (
+            <p className="text-xs text-accent" role="alert">
+              {DM_KEY_CHANGED_HINT}
+            </p>
+          )}
         </div>
       )}
 

@@ -10,6 +10,7 @@ import {
   persistIdentity,
 } from '../src/lib/crypto/identity'
 import { ROOMS_STORAGE_KEY } from '../src/lib/recentRooms'
+import { pinTofuFingerprint, TOFU_STORAGE_KEY } from '../src/lib/tofu'
 import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
 import { UI_STORAGE_KEY, useUiStore } from '../src/stores/useUiStore'
 import {
@@ -21,7 +22,7 @@ import {
 import { installFakeTrystero } from './fakeTrystero'
 
 /**
- * RF-08 — panic wipe: every WebRTC connection aborted, the FOUR documented
+ * RF-08 — panic wipe: every WebRTC connection aborted, the FIVE documented
  * `gritos:*` keys (spec §8.2) removed (plus stray `gritos:*` defensively),
  * in-memory stores reset, and the app reloads. Keys outside the app
  * namespace are never touched.
@@ -57,6 +58,8 @@ async function seedActiveSession(): Promise<void> {
   await manager.joinRoom('lobby')
   await manager.joinRoom('dev')
   fake.rooms[0]?.peerJoin('peer-1')
+  // Issue #22 — a fingerprint pinned in a previous encounter (TOFU).
+  pinTofuFingerprint('peer-1', 'A31F 09BC 77D2 4E5A')
 
   // A changed setting and a collapsed sidebar.
   useSettingsStore.getState().setSettings({ theme: 'dark', maxActiveRooms: 6 })
@@ -119,6 +122,8 @@ describe('panicWipe (RF-08)', () => {
     expect(localStorage.getItem(ROOMS_STORAGE_KEY)).toBeNull()
     expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toBeNull()
     expect(localStorage.getItem(UI_STORAGE_KEY)).toBeNull()
+    // Issue #22 — the TOFU pins die with the rest of the session.
+    expect(localStorage.getItem(TOFU_STORAGE_KEY)).toBeNull()
   })
 
   it('can skip the reload (tests drive the wipe without navigation)', async () => {

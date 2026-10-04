@@ -373,6 +373,7 @@ interface AppState {
 | `gritos:identity` | `{nickname, fingerprint, createdAt, pubJwk, privJwk}` (JSON) | ✅ |
 | `gritos:rooms` | `{recent: string[]}` — solo nombres si `rememberRooms` | ✅ |
 | `gritos:ui` | `{sidebarCollapsed: boolean}` | ✅ |
+| `gritos:tofu` | `{peerId: fingerprint}` — primera huella vista por par; detecta la rotación de claves (issue #22, TOFU) | ✅ |
 
 **No se persiste jamás**: mensajes, contraseñas de sala, claves DM derivadas, presencia, latencias, peerIds.
 
