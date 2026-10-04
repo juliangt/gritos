@@ -33,6 +33,16 @@ export const NETWORK_ERROR_BANNER_TEXT =
   'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos'
 
 /**
+ * Issue #43 — text of the non-blocking banner shown at the top of the chat
+ * area when the page runs outside a secure context (plain HTTP on a LAN IP):
+ * Web Crypto and WebRTC are unavailable, so the #lobby auto-join is skipped
+ * up front instead of rejecting silently. The '(contexto no seguro)' phrasing
+ * matches the onboarding error.
+ */
+export const INSECURE_CONTEXT_BANNER_TEXT =
+  'No se pudo conectar — WebRTC y el cifrado requieren HTTPS o localhost (contexto no seguro). Consulta el README para servir la app por HTTPS.'
+
+/**
  * §10.3/RF-05 — header status text. A password room that exhausted the
  * error heuristic without finding any peer shows the single not-found
  * message (wrong password and nonexistent room are indistinguishable by
