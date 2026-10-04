@@ -1,3 +1,5 @@
+import { canonicalFingerprint } from './crypto/dm'
+
 /**
  * TOFU pin store — issue #22. Persists the first-seen fingerprint per peer
  * under `gritos:tofu` (`{peerId: fingerprint}`, JSON) so a later key
@@ -11,6 +13,19 @@
  */
 
 export const TOFU_STORAGE_KEY = 'gritos:tofu'
+
+/**
+ * True when `pinned` and `live` render the SAME key even across format
+ * versions. Issue #23 widened the displayed fingerprint from 64 to 128
+ * bits: a pin persisted by the previous build is the 16-hex prefix of the
+ * same key's current 32-hex string (both cut the digest at byte 0), so a
+ * stale-format pin stays valid — it neither flags `keyChanged` nor keeps
+ * the truncated value on display. A pin from a genuinely different key
+ * never prefixes the live fingerprint (2⁻64 coincidence, ignored).
+ */
+export function pinMatchesFingerprint(pinned: string, live: string): boolean {
+  return canonicalFingerprint(live).startsWith(canonicalFingerprint(pinned))
+}
 
 /** Reads the pinned fingerprints; null-safe and corruption-safe. */
 export function loadTofuPins(): Record<string, string> {

@@ -7,6 +7,7 @@ import {
   TOFU_STORAGE_KEY,
   getTofuFingerprint,
   loadTofuPins,
+  pinMatchesFingerprint,
   pinTofuFingerprint,
   saveTofuPins,
 } from '../src/lib/tofu'
@@ -136,6 +137,24 @@ describe('TOFU store (gritos:tofu)', () => {
   })
 })
 
+describe('pinMatchesFingerprint (issue #23: 64 → 128-bit widening)', () => {
+  const wide = 'A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678'
+
+  it('accepts a stale 64-bit pin: it is the prefix of the same key 128-bit string', () => {
+    expect(pinMatchesFingerprint('A31F 09BC 77D2 4E5A', wide)).toBe(true)
+  })
+
+  it('accepts the exact modern pin regardless of whitespace/case', () => {
+    expect(pinMatchesFingerprint(wide.toLowerCase(), wide)).toBe(true)
+    expect(pinMatchesFingerprint(wide, wide)).toBe(true)
+  })
+
+  it('rejects a pin from a different key', () => {
+    expect(pinMatchesFingerprint('DEAD BEEF DEAD BEEF', wide)).toBe(false)
+    expect(pinMatchesFingerprint('DEAD BEEF DEAD BEEF CAFE BABE FEED FACE', wide)).toBe(false)
+  })
+})
+
 describe('keys handler TOFU enforcement (issue #22)', () => {
   let fake: ReturnType<typeof installFakeTrystero>
   let A: RemotePeer
@@ -222,6 +241,25 @@ describe('keys handler TOFU enforcement (issue #22)', () => {
     await joinAndReceiveKeys()
 
     expect(getTofuFingerprint(A.id)).toBe(A.fingerprint)
+    const peerEntry = Object.values(useAppStore.getState().rooms)[0]?.peers[0]
+    expect(peerEntry?.fingerprint).toBe(A.fingerprint)
+  })
+
+  it('a pin persisted by the previous 64-bit format stays valid after the widening (issue #23)', async () => {
+    // The pre-widening build pinned the first 4 groups (16 hex) of the same
+    // digest: a different STRING for the same KEY. It must not trip the
+    // `keyChanged` advisory nor keep the truncated value on display.
+    const staleFormatPin = A.fingerprint.slice(0, 19) // 'XXXX XXXX XXXX XXXX'
+    expect(staleFormatPin).toMatch(/^[0-9A-F]{4}( [0-9A-F]{4}){3}$/)
+    pinTofuFingerprint(A.id, staleFormatPin)
+
+    await joinAndReceiveKeys()
+    expect(manager.openDmChannel(A.id)).toBe(true)
+    await flushMicrotasks()
+
+    expect(getTofuFingerprint(A.id)).toBe(staleFormatPin) // first write wins
+    expect(dmChannel(A.id).keyChanged).toBe(false)
+    expect(dmChannel(A.id).peerFingerprint).toBe(A.fingerprint)
     const peerEntry = Object.values(useAppStore.getState().rooms)[0]?.peers[0]
     expect(peerEntry?.fingerprint).toBe(A.fingerprint)
   })

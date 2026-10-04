@@ -66,7 +66,10 @@ export function base64ToBytes(base64: string): Uint8Array {
 /**
  * Canonical fingerprint form for key derivation: whitespace stripped and
  * uppercased, so both ends hash the exact same byte sequence regardless of
- * how each side stores the display string.
+ * how each side stores the display string. Since issue #23 the display (and
+ * therefore the derivation) strings carry 128 bits (32 hex chars); each end
+ * computes them locally from the announced raw public keys, so peers running
+ * the same build always derive the same salt.
  */
 export function canonicalFingerprint(fingerprint: string): string {
   return fingerprint.replace(/\s+/g, '').toUpperCase()
@@ -81,7 +84,11 @@ export function orderedFingerprints(fpA: string, fpB: string): [string, string] 
 
 /**
  * HKDF salt (§9.2 step 3): SHA-256 over the UTF-8 concatenation of the two
- * fingerprints in sorted order. Both peers compute the identical salt.
+ * fingerprints in sorted order (128-bit display strings per issue #23,
+ * canonicalized). Both peers compute the identical salt from their raw-key
+ * fingerprints. Deliberate migration: the salt of a peer pair changes with
+ * this widening, so DMs between builds of different formats do not interop
+ * — channels and keys are session memory only, nothing persisted to move.
  */
 export async function deriveDmSalt(fpA: string, fpB: string): Promise<Uint8Array> {
   const [first, second] = orderedFingerprints(fpA, fpB)

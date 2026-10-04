@@ -12,7 +12,7 @@ import {
 } from '../src/lib/crypto/identity'
 import { sha256Hex } from '../src/lib/crypto/hashes'
 
-const FP_FORMAT = /^[0-9A-F]{4}( [0-9A-F]{4}){3}$/
+const FP_FORMAT = /^[0-9A-F]{4}( [0-9A-F]{4}){7}$/
 
 describe('identity keypair (spec §9.1)', () => {
   it('generates an extractable ECDH P-256 pair', async () => {
@@ -47,11 +47,19 @@ describe('identity keypair (spec §9.1)', () => {
   })
 })
 
-describe('fingerprint (spec §9.1)', () => {
-  it('formats the digest as 4 uppercase groups of 4 hex chars', () => {
-    expect(formatFingerprint('a31f09bc77d24e5a99')).toBe('A31F 09BC 77D2 4E5A')
+describe('fingerprint (spec §9.1, issue #23: 128 bits)', () => {
+  it('formats the first 32 hex chars as 8 uppercase groups of 4', () => {
+    expect(formatFingerprint('a31f09bc77d24e5a51c0ffee12345678')).toBe(
+      'A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678',
+    )
     expect(formatFingerprint('')).toBe('')
     expect(formatFingerprint('abc')).toBe('ABC')
+  })
+
+  it('accepts a full 64-hex digest and ignores everything past 128 bits', () => {
+    const fullDigest = 'a31f09bc77d24e5a51c0ffee12345678' + '99'.repeat(16)
+    expect(fullDigest).toHaveLength(64)
+    expect(formatFingerprint(fullDigest)).toBe('A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678')
   })
 
   it('matches the required format regex for real keys', async () => {
@@ -59,7 +67,7 @@ describe('fingerprint (spec §9.1)', () => {
     const raw = await exportRawPublicKey(keypair.publicKey)
     const fingerprint = await computeFingerprint(raw)
     expect(fingerprint).toMatch(FP_FORMAT)
-    expect(fingerprint).toHaveLength(19) // 16 hex + 3 spaces
+    expect(fingerprint).toHaveLength(39) // 32 hex + 7 spaces
   })
 
   it('is stable for the same key and equals the manual SHA-256', async () => {
@@ -69,7 +77,7 @@ describe('fingerprint (spec §9.1)', () => {
     const b = await computeFingerprint(raw)
     expect(a).toBe(b)
 
-    const manual = (await sha256Hex(raw)).slice(0, 16).toUpperCase()
+    const manual = (await sha256Hex(raw)).slice(0, 32).toUpperCase()
     expect(a).toBe(manual.replace(/(.{4})(?=.)/g, '$1 '))
   })
 
