@@ -18,7 +18,9 @@
       content="default-src 'self'; script-src 'self' 'sha256-XJRLxFqQlD7zuMSaUacvg1fywU8TxLNZ36vyGXHQ2vM='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; media-src 'none'; object-src 'none'; base-uri 'self'"
     />
     <meta name="color-scheme" content="light dark" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Relative href (issue #40): the build uses a relative base, so the
+         favicon must resolve under any subpath (GitHub Pages project sites). -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
