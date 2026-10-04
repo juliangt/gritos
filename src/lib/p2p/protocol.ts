@@ -40,6 +40,17 @@ export const MAX_ENVELOPE_AGE_MS = 300_000
  */
 export const MAX_CLOCK_SKEW_MS = 90_000
 
+/**
+ * Issue #20 — maximum entries of a dedup window (per-connection chat ids and
+ * the session-wide DM set). `markSeen`/`shouldProcess` only ever grow their
+ * set, and every parseable envelope consumes an id, so an unbounded set lets
+ * a malicious peer flood protocol-compliant envelopes with random ids and
+ * exhaust the tab's memory over a long-lived session. At the cap the OLDEST
+ * entry is evicted (FIFO), so dedup stays effective for any practical
+ * duplicate window while memory stays bounded.
+ */
+export const SEEN_IDS_CAP = 10_000
+
 export type EnvelopeKind = 'chat' | 'dm'
 
 /**
@@ -125,6 +136,57 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Minimal dedup-set surface shared by a plain `Set<string>` and the bounded
+ * `BoundedSeenIds` (issue #20) — everything `markSeen`/`shouldProcess` need.
+ */
+export type SeenIdSet = {
+  has(id: string): boolean
+  add(id: string): unknown
+}
+
+/**
+ * Issue #20 — a dedup set that never grows beyond `cap` entries. Backed by a
+ * `Map` used as an ordered set (insertion order tracked); adding past the cap
+ * evicts the OLDEST entry (FIFO), so a flood of unique ids only shrinks the
+ * dedup window instead of exhausting memory. Accepted semantics: an evicted
+ * id re-seen later is treated as unseen again (a replayed copy may surface
+ * once more) — the freshness window (issue #19) still bounds any such
+ * resurfacing to a 5-minute replay.
+ */
+export class BoundedSeenIds {
+  private readonly entries = new Map<string, true>()
+  readonly cap: number
+
+  constructor(cap: number = SEEN_IDS_CAP) {
+    this.cap = cap
+  }
+
+  has(id: string): boolean {
+    return this.entries.has(id)
+  }
+
+  /** Records `id`; true only when it had not been seen before. */
+  add(id: string): boolean {
+    if (this.entries.has(id)) return false
+    this.entries.set(id, true)
+    while (this.entries.size > this.cap) {
+      const oldest = this.entries.keys().next()
+      if (oldest.done === true) break
+      this.entries.delete(oldest.value)
+    }
+    return true
+  }
+
+  get size(): number {
+    return this.entries.size
+  }
+
+  clear(): void {
+    this.entries.clear()
+  }
+}
+
+/**
  * Structural validation of an incoming envelope (§7.2 + §7.3): protocol
  * version, required fields, shape and size limits. Returns a normalized
  * copy containing only the known fields; null when the payload must be
@@ -196,8 +258,10 @@ export function createEnvelope(
 /**
  * Records `id` and returns true when it had not been seen before.
  * Per-room dedup window (spec §7.3) — full-mesh delivery duplicates.
+ * Issue #20: the window may be a plain Set or a bounded BoundedSeenIds;
+ * both grow only here, and the bounded one evicts its oldest entry at cap.
  */
-export function markSeen(seenIds: Set<string>, id: string): boolean {
+export function markSeen(seenIds: SeenIdSet, id: string): boolean {
   if (seenIds.has(id)) return false
   seenIds.add(id)
   return true
@@ -224,7 +288,7 @@ export function isWithinFreshnessWindow(
  * envelope has zero side effects: no feed message, no receipt, and it does
  * not even consume its id in the dedup set.
  */
-export function shouldProcess(envelope: Envelope, seenIds: Set<string>): boolean {
+export function shouldProcess(envelope: Envelope, seenIds: SeenIdSet): boolean {
   if (!isWithinFreshnessWindow(envelope.ts)) return false
   return markSeen(seenIds, envelope.id)
 }

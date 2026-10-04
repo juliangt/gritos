@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  BoundedSeenIds,
   MAX_CLOCK_SKEW_MS,
   MAX_ENVELOPE_AGE_MS,
   MAX_PAYLOAD_BYTES,
   MAX_PLAINTEXT_LENGTH,
   MAX_RECEIPT_BATCH,
   PROTOCOL_VERSION,
+  SEEN_IDS_CAP,
   createEnvelope,
   filterDmForSelf,
   isOversized,
@@ -162,6 +164,73 @@ describe('dedup helpers (spec §7.3)', () => {
     expect(shouldProcess(envelope, seen)).toBe(true)
     expect(shouldProcess(envelope, seen)).toBe(false) // full-mesh duplicate
     expect(seen.size).toBe(1)
+  })
+})
+
+describe('BoundedSeenIds (issue #20: bounded dedup window)', () => {
+  it('pins the cap constant at 10 000 entries', () => {
+    expect(SEEN_IDS_CAP).toBe(10_000)
+    expect(new BoundedSeenIds().cap).toBe(SEEN_IDS_CAP)
+  })
+
+  it('dedups like a Set while below the cap', () => {
+    const seen = new BoundedSeenIds()
+    expect(markSeen(seen, 'id-1')).toBe(true)
+    expect(markSeen(seen, 'id-1')).toBe(false)
+    expect(markSeen(seen, 'id-2')).toBe(true)
+    expect(seen.has('id-1')).toBe(true)
+    expect(seen.size).toBe(2)
+    seen.clear()
+    expect(seen.has('id-1')).toBe(false)
+    expect(seen.size).toBe(0)
+  })
+
+  it('evicts the OLDEST entry first (FIFO) beyond the cap', () => {
+    const seen = new BoundedSeenIds(4)
+    for (let i = 0; i < 6; i += 1) {
+      expect(markSeen(seen, `id-${i}`)).toBe(true)
+    }
+    expect(seen.size).toBe(4)
+    expect(seen.has('id-0')).toBe(false) // evicted first
+    expect(seen.has('id-1')).toBe(false)
+    expect(seen.has('id-2')).toBe(true) // oldest survivor
+    expect(seen.has('id-5')).toBe(true) // newest retained
+
+    // Accepted semantics of a bounded window: a re-seen evicted id is
+    // treated as unseen again (it may surface once more); the freshness
+    // window (issue #19) still bounds any replay to 5 minutes.
+    expect(markSeen(seen, 'id-0')).toBe(true)
+    expect(seen.size).toBe(4)
+    expect(seen.has('id-0')).toBe(true)
+    expect(seen.has('id-2')).toBe(false) // now the oldest, evicted by id-0
+  })
+
+  it('keeps the default-cap set bounded: 10 001 unique ids stay at 10 000', () => {
+    const seen = new BoundedSeenIds()
+    for (let i = 0; i < SEEN_IDS_CAP + 1; i += 1) {
+      markSeen(seen, `id-${i}`)
+    }
+    expect(seen.size).toBe(SEEN_IDS_CAP)
+    expect(seen.has('id-0')).toBe(false)
+    expect(seen.has('id-1')).toBe(true)
+    expect(seen.has(`id-${SEEN_IDS_CAP}`)).toBe(true)
+  })
+
+  it('survives a 50k unique-id flood through shouldProcess within the cap', () => {
+    const seen = new BoundedSeenIds()
+    let allProcessed = true
+    let maxSize = 0
+    for (let i = 0; i < 50_000; i += 1) {
+      if (!shouldProcess(validChat({ id: `flood-${i}`, ts: Date.now() }), seen)) {
+        allProcessed = false
+      }
+      if (seen.size > maxSize) maxSize = seen.size
+    }
+    expect(allProcessed).toBe(true)
+    expect(maxSize).toBeLessThanOrEqual(SEEN_IDS_CAP)
+    expect(seen.size).toBe(SEEN_IDS_CAP)
+    expect(seen.has('flood-0')).toBe(false)
+    expect(seen.has('flood-49999')).toBe(true)
   })
 })
 
