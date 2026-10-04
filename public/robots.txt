@@ -1,0 +1,9 @@
+# gritos — crawler policy (issue #49).
+#
+# Deliberate choice: allow everything. The app URL itself is the product
+# page (the README links it as such), so it should be indexable. Room names
+# never leak into crawlable URLs: share links encode the room key in the
+# URL fragment (#…), which crawlers never send to the server (there is no
+# server anyway), so there is nothing room-specific to disallow.
+User-agent: *
+Allow: /
