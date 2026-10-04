@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { build, resolveConfig } from 'vite'
 import config from '../vite.config'
+import robotsTxt from '../public/robots.txt?raw'
 
 /**
  * Regression guards for production-build issues:
@@ -16,19 +17,28 @@ import config from '../vite.config'
  *   GitHub Pages, Netlify and nginx subpaths alike.
  * - Issue #27: the inline bootstrap script (frame-bust + anti-flash) must
  *   ship intact and stay allow-listed in the CSP meta by its sha256 hash.
+ * - Issue #49: public-site basics must ship — robots.txt with the deliberate
+ *   allow-all policy, og:/twitter: share meta with a relative og:image, a
+ *   theme-color per color scheme and PNG/apple-touch icon fallback links.
  *
- * Cheap checks keep all three from shipping again:
+ * Cheap checks keep all four from shipping again:
  *  1. the shared vite config registers the Tailwind plugin and resolves a
  *     relative base,
  *  2. a real production build emits expanded utilities (no raw directive)
  *     and a fully relative index.html,
  *  3. the built index.html keeps the frame-bust and a CSP hash that matches
  *     the actual inline script text (computed here, so any edit to the
- *     script that forgets to refresh the hash fails CI).
+ *     script that forgets to refresh the hash fails CI),
+ *  4. the built index.html keeps the share/theme-color/icon metas of
+ *     issue #49, and public/robots.txt keeps its policy (read via `?raw`
+ *     against the exact bytes on disk, as in license.test.ts).
  *
  * The build runs with `write: false`: the CSS and HTML are asserted from the
  * in-memory rollup output (byte-for-byte what `vite build` writes to
- * dist/), so the test leaves no build artifacts behind.
+ * dist/), so the test leaves no build artifacts behind. Public assets
+ * (robots.txt, the icons) are copied verbatim by Vite and are not part of
+ * the rollup output; robots.txt is asserted from disk below and the icons
+ * are covered by the link hrefs in the HTML.
  */
 function collectPluginNames(plugins: readonly unknown[]): string[] {
   const names: string[] = []
@@ -95,7 +105,17 @@ async function cspSha256(text: string): Promise<string> {
   return 'sha256-' + btoa(String.fromCharCode(...new Uint8Array(digest)))
 }
 
-describe('production build output (issues #37, #40, #27)', () => {
+/** The full `<meta …>` tag whose `property` attribute is `property`, if any. */
+function metaByProperty(html: string, property: string): string | undefined {
+  return html.match(new RegExp(`<meta[^>]*property="${property}"[^>]*>`))?.[0]
+}
+
+/** The full `<meta …>` tag whose `name` attribute is `name`, if any. */
+function metaByName(html: string, name: string): string | undefined {
+  return html.match(new RegExp(`<meta[^>]*name="${name}"[^>]*>`))?.[0]
+}
+
+describe('production build output (issues #37, #40, #27, #49)', () => {
   it('registers the Tailwind Vite plugin', () => {
     const names = collectPluginNames(config.plugins ?? [])
     expect(
@@ -174,5 +194,67 @@ describe('production build output (issues #37, #40, #27)', () => {
     const meta = html.match(/<meta[^>]*Content-Security-Policy[^>]*>/)?.[0]
     expect(meta, 'the built index.html must keep the CSP meta').toBeDefined()
     expect(meta).toContain(hash)
+  })
+
+  it('ships og: share meta with a relative image (issue #49)', () => {
+    const html = emittedHtml(result)
+    expect(metaByProperty(html, 'og:type')).toMatch(/content="website"/)
+    expect(metaByProperty(html, 'og:site_name')).toMatch(/content="gritos"/)
+    const title = metaByProperty(html, 'og:title')
+    expect(title, 'og:title must be present').toBeDefined()
+    expect(title).toMatch(/content="gritos/)
+    const description = metaByProperty(html, 'og:description')
+    expect(description, 'og:description must be present').toBeDefined()
+    expect(description).toContain('chat P2P sin servidor')
+    const image = metaByProperty(html, 'og:image')
+    expect(image, 'og:image must be present').toBeDefined()
+    expect(image).toContain('content="./apple-touch-icon.png"')
+    expect(image, 'a root-absolute og:image 404s under a subpath (GitHub Pages)').not.toContain(
+      'content="/',
+    )
+  })
+
+  it('ships the twitter:card meta (issue #49)', () => {
+    const html = emittedHtml(result)
+    expect(metaByName(html, 'twitter:card')).toMatch(/content="summary"/)
+  })
+
+  it('declares a theme-color for each color scheme (issue #49)', () => {
+    const html = emittedHtml(result)
+    expect(
+      [...html.matchAll(/<meta[^>]*name="theme-color"[^>]*>/g)],
+      'exactly one theme-color meta per scheme',
+    ).toHaveLength(2)
+    const light = html.match(
+      /<meta[^>]*name="theme-color"[^>]*media="\(prefers-color-scheme: light\)"[^>]*>/,
+    )?.[0]
+    const dark = html.match(
+      /<meta[^>]*name="theme-color"[^>]*media="\(prefers-color-scheme: dark\)"[^>]*>/,
+    )?.[0]
+    expect(light, 'a light-scheme theme-color must be present').toBeDefined()
+    expect(dark, 'a dark-scheme theme-color must be present').toBeDefined()
+    // The colors must match the theme tokens in src/styles/index.css.
+    expect(light).toContain('content="#fafaf9"')
+    expect(dark).toContain('content="#0c0a09"')
+  })
+
+  it('links the PNG favicon and apple-touch-icon fallbacks relatively (issue #49)', () => {
+    const html = emittedHtml(result)
+    const png = html.match(/<link[^>]*rel="icon"[^>]*type="image\/png"[^>]*>/)?.[0]
+    expect(png, 'a 32px PNG favicon fallback must be linked').toBeDefined()
+    expect(png).toContain('href="./favicon-32.png"')
+    const apple = html.match(/<link[^>]*rel="apple-touch-icon"[^>]*>/)?.[0]
+    expect(apple, 'an apple-touch-icon must be linked').toBeDefined()
+    expect(apple).toContain('href="./apple-touch-icon.png"')
+  })
+})
+
+describe('robots.txt (issue #49)', () => {
+  it('ships the deliberate allow-all policy from public/', () => {
+    expect(robotsTxt).toMatch(/^User-agent: \*$/m)
+    expect(robotsTxt).toMatch(/^Allow: \/$/m)
+    expect(robotsTxt, 'nothing is disallowed: room names live only in URL fragments').not.toMatch(
+      /^Disallow:/m,
+    )
   })
 })

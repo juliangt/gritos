@@ -20,14 +20,52 @@
       content="default-src 'self'; script-src 'self' 'sha256-L/0fM7/nm52V0EBeN57Mi3OoMCaxNUN87InOK0k1Hrs='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; media-src 'none'; object-src 'none'; base-uri 'self'"
     />
     <meta name="color-scheme" content="light dark" />
+    <!-- Browser chrome color per scheme (issue #49). Mirrors the anti-flash
+         script below, which also keys off the OS preference: while the page
+         is a user-forced theme (set in-app against the OS), the chrome keeps
+         the OS color until React mounts — same accepted trade-off as the
+         anti-flash seed. The colors are the theme tokens (--gritos-bg). -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafaf9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0c0a09" />
     <!-- Relative href (issue #40): the build uses a relative base, so the
          favicon must resolve under any subpath (GitHub Pages project sites). -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- PNG fallbacks (issue #49): raster for browsers without SVG favicon
+         support, apple-touch-icon for the iOS home screen (opaque background,
+         iOS composites transparency onto black). -->
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
       content="gritos — chat P2P sin servidor: sin cuentas, cifrado de extremo a extremo y efímero. Los mensajes viajan directos entre navegadores."
     />
+    <!--
+      Social share meta (issue #49). No canonical domain is pinned (the app
+      is deployed wherever it is hosted), so og:image is a relative URL: the
+      OpenGraph spec resolves it against the document URL, and Discord,
+      Slack and Telegram follow suit. Facebook's scraper is the notable
+      exception that prefers an absolute URL — a host with a fixed domain
+      should absolutize og:image (or set og:url) if Facebook previews matter.
+      The 180px icon is small for a share image; a dedicated og asset is
+      deliberately skipped for v1 (twitter:card summary renders it fine).
+      og:description must stay in sync with the description meta above.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="gritos" />
+    <meta property="og:title" content="gritos — chat p2p sin servidor" />
+    <meta
+      property="og:description"
+      content="gritos — chat P2P sin servidor: sin cuentas, cifrado de extremo a extremo y efímero. Los mensajes viajan directos entre navegadores."
+    />
+    <meta property="og:image" content="./apple-touch-icon.png" />
+    <meta property="og:image:width" content="180" />
+    <meta property="og:image:height" content="180" />
+    <meta
+      property="og:image:alt"
+      content="Logotipo de gritos: burbuja de chat blanca con un signo de exclamación sobre fondo oscuro"
+    />
+    <meta name="twitter:card" content="summary" />
     <title>gritos — chat p2p sin servidor</title>
     <script>
       // Frame-bust (issue #27) + anti-flash (spec §10.6). The frame-bust runs
