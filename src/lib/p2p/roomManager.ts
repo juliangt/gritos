@@ -181,6 +181,17 @@ interface RoomInternals extends RoomConnection {
 
 const connections = new Map<string, RoomInternals>()
 
+/**
+ * Issue #19 — session-wide DM dedup set, shared by every room connection
+ * and surviving connection churn (leave/rejoin, reconnectAll): a replayed
+ * DM envelope that is still within the freshness window must be dropped
+ * even when it arrives through a different room or a fresh DataChannel
+ * whose per-connection dedup set is empty. Like every dedup window it is
+ * memory-only and resets on reload (the freshness window bounds what a
+ * reset can resurface). No size cap here — tracked separately in #20.
+ */
+const seenDmIds = new Set<string>()
+
 let joinRoomImpl: TrysteroJoinRoom = trysteroJoinRoom
 
 /**
@@ -1189,7 +1200,9 @@ function handleDmEnvelope(
   const envelope = parseEnvelope(data)
   if (envelope === null || envelope.kind !== 'dm') return
   if (filterDmForSelf(envelope, trysteroSelfId) === null) return
-  if (!shouldProcess(envelope, connection.seenIds)) return
+  // Issue #19 — dedup against the session-wide set, not the connection's:
+  // replays through other rooms or fresh connections must still be dropped.
+  if (!shouldProcess(envelope, seenDmIds)) return
   if (!envelope.enc || envelope.iv === null) return
 
   const identity = sessionIdentity
@@ -1332,6 +1345,7 @@ export function resetManagerForTests(): void {
   }
   connections.clear()
   pendingJoins.clear()
+  seenDmIds.clear()
   pongListeners.clear()
   dmListeners.clear()
   mentionListeners.clear()

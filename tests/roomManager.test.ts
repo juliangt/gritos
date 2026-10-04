@@ -4,7 +4,7 @@ import { useAppStore } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
 import { formatFingerprint } from '../src/lib/crypto/identity'
-import type { Envelope } from '../src/lib/p2p/protocol'
+import { MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
 import { installFakeTrystero } from './fakeTrystero'
 
 let fake: ReturnType<typeof installFakeTrystero>
@@ -333,6 +333,48 @@ describe('chat flow (§6.4, §7.3)', () => {
     room.receive('receipt', { ids: tooMany }, 'peer-1')
     expect(storedRoom(roomId).messages[1]?.id).toBe(second?.id)
     expect(storedRoom(roomId).messages[1]?.status).toBe('sent')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #19 — freshness window on the chat receive path: a captured envelope
+// replayed after a dedup reset (reload/rejoin) is discarded by age, closing
+// the social-engineering replay. Date.now is frozen by the fake timers, so
+// the tests place `ts` explicitly around it.
+// ---------------------------------------------------------------------------
+
+describe('chat freshness window (issue #19)', () => {
+  it('processes fresh chat envelopes', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('chat', chatEnvelope({ ts: Date.now() }), 'peer-1')
+    expect(storedRoom(roomId).messages).toHaveLength(1)
+  })
+
+  it('discards an envelope older than 5 minutes with zero state change', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('chat', chatEnvelope({ ts: Date.now() - MAX_ENVELOPE_AGE_MS - 1 }), 'peer-1')
+
+    // No feed entry, and no debounced receipt either.
+    expect(storedRoom(roomId).messages).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(room.action('receipt').sends).toHaveLength(0)
+  })
+
+  it('discards an envelope dated 2 minutes into the future', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('chat', chatEnvelope({ ts: Date.now() + 120_000 }), 'peer-1')
+    expect(storedRoom(roomId).messages).toHaveLength(0)
+  })
+
+  it('keeps boundary envelopes just inside the window', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('chat', chatEnvelope({ ts: Date.now() - MAX_ENVELOPE_AGE_MS }), 'peer-1')
+    room.receive('chat', chatEnvelope({ ts: Date.now() + MAX_CLOCK_SKEW_MS }), 'peer-1')
+    expect(storedRoom(roomId).messages).toHaveLength(2)
   })
 })
 
