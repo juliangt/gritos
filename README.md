@@ -132,4 +132,4 @@ Peer discovery relies on **public WebTorrent trackers** operated by third partie
 
 ## License
 
-License: TBD.
+Gritos is released under the [MIT License](LICENSE).
