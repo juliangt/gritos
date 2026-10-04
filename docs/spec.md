@@ -422,7 +422,7 @@ La derivación con contraseña hace que la sala sea **indescubrible** en el trac
 - Suplantación de apodo: cualquier par puede usar el apodo de otro; la defensa es comparar fingerprints en DMs (TOFU — *trust on first use*), sin base de identidad persistente global.
 - Compromiso del dispositivo o del origen (XSS): la clave privada se guarda cifrada en reposo (issue #24), pero un script del propio origen tiene acceso a `localStorage` **y** a IndexedDB, por lo que un contexto totalmente comprometido sigue pudiendo usar la clave (suplantar al usuario). Mitigación: la envoltura eleva el listón frente a volcados ingenuos de `localStorage` (extensiones con permisos de lectura, acceso físico al disco); contra el compromiso del propio origen no hay defensa local. El renderer Markdown propio con tests de XSS y la superficie mínima de dependencias siguen siendo la primera barrera.
 - Metadatos: los pares conectados ven tu IP (naturaleza de WebRTC); usar TURN mitiga parcialmente.
-- Avances criptoanalíticos / contraseña de sala débil: PBKDF2 eleva el coste, pero una contraseña trivial es comprometible por fuerza bruta offline por quien conozca el nombre de sala.
+- Avances criptoanalíticos / contraseña de sala débil: PBKDF2 eleva el coste, pero una contraseña trivial es comprometible por fuerza bruta offline por quien conozca el nombre de sala. En los DMs el riesgo concreto es *harvest now, decrypt later* (issue #25): los sobres grabados hoy se descifrarían en bloque si la clave privada se compromete mañana — nota de diseño y migración en 12.1.
 
 ## 10. UX/UI
 
@@ -506,6 +506,21 @@ El *discovery* en trackers públicos tarda típicamente 2–6 s; la UI debe comu
 4. Salas masivas: topología de retransmisión o SFU.
 5. PWA (service worker, iconos, offline shell).
 6. i18n y mensajes editables/borrables.
+7. Secrecía hacia delante en DMs (issue #25; nota de diseño en 12.1): claves DM efímeras por sesión como mínimo; *prekeys* + *double ratchet* como solución completa.
+
+### 12.1 Nota de diseño: secrecía hacia delante en DMs (issue #25)
+
+**Amenaza — *harvest now, decrypt later*.** El `dm` se emite en difusión por la malla de cada sala compartida (7.1; el envío dirigido es la issue #18), de modo que cualquier miembro de la sala puede grabar los sobres cifrados. La clave DM se deriva de un ECDH **estático-estático** P-256 (9.2) entre claves de identidad de larga vida: basta un único compromiso posterior de la clave privada (acceso al dispositivo, volcado de `localStorage`/IndexedDB, avance criptoanalítico) para descifrar **todo el historial grabado** de cada pareja de pares. 9.5 lo recoge como riesgo aceptado de v1; esta nota fija la migración.
+
+**Mínimo viable: secrecía por sesión.** Derivar la clave DM de un par ECDH **efímero por sesión de la app**, anunciado con la acción `keys` existente (7.1): el ECDH de 9.2 deja de usar la clave privada de identidad y pasa a usar material efímero de sesión. La clave de identidad de larga vida y su fingerprint siguen siendo el ancla TOFU: se muestran en la lista de pares y en la cabecera del DM para la verificación manual (RF-04, 9.1). Consecuencias a documentar:
+
+- El pin `gritos:tofu` (8.2, issue #22) debe seguir fijando el fingerprint de **identidad**, nunca el de la clave efímera (que cambia en cada sesión y rompería el pin al reiniciar).
+- Cada par debe enlazar identidad → clave efímera sin abrir la puerta a suplantación: la clave efímera viaja firmada por la clave de identidad, o la sal de 9.2 se deriva de ambos pares de fingerprints (identidad y efímero), de modo que una clave efímera sustituida no derive la misma clave.
+- La ventana de exposición se reduce de "vida completa de la identidad" a "una sesión": lo grabado deja de ser descifrable al cerrar la pestaña; lo capturado antes de la migración sigue expuesto.
+
+**Solución completa (fuera del alcance de v1).** *Prekeys* anunciadas por par y establecimiento tipo X3DH con *double ratchet* por conversación (secrecía hacia delante y recuperación post-compromiso, estilo Signal). Exige canal de anuncio de prekeys y estado de ratchet por conversación; solo cobra sentido sobre el envío dirigido (issue #18).
+
+**Disciplina de migración.** El formato actual queda fijado por contrato: derivación con `info = 'gritos/dm/v1'` sobre la sal de fingerprints ordenados (9.2) y sobre DM `{iv, payload}` (7.2). Cualquier cambio en las entradas de derivación (par de claves, sal, info) o en el formato wire debe **incrementar un marcador de versión** — `info = 'gritos/dm/v2'`, o Envelope `v: 2`, que los pares v1 ya ignoran silenciosamente (7.2) — y estar controlado por tests, de forma que pares viejos y nuevos nunca deriven silenciosamente claves distintas de los mismos sobres. En salas con versiones mezcladas la degradación es la prevista: los sobres que no se abren se descartan en silencio (7.3) hasta que los pares convergen a la misma versión. Un test guard fija hoy `DM_KEY_INFO === 'gritos/dm/v1'`; cambiar esa cadena (o la forma del sobre) es la puerta deliberada de la migración v2.
 
 ---
 
