@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, type PersistStorage } from 'zustand/middleware'
+import { normalizeSettings } from '../lib/validateSettings'
 import type { Settings } from './useAppStore'
 
 /** spec.md §8.2 — one of the only four persistent `gritos:*` keys. */
@@ -26,9 +27,10 @@ export interface SettingsStore {
  * Persists the raw `Settings` JSON object under `gritos:settings`
  * (spec §8.2: "Settings (JSON)") — deliberately NOT wrapped in zustand's
  * `{ state, version }` envelope, so the anti-flash script in index.html can
- * read `theme` directly. Unknown/missing fields fall back to the defaults,
- * which keeps old payloads forward-compatible. Defensive against
- * environments without `localStorage` (unit tests, potential SSR).
+ * read `theme` directly. Issue #29: the stored JSON is schema-validated on
+ * every load (lib/validateSettings) — unknown/missing/hostile fields fall
+ * back to the defaults, which keeps old payloads forward-compatible.
+ * Defensive against environments without `localStorage` (unit tests, SSR).
  */
 const settingsStorage: PersistStorage<Settings> = {
   getItem: (name) => {
@@ -36,8 +38,8 @@ const settingsStorage: PersistStorage<Settings> = {
     const raw = localStorage.getItem(name)
     if (raw === null) return null
     try {
-      const parsed = JSON.parse(raw) as Partial<Settings>
-      return { state: { ...DEFAULT_SETTINGS, ...parsed } }
+      const parsed: unknown = JSON.parse(raw)
+      return { state: normalizeSettings(parsed, DEFAULT_SETTINGS) }
     } catch {
       return null
     }
