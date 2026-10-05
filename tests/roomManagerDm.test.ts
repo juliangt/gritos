@@ -535,7 +535,10 @@ describe('DM freshness and replay (issue #19)', () => {
     const mine = await myRawKeyAndFingerprint(room)
 
     const envelope = await sealFromA('del futuro', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
-    room.receive('dm', { ...envelope, ts: Date.now() + MAX_CLOCK_SKEW_MS + 1 }, A.id)
+    // Far beyond the tolerance, not +1ms: the gate runs after real async
+    // crypto work, so a hair-thin margin flips whenever the run is slow
+    // (the exact boundary is pinned by the protocol unit tests instead).
+    room.receive('dm', { ...envelope, ts: Date.now() + MAX_CLOCK_SKEW_MS + 30_000 }, A.id)
     await flushMicrotasks()
 
     expect(useAppStore.getState().dms[A.id]).toBeUndefined()
@@ -546,7 +549,8 @@ describe('DM freshness and replay (issue #19)', () => {
     const mine = await myRawKeyAndFingerprint(room)
 
     const envelope = await sealFromA('al límite', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
-    room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS }, A.id)
+    // 30s of slack inside the window, same real-timer reasoning as above.
+    room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS + 30_000 }, A.id)
     await flushMicrotasks()
 
     expect(dmChannel(A.id).messages).toHaveLength(1)
