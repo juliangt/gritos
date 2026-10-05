@@ -4,6 +4,7 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { OnboardingScreen } from '../src/components/onboarding/OnboardingScreen'
+import { P2P_DISCLOSURE_TEXT } from '../src/components/settings/messages'
 import { resetManagerForTests, setJoinRoomFactory } from '../src/lib/p2p/roomManager'
 import { useAppStore } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
@@ -41,6 +42,11 @@ describe('OnboardingScreen (RF-01, spec §10.2)', () => {
         'Sin servidor, sin cuentas: tus mensajes viajan directos entre navegadores y desaparecen al recargar.',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('discloses the P2P IP exposure to room peers (issue #35)', () => {
+    render(<OnboardingScreen />)
+    expect(screen.getByText(P2P_DISCLOSURE_TEXT)).toBeInTheDocument()
   })
 
   it('sorpréndeme fills a valid generated nickname', () => {

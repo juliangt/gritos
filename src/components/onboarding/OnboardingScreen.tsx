@@ -10,6 +10,7 @@ import { useRoomManager } from '../../hooks/useRoomManager'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
+import { P2P_DISCLOSURE_TEXT } from '../settings/messages'
 
 /**
  * First-visit onboarding (RF-01, spec §10.2): centered screen over the
@@ -133,6 +134,7 @@ export function OnboardingScreen() {
             enlace compartido.
           </p>
         )}
+        <p className="text-center text-xs text-muted">{P2P_DISCLOSURE_TEXT}</p>
       </form>
     </main>
   )
