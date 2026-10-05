@@ -16,6 +16,23 @@ export const PROTOCOL_VERSION = 1
 export const MAX_PLAINTEXT_LENGTH = 4000
 /** Binary payloads above this size are discarded (§7.3). */
 export const MAX_PAYLOAD_BYTES = 64 * 1024
+/**
+ * Issue #21 — cap on the `body` of an encrypted envelope (`enc: true`),
+ * enforced in `parseEnvelope` BEFORE any base64 decode or GCM work. Only
+ * plaintext bodies used to be capped, so an enc body of transport-maximum
+ * size ("ciphertext bomb") paid a full `atob` + AES-GCM tag verification
+ * per message that the failing tag then discarded — CPU/memory
+ * amplification under a flood. The math for an honest message: a
+ * 4000-char plaintext of 1-byte UTF-8 chars seals to 4000 B ciphertext +
+ * 16 B GCM tag, plus the 12 B IV → 4028 B → 5372 base64 chars; the cap
+ * keeps 16 384 (2^14) chars ≈ 3× that worst case, so it only bites on
+ * attacker input. (Degenerate multi-byte plaintexts — 4000 emoji encode to
+ * 16 KB and seal to ~21 372 base64 chars — exceed it and are dropped too:
+ * a deliberate trade-off, ordinary text never comes near.) At the cap a
+ * body still decodes to ≤ 12 KB of ciphertext, bounding each decode+verify
+ * to a fraction of the transport maximum.
+ */
+export const MAX_ENCRYPTED_BODY_CHARS = 16_384
 /** Receipts are batched, max 50 ids per action (§7.1). */
 export const MAX_RECEIPT_BATCH = 50
 
@@ -194,8 +211,10 @@ export class BoundedSeenIds {
  *
  * Rules: `v` must be exactly 1; `id`, `from`, `nick`, `body` are non-empty
  * strings (nick may be empty); `ts` a finite number; `kind` ∈ {chat, dm};
- * `to` required (non-empty) iff kind is 'dm'; `enc` defaults to false and
- * when false the plaintext body is capped at MAX_PLAINTEXT_LENGTH.
+ * `to` required (non-empty) iff kind is 'dm'; `enc` defaults to false, and
+ * the body is capped before any decode work: plaintext bodies at
+ * MAX_PLAINTEXT_LENGTH (4000 chars), base64 ciphertext bodies at
+ * MAX_ENCRYPTED_BODY_CHARS (issue #21).
  */
 export function parseEnvelope(raw: unknown): Envelope | null {
   if (!isPlainObject(raw)) return null
@@ -219,7 +238,12 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   const iv = raw.iv ?? null
   if (iv !== null && typeof iv !== 'string') return null
   if (typeof raw.body !== 'string') return null
-  if (!enc && raw.body.length > MAX_PLAINTEXT_LENGTH) return null
+  if (enc) {
+    // Issue #21 — ciphertext bombs die here, before any atob/GCM work.
+    if (raw.body.length > MAX_ENCRYPTED_BODY_CHARS) return null
+  } else if (raw.body.length > MAX_PLAINTEXT_LENGTH) {
+    return null
+  }
 
   const envelope: Envelope = {
     v: PROTOCOL_VERSION,
