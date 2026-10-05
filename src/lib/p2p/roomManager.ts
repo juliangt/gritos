@@ -5,6 +5,7 @@ import {
   type MessageAction,
   type Room as TrysteroRoom,
 } from '@trystero-p2p/torrent'
+import { resolveTrysteroAppId } from './appId'
 import { deriveRoomId } from '../crypto/hashes'
 import {
   INITIAL_APP_STATE,
@@ -78,9 +79,6 @@ import { joinSystemLine, leaveSystemLine } from '../feed'
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
  */
-
-/** spec §9.4 — constant Trystero appId. */
-export const APP_ID = 'gritos-app-v1'
 
 /** RF-02 — normalized names: 1–32 chars of [a-z0-9_-]. */
 export const ROOM_NAME_PATTERN = /^[a-z0-9_-]{1,32}$/
@@ -506,8 +504,10 @@ async function doJoinRoom(normalized: string, password?: string): Promise<RoomCo
   await ensureSessionIdentity()
 
   // Trystero config (§6.3): appId always; custom trackers/ICE replace the
-  // defaults only when the user configured them (RF-07).
-  const config: JoinRoomConfig = { appId: APP_ID }
+  // defaults only when the user configured them (RF-07). Issue #90 — the
+  // appId comes from the build environment, resolved per join so a missing
+  // variable surfaces as a join error instead of breaking at import time.
+  const config: JoinRoomConfig = { appId: resolveTrysteroAppId() }
   if (settings.trackers.length > 0) {
     config.relayConfig = { urls: [...settings.trackers] }
   }

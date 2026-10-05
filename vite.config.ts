@@ -36,5 +36,10 @@ export default defineConfig({
     // crypto suites); DOM tests opt in per file with
     // `// @vitest-environment jsdom`.
     environment: 'node',
+    // Issue #90 — roomManager resolves the Trystero appId from
+    // `import.meta.env.VITE_TRYSTERO_APP_ID` (src/lib/p2p/appId.ts). The
+    // suite runs against this fixture value, and roomManager tests assert
+    // it is the one forwarded to the joinRoom config.
+    env: { VITE_TRYSTERO_APP_ID: 'gritos-app-v1' },
   },
 })

@@ -32,6 +32,8 @@ npm run dev      # start the dev server
 
 Open two browser tabs, pick a nickname, and you are two peers.
 
+Copy the environment template first (`cp .env.example .env`) — the app refuses to join rooms without `VITE_TRYSTERO_APP_ID` (see [Configuration](#configuration)).
+
 ```bash
 npm run build    # type-check and emit the static bundle to dist/
 npm run preview  # serve the production build locally
@@ -51,6 +53,26 @@ Requires Node.js ≥ 22 and npm ≥ 11. Browsers must support Web Crypto, WebRTC
 | `npm run format`  | Prettier over the repository                                         |
 
 > The strict CSP `<meta>` in `index.html` targets the **production** build. Vite's dev server injects its own inline HMR preamble that a hash-pinned `script-src` cannot allow, so a tiny dev-only Vite plugin (`stripCspMetaInDev` in `vite.config.ts`) removes the meta while serving in dev. `vite build` output keeps it untouched.
+
+## Configuration
+
+| Variable               | Default in `.env.example`                        | What it does                                                                 |
+| ---------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `VITE_TRYSTERO_APP_ID` | `bebf21e4-20ea-4626-9e88-f450626b6b8e/gritos-dev` | Trystero **appId** — the peer-discovery namespace (issue #90, spec §9.4).    |
+
+The appId is the namespace Trystero uses to introduce peers: **only builds sharing the same appId can discover each other.** Copies of the app built with different appIds are fully isolated swarms. Set it in a `.env` file (`.env*` is git-ignored; `.env.example` is the committed template) or in your host's build environment:
+
+```bash
+cp .env.example .env   # then edit .env
+npm run build
+```
+
+Two things to know:
+
+- **Build-time only.** Vite statically inlines `import.meta.env.*` during `vite build`, so the value is baked into the bundle and changing it requires a rebuild. It is not runtime configuration, and nothing environment-specific is fetched over HTTP at runtime.
+- **A build without the variable refuses to join.** Rather than silently falling back to a shared default (which would quietly fork the swarm with no visible signal), any join attempt fails immediately with a clear error naming the variable (`src/lib/p2p/appId.ts`).
+
+The value shipped in `.env.example` is the development namespace used by the project's own dev builds.
 
 ## Architecture
 
