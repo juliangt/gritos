@@ -8,6 +8,8 @@ import {
   MAX_ROOMS_ERROR_TEXT,
   RECONNECT_NOTE,
   TRACKER_ERROR_TEXT,
+  TURN_CREDENTIAL_MEMORY_HINT,
+  TURN_CREDENTIAL_STORAGE_HINT,
 } from './messages'
 import { Toggle } from './Toggle'
 
@@ -16,7 +18,9 @@ import { Toggle } from './Toggle'
  * (stun:/turn: with TURN credentials), the 1–6 active-room cap and the
  * "Reconectar todo" note + button that applies the settings via
  * reconnectAll(). Valid values persist instantly; invalid ones show the
- * inline Spanish error and are not saved.
+ * inline Spanish error and are not saved. Issue #30: a toggle decides
+ * whether TURN credentials persist in this browser — off keeps them
+ * session-only (memory), and both states carry a Spanish disclosure.
  */
 
 /** wss:// scheme + something after it. */
@@ -253,6 +257,12 @@ export function NetworkTab() {
             )}
           </div>
         ))}
+        {/* Issue #30: persistent-storage disclosure next to the TURN
+            credential fields; the memory-only wording takes over while the
+            remember toggle is off (it then lives under the checkbox). */}
+        {settings.rememberTurnCredentials && iceDraft.some((row) => row.kind === 'turn') && (
+          <p className="text-xs text-muted">{TURN_CREDENTIAL_STORAGE_HINT}</p>
+        )}
         {iceError !== null && (
           <p role="alert" className="text-xs text-accent">
             {iceError}
@@ -266,6 +276,13 @@ export function NetworkTab() {
           Añadir servidor ICE
         </button>
       </fieldset>
+
+      <Toggle
+        label="Recordar credenciales TURN en este navegador"
+        checked={settings.rememberTurnCredentials}
+        hint={settings.rememberTurnCredentials ? undefined : TURN_CREDENTIAL_MEMORY_HINT}
+        onChange={(rememberTurnCredentials) => setSettings({ rememberTurnCredentials })}
+      />
 
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium" htmlFor="max-active-rooms">

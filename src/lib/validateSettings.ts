@@ -9,6 +9,10 @@
  * independently: the valid parts of a record survive and everything else
  * falls back to the documented defaults (spec §8.1). The pass is total and
  * never throws — every `new URL` parse is wrapped in try/catch.
+ * Issue #30: when `rememberTurnCredentials` resolves to false, TURN
+ * `credential` fields are dropped on load as well — a stale record written
+ * before the toggle existed (or by a careless import) must not survive
+ * rehydration once remembering is off.
  */
 
 import type { Settings, ThemeChoice } from '../stores/useAppStore'
@@ -54,9 +58,10 @@ function normalizeTrackers(raw: unknown): string[] {
  * Rebuilds one ICE entry from the only fields gritos understands (§6.3):
  * `urls` as a string or string array of stun:/turn:/turns: URLs, plus
  * optional string `username`/`credential`. Any other key (or shape) is
- * dropped so nothing unvetted reaches `RTCPeerConnection`.
+ * dropped so nothing unvetted reaches `RTCPeerConnection`. Issue #30: the
+ * `credential` only survives when the caller keeps credentials.
  */
-function normalizeIceServer(raw: unknown): RTCIceServer | null {
+function normalizeIceServer(raw: unknown, keepCredentials: boolean): RTCIceServer | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
   const record = raw as Record<string, unknown>
   const rawUrls: unknown = record.urls
@@ -69,14 +74,16 @@ function normalizeIceServer(raw: unknown): RTCIceServer | null {
   }
   const server: RTCIceServer = { urls: urls.length === 1 ? urls[0] : urls }
   if (typeof record.username === 'string') server.username = record.username
-  if (typeof record.credential === 'string') server.credential = record.credential
+  if (keepCredentials && typeof record.credential === 'string') {
+    server.credential = record.credential
+  }
   return server
 }
 
-function normalizeIceServers(raw: unknown): RTCIceServer[] {
+function normalizeIceServers(raw: unknown, keepCredentials: boolean): RTCIceServer[] {
   if (!Array.isArray(raw)) return []
   return raw
-    .map(normalizeIceServer)
+    .map((entry) => normalizeIceServer(entry, keepCredentials))
     .filter((server): server is RTCIceServer => server !== null)
 }
 
@@ -86,20 +93,41 @@ function normalizeMaxActiveRooms(raw: unknown, fallback: Settings): number {
 }
 
 /**
+ * Issue #30 — shallow-copies each ICE entry without its `credential`
+ * (`urls`/`username` and any other field survive). Used on the persist path
+ * when `rememberTurnCredentials` is off so the stored `gritos:settings`
+ * JSON never carries TURN secrets.
+ */
+export function stripIceCredentials(servers: readonly RTCIceServer[]): RTCIceServer[] {
+  return servers.map((server) => {
+    const copy = { ...server }
+    delete copy.credential
+    return copy
+  })
+}
+
+/**
  * Validates a parsed `gritos:settings` value against the `Settings` schema.
  * Non-object payloads (corrupt shape, `"[]"`, `42`, `null`, arrays) come
  * back as fresh defaults; objects are validated field by field and unknown
  * keys never survive. `fallback` supplies the documented defaults (spec
  * §8.1) so this module stays a pure helper with no store dependency.
+ * Issue #30: `rememberTurnCredentials` is resolved first so the ICE pass
+ * can honor it — with the toggle off, rehydrated `credential` fields are
+ * dropped (see the module comment above).
  */
 export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ...fallback }
   const record = raw as Record<string, unknown>
+  const rememberTurnCredentials =
+    typeof record.rememberTurnCredentials === 'boolean'
+      ? record.rememberTurnCredentials
+      : fallback.rememberTurnCredentials
   return {
     autoJoinLobby:
       typeof record.autoJoinLobby === 'boolean' ? record.autoJoinLobby : fallback.autoJoinLobby,
     trackers: normalizeTrackers(record.trackers),
-    iceServers: normalizeIceServers(record.iceServers),
+    iceServers: normalizeIceServers(record.iceServers, rememberTurnCredentials),
     maxActiveRooms: normalizeMaxActiveRooms(record.maxActiveRooms, fallback),
     theme: THEMES.includes(record.theme as ThemeChoice)
       ? (record.theme as ThemeChoice)
@@ -108,5 +136,6 @@ export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
       typeof record.notifications === 'boolean' ? record.notifications : fallback.notifications,
     rememberRooms:
       typeof record.rememberRooms === 'boolean' ? record.rememberRooms : fallback.rememberRooms,
+    rememberTurnCredentials,
   }
 }

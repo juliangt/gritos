@@ -10,6 +10,8 @@ import {
   ICE_ERROR_TEXT,
   MAX_ROOMS_ERROR_TEXT,
   TRACKER_ERROR_TEXT,
+  TURN_CREDENTIAL_MEMORY_HINT,
+  TURN_CREDENTIAL_STORAGE_HINT,
 } from '../src/components/settings/messages'
 import { NICKNAME_ERROR_TEXT } from '../src/lib/nickname'
 import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
@@ -168,6 +170,8 @@ describe('Red tab (RF-07)', () => {
     })
     expect(screen.getByLabelText('Usuario TURN 1')).toBeInTheDocument()
     expect(screen.getByLabelText('Contraseña TURN 1')).toBeInTheDocument()
+    // Issue #30: the persistent-storage disclosure sits next to the fields.
+    expect(screen.getByText(TURN_CREDENTIAL_STORAGE_HINT)).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Usuario TURN 1'), { target: { value: 'ana' } })
     fireEvent.change(screen.getByLabelText('Contraseña TURN 1'), { target: { value: 'secreta' } })
     fireEvent.change(screen.getByLabelText('URL del servidor ICE 1'), {
@@ -177,6 +181,47 @@ describe('Red tab (RF-07)', () => {
     expect(useSettingsStore.getState().settings.iceServers).toEqual([
       { urls: 'turn:turn.ejemplo:3478', username: 'ana', credential: 'secreta' },
     ])
+  })
+
+  it('keeps typed TURN credentials memory-only when remembering is off (issue #30)', () => {
+    useSettingsStore.getState().setSettings({ rememberTurnCredentials: false })
+    renderModal()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir servidor ICE' }))
+    fireEvent.change(screen.getByLabelText('Tipo de servidor ICE 1'), {
+      target: { value: 'turn' },
+    })
+    fireEvent.change(screen.getByLabelText('URL del servidor ICE 1'), {
+      target: { value: 'turn:turn.ejemplo:3478' },
+    })
+    fireEvent.change(screen.getByLabelText('Usuario TURN 1'), { target: { value: 'ana' } })
+    fireEvent.change(screen.getByLabelText('Contraseña TURN 1'), { target: { value: 'secreta' } })
+
+    // The credential lives in the store for the session...
+    expect(useSettingsStore.getState().settings.iceServers).toEqual([
+      { urls: 'turn:turn.ejemplo:3478', username: 'ana', credential: 'secreta' },
+    ])
+    // ...but never reaches the persisted JSON.
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY) as string
+    expect(raw).not.toContain('"credential"')
+  })
+
+  it('remembers TURN credentials by default and goes memory-only when unchecked (issue #30)', () => {
+    renderModal()
+    const toggle = screen.getByRole('checkbox', {
+      name: 'Recordar credenciales TURN en este navegador',
+    })
+    expect(toggle).toBeChecked()
+    expect(useSettingsStore.getState().settings.rememberTurnCredentials).toBe(true)
+
+    fireEvent.click(toggle)
+    expect(useSettingsStore.getState().settings.rememberTurnCredentials).toBe(false)
+    expect(screen.getByText(TURN_CREDENTIAL_MEMORY_HINT)).toBeInTheDocument()
+    expect(rawSettings().rememberTurnCredentials).toBe(false)
+
+    fireEvent.click(toggle)
+    expect(useSettingsStore.getState().settings.rememberTurnCredentials).toBe(true)
+    expect(screen.queryByText(TURN_CREDENTIAL_MEMORY_HINT)).not.toBeInTheDocument()
   })
 
   it('rejects a wrong ICE scheme with the inline error and keeps the store clean', () => {
@@ -273,6 +318,13 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Recordar salas recientes' }))
     expect(useSettingsStore.getState().settings.rememberRooms).toBe(false)
     expect(rawSettings().rememberRooms).toBe(false)
+  })
+
+  it('discloses that TURN credentials are stored unencrypted (issue #30)', () => {
+    renderModal()
+    openTab('Privacidad')
+    expect(screen.getByText(/se guardan sin cifrar en este navegador/)).toBeInTheDocument()
+    expect(screen.getByText(/Recordar credenciales TURN en este navegador/)).toBeInTheDocument()
   })
 
   it('Regenerar identidad confirms with the exact warning and swaps the keypair', async () => {

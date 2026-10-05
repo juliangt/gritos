@@ -59,6 +59,21 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
     })
   })
 
+  it('coerces rememberTurnCredentials by type only (issue #30)', () => {
+    expect(normalizeSettings({ rememberTurnCredentials: false }, FALLBACK)).toEqual({
+      ...DEFAULT_SETTINGS,
+      rememberTurnCredentials: false,
+    })
+    // Only the exact `false` boolean turns it off; anything else falls back.
+    expect(normalizeSettings({ rememberTurnCredentials: 0 }, FALLBACK).rememberTurnCredentials).toBe(
+      true,
+    )
+    expect(
+      normalizeSettings({ rememberTurnCredentials: 'no' }, FALLBACK).rememberTurnCredentials,
+    ).toBe(true)
+    expect(normalizeSettings({}, FALLBACK).rememberTurnCredentials).toBe(true)
+  })
+
   it('allows only the real theme enum', () => {
     expect(normalizeSettings({ theme: 'purple' }, FALLBACK).theme).toBe('system')
     expect(normalizeSettings({ theme: 42 }, FALLBACK).theme).toBe('system')
@@ -106,6 +121,38 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
     ])
   })
 
+  it('keeps TURN credentials on load while rememberTurnCredentials is on (issue #30)', () => {
+    const { iceServers, rememberTurnCredentials } = normalizeSettings(
+      {
+        rememberTurnCredentials: true,
+        iceServers: [{ urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' }],
+      },
+      FALLBACK,
+    )
+    expect(rememberTurnCredentials).toBe(true)
+    expect(iceServers).toEqual([
+      { urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' },
+    ])
+  })
+
+  it('drops TURN credentials on load when rememberTurnCredentials is false (issue #30)', () => {
+    const { iceServers } = normalizeSettings(
+      {
+        rememberTurnCredentials: false,
+        iceServers: [
+          { urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' },
+          { urls: 'stun:stun.example:19302' },
+        ],
+      },
+      FALLBACK,
+    )
+    // urls/username survive; only the credential is gone.
+    expect(iceServers).toEqual([
+      { urls: 'turn:turn.example:3478', username: 'ana' },
+      { urls: 'stun:stun.example:19302' },
+    ])
+  })
+
   it('keeps the valid parts of a mixed record and drops the rest', () => {
     expect(
       normalizeSettings(
@@ -138,6 +185,7 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
       theme: 'light',
       notifications: true,
       rememberRooms: false,
+      rememberTurnCredentials: true,
     }
     expect(normalizeSettings(valid, FALLBACK)).toEqual(valid)
   })
@@ -211,5 +259,20 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
     expect(settings.theme).toBe('dark')
     expect(settings.notifications).toBe(true)
     expect(settings.rememberRooms).toBe(false)
+  })
+
+  it('strips stale stored TURN credentials when remembering is off (issue #30)', async () => {
+    // A record written before the toggle existed (or by hand) still honors
+    // the toggle on load: credentials never reach the rehydrated state.
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        rememberTurnCredentials: false,
+        iceServers: [{ urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' }],
+      }),
+    )
+    const { settings } = await rehydrate()
+    expect(settings.rememberTurnCredentials).toBe(false)
+    expect(settings.iceServers).toEqual([{ urls: 'turn:turn.example:3478', username: 'ana' }])
   })
 })

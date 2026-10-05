@@ -26,6 +26,12 @@ export interface Settings {
   notifications: boolean
   /** Remember recent room names (names only, never content). Default: true. */
   rememberRooms: boolean
+  /**
+   * Keep TURN credentials in this browser's storage (issue #30). When false
+   * they stay in memory for the session only: the persisted `gritos:settings`
+   * JSON drops them, so a reload requires re-entering them. Default: true.
+   */
+  rememberTurnCredentials: boolean
 }
 
 export interface Identity {
