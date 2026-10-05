@@ -348,6 +348,35 @@ describe('receive size caps (issue #21)', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// Issue #31 — password-room names are session-only: a password join never
+// enters the recents list and purges any entry recorded earlier with that
+// name, while the room itself stays active in the store (sidebar "Activas").
+// Raw `gritos:rooms` storage assertions live in localStorageInvariant.test.ts
+// (this file runs in the node environment, where localStorage is absent and
+// the persistence layer no-ops).
+// ---------------------------------------------------------------------------
+
+describe('recent rooms (issue #31: password names are session-only)', () => {
+  it('a password join records nothing and keeps the room active in the store', async () => {
+    const { roomId } = await joinB()
+    expect(useAppStore.getState().recentRooms).toEqual([])
+    expect(storedRoom(roomId)).toMatchObject({ name: ROOM, hasPassword: true })
+  })
+
+  it('a password join purges a recents entry recorded earlier with the same name', async () => {
+    useAppStore.getState().setRecentRooms([ROOM, 'lobby'])
+    await joinB()
+    expect(useAppStore.getState().recentRooms).toEqual(['lobby'])
+  })
+
+  it('joining the same name without a password still records it', async () => {
+    await manager.joinRoom(ROOM, PASSWORD)
+    await manager.joinRoom(ROOM)
+    expect(useAppStore.getState().recentRooms).toEqual([ROOM])
+  })
+})
+
 describe('key lifecycle (RF-05: memory only)', () => {
   it('reconnectAll re-joins password rooms re-deriving the SAME key (RF-07 + RF-05)', async () => {
     const first = await joinB()

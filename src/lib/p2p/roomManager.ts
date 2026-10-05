@@ -40,7 +40,7 @@ import {
   encryptRoomMessage,
 } from '../crypto/roomKey'
 import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
-import { pushRecentRoom, saveRecentRooms } from '../recentRooms'
+import { dropRecentRoom, pushRecentRoom, removeRecentRoom, saveRecentRooms } from '../recentRooms'
 import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '../tofu'
 import { joinSystemLine, leaveSystemLine } from '../feed'
 
@@ -437,6 +437,18 @@ function recordRecentRoom(name: string): void {
   saveRecentRooms(next)
 }
 
+/**
+ * Issue #31 — password-room names are session-only: they never enter the
+ * recents list, and a password join actively purges the name from the store
+ * state and `gritos:rooms` (covering entries recorded earlier as public
+ * rooms or by older builds). The room itself keeps showing as active in the
+ * sidebar for as long as it stays joined.
+ */
+function forgetRecentRoom(name: string): void {
+  useAppStore.getState().setRecentRooms(dropRecentRoom(useAppStore.getState().recentRooms, name))
+  removeRecentRoom(name)
+}
+
 /** Errors surfaced as rejection reasons are RoomLimitError / RoomNameError. */
 export function joinRoom(name: string, password?: string): Promise<RoomConnection> {
   const normalized = normalizeRoomName(name)
@@ -462,7 +474,11 @@ async function doJoinRoom(normalized: string, password?: string): Promise<RoomCo
   const roomId = await deriveRoomId(normalized, password)
   const existing = connections.get(roomId)
   if (existing !== undefined) {
-    recordRecentRoom(normalized)
+    // Issue #31 — public joins record the recents entry; password joins
+    // purge it (the roomIds of the two never collide, so `existing` here
+    // always matches the password argument of THIS join).
+    if (password === undefined) recordRecentRoom(normalized)
+    else forgetRecentRoom(normalized)
     return publicViewOf(existing)
   }
 
@@ -511,7 +527,10 @@ async function doJoinRoom(normalized: string, password?: string): Promise<RoomCo
     fifoTrimmed: false,
   })
 
-  recordRecentRoom(normalized)
+  // Issue #31 — a password room's name stays session-only: never recorded
+  // as recent, and any previously recorded entry is purged.
+  if (password === undefined) recordRecentRoom(normalized)
+  else forgetRecentRoom(normalized)
   return publicViewOf(connection)
 }
 

@@ -22,6 +22,18 @@ export function dropRecentRoom(list: string[], name: string): string[] {
   return list.filter((entry) => entry !== name)
 }
 
+/**
+ * Issue #31 — active purge of a password join: drops `name` from the
+ * persisted `gritos:rooms` record (entries recorded earlier as public rooms
+ * or by older builds). No-op when nothing is stored yet — the purge never
+ * creates the key. Null-safe and corruption-safe like the rest of the API.
+ */
+export function removeRecentRoom(name: string): void {
+  if (typeof localStorage === 'undefined') return
+  if (localStorage.getItem(ROOMS_STORAGE_KEY) === null) return
+  saveRecentRooms(dropRecentRoom(loadRecentRooms(), name))
+}
+
 /** Reads `{recent}` from localStorage; null-safe and corruption-safe. */
 export function loadRecentRooms(): AppState['recentRooms'] {
   if (typeof localStorage === 'undefined') return []

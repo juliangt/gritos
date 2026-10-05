@@ -19,8 +19,13 @@ export const INVALID_ROOM_NAME_TEXT =
  */
 export const ENCRYPTED_MESSAGE_PLACEHOLDER = '🔒 mensaje cifrado'
 
-/** RF-05 — one-line explanation shown under the encrypted-room password field. */
-export const ENCRYPTED_ROOM_HINT = 'Quien no tenga la contraseña no encontrará esta sala.'
+/**
+ * RF-05 — one-line explanation shown under the encrypted-room password field.
+ * Issue #31 — the second sentence makes the recents behavior explicit: the
+ * name of a password room is never saved in this browser (session-only).
+ */
+export const ENCRYPTED_ROOM_HINT =
+  'Quien no tenga la contraseña no encontrará esta sala. Su nombre no se guarda en este navegador.'
 
 /** RF-05 — inline error when the encrypted-room toggle is on but the field is empty. */
 export const EMPTY_ROOM_PASSWORD_TEXT = 'Escribe una contraseña para la sala cifrada'
