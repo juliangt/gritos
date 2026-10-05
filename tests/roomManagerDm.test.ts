@@ -6,7 +6,7 @@ import {
   exportRawPublicKey,
   generateSessionKeypair,
 } from '../src/lib/crypto/identity'
-import { decryptDm, deriveDmKey, encryptDm, clearDmKeyCache } from '../src/lib/crypto/dm'
+import { bytesToBase64, clearDmKeyCache, decryptDm, deriveDmKey, encryptDm } from '../src/lib/crypto/dm'
 import { createEnvelope, MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
 import { installFakeTrystero, type FakeTrysteroRoom } from './fakeTrystero'
 
@@ -107,6 +107,38 @@ function sealFromAWithKey(key: CryptoKey, text: string, toPeerId: string): Promi
       body: sealed.payload,
     }),
   )
+}
+
+/**
+ * Issue #21 — seals `text` with `key` via raw crypto.subtle, BYPASSING
+ * encryptDm's send-side 4000-char cap (which only binds honest clients):
+ * what a key-holding malicious peer can produce.
+ */
+async function sealFromAWithKeyRaw(
+  key: CryptoKey,
+  text: string,
+  toPeerId: string,
+): Promise<Envelope> {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      new TextEncoder().encode(text) as BufferSource,
+    ),
+  )
+  const combined = new Uint8Array(iv.length + ciphertext.length)
+  combined.set(iv)
+  combined.set(ciphertext, iv.length)
+  return createEnvelope({
+    from: A.id,
+    nick: 'zorro-bravo',
+    kind: 'dm',
+    to: toPeerId,
+    enc: true,
+    iv: bytesToBase64(iv),
+    body: bytesToBase64(combined),
+  })
 }
 
 async function myRawKeyAndFingerprint(room: FakeTrysteroRoom): Promise<{
@@ -242,6 +274,27 @@ describe('incoming DM (RF-04, §9.2)', () => {
     room.receive('dm', envelope, A.id)
     await flushMicrotasks()
     expect(useAppStore.getState().dms[A.id]).toBeUndefined()
+  })
+
+  // Issue #21 — the ciphertext cap still admits ~12 KB of ciphertext and the
+  // send-side 4000-char cap only binds honest clients, so a key-holding peer
+  // can seal an over-limit plaintext that opens validly. The receive path
+  // discards it with zero side effects.
+  it('discards a decrypted plaintext above the 4000-char limit (issue #21)', async () => {
+    const { room } = await joinWithPeerA()
+    const mine = await myRawKeyAndFingerprint(room)
+
+    // 4001 chars seals to ~5.4 KB of base64: inside the ciphertext cap, so
+    // only the post-decrypt limit can reject it.
+    const keyAB = await deriveDmKey(A.keypair.privateKey, mine.rawPublicKey, A.fingerprint, mine.fingerprint)
+    const envelope = await sealFromAWithKeyRaw(keyAB, 'a'.repeat(4001), manager.getSelfPeerId())
+    room.receive('dm', envelope, A.id)
+    await flushMicrotasks()
+
+    // No channel, no message, no debounced receipt (§7.3 silence).
+    expect(useAppStore.getState().dms[A.id]).toBeUndefined()
+    await waitForReceiptDebounce()
+    expect(room.action('receipt').sends).toHaveLength(0)
   })
 })
 

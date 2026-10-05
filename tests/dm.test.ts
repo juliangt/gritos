@@ -13,7 +13,12 @@ import {
   getCachedDmKey,
   orderedFingerprints,
 } from '../src/lib/crypto/dm'
-import { MAX_PLAINTEXT_LENGTH } from '../src/lib/p2p/protocol'
+import {
+  MAX_ENCRYPTED_BODY_CHARS,
+  MAX_PLAINTEXT_LENGTH,
+  createEnvelope,
+  parseEnvelope,
+} from '../src/lib/p2p/protocol'
 import { sha256Hex } from '../src/lib/crypto/hashes'
 import { computeFingerprint, exportRawPublicKey, generateSessionKeypair } from '../src/lib/crypto/identity'
 
@@ -148,6 +153,67 @@ describe('encrypt/decrypt roundtrip (§9.2 step 4)', () => {
     await expect(encryptDm(key, 'a'.repeat(MAX_PLAINTEXT_LENGTH + 1))).rejects.toThrowError(
       RangeError,
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #21 — the sealed wire form must stay inside parseEnvelope's
+// encrypted-body cap for every honest message, so the cap only ever bites
+// on attacker input. Math check: plaintext bytes + 16 B GCM tag + 12 B IV,
+// base64-encoded (4 chars per 3 bytes), against MAX_ENCRYPTED_BODY_CHARS.
+// ---------------------------------------------------------------------------
+
+describe('sealed envelope size vs the ciphertext cap (issue #21)', () => {
+  async function keyAB(): Promise<CryptoKey> {
+    return deriveDmKey(A.keypair.privateKey, B.rawPublicKey, A.fingerprint, B.fingerprint)
+  }
+
+  function envelopeFor(sealed: { iv: string; payload: string }) {
+    return createEnvelope({
+      from: A.id,
+      nick: 'zorro-bravo',
+      kind: 'dm',
+      to: B.id,
+      enc: true,
+      iv: sealed.iv,
+      body: sealed.payload,
+    })
+  }
+
+  it('roundtrips a maximal 4000-char plaintext under the cap', async () => {
+    const key = await keyAB()
+    const text = 'a'.repeat(MAX_PLAINTEXT_LENGTH)
+    const sealed = await encryptDm(key, text)
+
+    // 4000 B ct + 16 B tag + 12 B IV = 4028 B → 5372 base64 chars: the
+    // honest worst case, far below the 16 384-char cap.
+    const honestWorstChars = Math.ceil((MAX_PLAINTEXT_LENGTH + 16 + 12) / 3) * 4
+    expect(sealed.payload.length).toBe(honestWorstChars)
+    expect(honestWorstChars).toBeLessThan(MAX_ENCRYPTED_BODY_CHARS)
+
+    const parsed = parseEnvelope(envelopeFor(sealed))
+    expect(parsed).not.toBeNull()
+    await expect(
+      decryptDm(key, { iv: parsed?.iv ?? '', payload: parsed?.body ?? '' }),
+    ).resolves.toBe(text)
+  })
+
+  it('keeps a legal plaintext whose body sits just under the cap', async () => {
+    // U+0800 encodes to 3 UTF-8 bytes: 4000 chars → 12 000 B plaintext →
+    // 12 028 B blob → 16 040 base64 chars, the closest honest traffic gets
+    // to the cap. (Only degenerate 4-byte plaintexts — 4000 emoji — would
+    // exceed it, at ~21 372 chars; those are dropped by design.)
+    const key = await keyAB()
+    const text = '\u0800'.repeat(MAX_PLAINTEXT_LENGTH)
+    const sealed = await encryptDm(key, text)
+    expect(sealed.payload.length).toBe(Math.ceil((MAX_PLAINTEXT_LENGTH * 3 + 16 + 12) / 3) * 4)
+    expect(sealed.payload.length).toBeLessThan(MAX_ENCRYPTED_BODY_CHARS)
+
+    const parsed = parseEnvelope(envelopeFor(sealed))
+    expect(parsed).not.toBeNull()
+    await expect(
+      decryptDm(key, { iv: parsed?.iv ?? '', payload: parsed?.body ?? '' }),
+    ).resolves.toBe(text)
   })
 })
 

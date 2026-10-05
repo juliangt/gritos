@@ -1206,7 +1206,14 @@ async function decryptChatEnvelope(
   try {
     const key = await roomKey
     const text = await decryptRoomMessage(key, { iv: envelope.iv ?? '', payload: envelope.body })
-    appendRoomChat(connection, envelope, senderId, text, false)
+    // Issue #21 — the ciphertext cap still admits ~12 KB of ciphertext, and
+    // the send-side 4000-char cap only binds honest clients: a key-holding
+    // peer can seal an over-limit plaintext that opens validly. It is
+    // discarded here like any other invalid payload (§7.3 silence); the
+    // receipt below still answers the transport, not readability.
+    if (text.length <= MAX_PLAINTEXT_LENGTH) {
+      appendRoomChat(connection, envelope, senderId, text, false)
+    }
   } catch {
     appendRoomChat(connection, envelope, senderId, ENCRYPTED_MESSAGE_PLACEHOLDER, true)
   }
@@ -1271,6 +1278,11 @@ async function decryptDmEnvelope(
       theirFp,
     )
     const text = await decryptDm(key, { iv: envelope.iv ?? '', payload: envelope.body })
+    // Issue #21 — the send-side cap only binds honest clients: a key-holding
+    // peer can seal an over-limit plaintext that opens validly. Discarded
+    // with zero side effects (no channel, no receipt, no notification), the
+    // same §7.3 silence as the catch below.
+    if (text.length > MAX_PLAINTEXT_LENGTH) return
     syncDmTofuState(senderId, envelope.nick, theirFp)
     useAppStore.getState().appendDmMessage(senderId, {
       id: envelope.id,

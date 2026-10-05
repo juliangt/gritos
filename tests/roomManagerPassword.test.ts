@@ -74,6 +74,34 @@ async function sealFromA(text: string): Promise<Envelope> {
   })
 }
 
+/**
+ * Issue #21 — seals `text` with the shared room key via raw crypto.subtle,
+ * BYPASSING encryptRoomMessage's send-side 4000-char cap (which only binds
+ * honest clients): what a key-holding malicious peer can produce.
+ */
+async function sealFromARaw(text: string): Promise<Envelope> {
+  const key = await deriveRoomKey(PASSWORD, ROOM)
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      new TextEncoder().encode(text) as BufferSource,
+    ),
+  )
+  const combined = new Uint8Array(iv.length + ciphertext.length)
+  combined.set(iv)
+  combined.set(ciphertext, iv.length)
+  return createEnvelope({
+    from: 'peer-a',
+    nick: 'zorro-bravo',
+    kind: 'chat',
+    enc: true,
+    iv: bytesToBase64(iv),
+    body: bytesToBase64(combined),
+  })
+}
+
 describe('joinRoom with password (RF-05, §9.4)', () => {
   it('derives the roomId from name+password and marks the room hasPassword', async () => {
     const { roomId } = await joinB()
@@ -253,6 +281,70 @@ describe('undecryptable receives (RF-05 placeholder, §7.3)', () => {
     // Delivery (not readability) is what receipts answer.
     await waitForReceiptDebounce()
     expect(room.lastSend('receipt').data).toEqual({ ids: [envelope.id] })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #21 — envelope size caps at the receive boundary: a ciphertext bomb
+// is discarded by parseEnvelope before any decode, and a validly sealed
+// plaintext beyond the §7.3 limit (forged by a key-holding peer) is
+// discarded after decrypt instead of landing in the store.
+// ---------------------------------------------------------------------------
+
+describe('receive size caps (issue #21)', () => {
+  it('discards a ciphertext bomb before any decode: no store entry, no receipt, no atob', async () => {
+    const { roomId, room } = await joinB()
+    room.peerJoin('peer-a')
+
+    // Transport-sized body (100 KB ≫ the 16 384-char cap): the same flood
+    // shape a malicious peer would send.
+    const bomb = await sealFromA('x')
+    bomb.body = 'a'.repeat(100_000)
+
+    const atobSpy = vi.spyOn(globalThis, 'atob')
+    try {
+      room.receive('chat', bomb, 'peer-a')
+      // parseEnvelope rejects synchronously: nothing decoded, nothing stored.
+      expect(atobSpy).not.toHaveBeenCalled()
+    } finally {
+      atobSpy.mockRestore()
+    }
+    expect(storedRoom(roomId).messages).toHaveLength(0)
+
+    await waitForReceiptDebounce()
+    expect(room.action('receipt').sends).toHaveLength(0)
+  })
+
+  it('discards a decrypted plaintext above the 4000-char limit (never stored)', async () => {
+    const { roomId, room } = await joinB()
+    room.peerJoin('peer-a')
+
+    // 4001 chars seals to ~5.4 KB of base64: inside the ciphertext cap, so
+    // only the post-decrypt limit can reject it.
+    const envelope = await sealFromARaw('a'.repeat(4001))
+    room.receive('chat', envelope, 'peer-a')
+    await vi.waitFor(() => expect(room.action('receipt').sends).toHaveLength(1))
+
+    // Nothing reached the store — not the text, not the placeholder.
+    expect(storedRoom(roomId).messages).toHaveLength(0)
+
+    // Receipting is about transport, not readability (§7.1): the debounced
+    // receipt above still answered the delivery.
+    expect(room.lastSend('receipt').data).toEqual({ ids: [envelope.id] })
+  })
+
+  it('still stores a validly sealed plaintext at the 4000-char limit', async () => {
+    const { roomId, room } = await joinB()
+    room.peerJoin('peer-a')
+
+    const envelope = await sealFromARaw('a'.repeat(4000))
+    room.receive('chat', envelope, 'peer-a')
+    await vi.waitFor(() => expect(storedRoom(roomId).messages).toHaveLength(1))
+    expect(storedRoom(roomId).messages[0]).toMatchObject({
+      id: envelope.id,
+      text: 'a'.repeat(4000),
+      encrypted: false,
+    })
   })
 })
 

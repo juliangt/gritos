@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BoundedSeenIds,
   MAX_CLOCK_SKEW_MS,
+  MAX_ENCRYPTED_BODY_CHARS,
   MAX_ENVELOPE_AGE_MS,
   MAX_PAYLOAD_BYTES,
   MAX_PLAINTEXT_LENGTH,
@@ -91,15 +92,36 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
     expect(parsed?.to).toBeUndefined()
   })
 
-  it('enforces the 4000-char plaintext cap, ciphertext exempt', () => {
+  it('enforces the 4000-char plaintext cap on unencrypted bodies', () => {
     expect(parseEnvelope(validChat({ body: 'a'.repeat(4000) }))?.body).toHaveLength(
       4000,
     )
     expect(parseEnvelope(validChat({ body: 'a'.repeat(MAX_PLAINTEXT_LENGTH + 1) }))).toBeNull()
+  })
 
-    // With enc the body is base64(IV ‖ ct) — only the 64 KB payload cap applies.
-    const longCipher = validChat({ enc: true, iv: 'AAAA', body: 'a'.repeat(90_000) })
-    expect(parseEnvelope(longCipher)).not.toBeNull()
+  it('enforces the encrypted-body cap before any decode (issue #21)', () => {
+    // 128x-style headroom over the honest worst case: a 4000-char plaintext
+    // of 1-byte chars seals to 4028 B (IV + ct + tag) → 5372 base64 chars.
+    expect(MAX_ENCRYPTED_BODY_CHARS).toBe(16_384)
+    expect(Math.ceil((MAX_PLAINTEXT_LENGTH + 16 + 12) / 3) * 4).toBeLessThan(
+      MAX_ENCRYPTED_BODY_CHARS,
+    )
+
+    // Up to the cap the ciphertext body is exempt from the plaintext cap.
+    const atCap = validChat({ enc: true, iv: 'AAAA', body: 'a'.repeat(MAX_ENCRYPTED_BODY_CHARS) })
+    expect(parseEnvelope(atCap)).not.toBeNull()
+    expect(parseEnvelope({ ...atCap, body: 'a'.repeat(MAX_ENCRYPTED_BODY_CHARS + 1) })).toBeNull()
+
+    // A transport-sized body (e.g. 100 KB) is discarded with zero decode
+    // work — the rejection happens before atob could ever run.
+    const atobSpy = vi.spyOn(globalThis, 'atob')
+    try {
+      const bomb = validChat({ enc: true, iv: 'AAAA', body: 'a'.repeat(100_000) })
+      expect(parseEnvelope(bomb)).toBeNull()
+      expect(atobSpy).not.toHaveBeenCalled()
+    } finally {
+      atobSpy.mockRestore()
+    }
   })
 
   it('validates enc and iv shapes', () => {
