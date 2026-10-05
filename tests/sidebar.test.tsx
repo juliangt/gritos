@@ -155,6 +155,65 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(2)
   })
 
+  it('shows the exact cap message in the popover when a suggested room is rejected (issue #87)', async () => {
+    useSettingsStore.getState().setSettings({ maxActiveRooms: 2 })
+    await joinRoom('lobby')
+    await joinRoom('dev')
+    render(<Sidebar />)
+
+    // The suggested-room path runs through Sidebar.joinByName, not the
+    // popover's own submit: the rejection must surface inside the popover
+    // that opens, never in a hidden post-dismiss paragraph.
+    fireEvent.click(screen.getByRole('button', { name: '#general' }))
+
+    expect(await screen.findByText('Límite de salas activas alcanzado (2)')).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Unirse por nombre' })).toBeInTheDocument()
+    expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(2)
+  })
+
+  it('clears the cap message when the popover is dismissed (issue #87)', async () => {
+    useSettingsStore.getState().setSettings({ maxActiveRooms: 2 })
+    await joinRoom('lobby')
+    await joinRoom('dev')
+    render(<Sidebar />)
+    fireEvent.click(screen.getByRole('button', { name: '#general' }))
+    expect(await screen.findByText('Límite de salas activas alcanzado (2)')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    // Deliberate UX (issue #87): the message lives inside the popover, so
+    // dismissing it removes the message with it — nothing lingers outside.
+    expect(screen.queryByRole('form', { name: 'Unirse por nombre' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Límite de salas activas alcanzado (2)')).not.toBeInTheDocument()
+  })
+
+  it('a successful join after a capped rejection clears the error (issue #87)', async () => {
+    useSettingsStore.getState().setSettings({ maxActiveRooms: 2 })
+    await joinRoom('lobby')
+    await joinRoom('dev')
+    render(<Sidebar />)
+    fireEvent.click(screen.getByRole('button', { name: '#general' }))
+    expect(await screen.findByText('Límite de salas activas alcanzado (2)')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    // Free a slot and retry the same suggested room: the join succeeds and
+    // the stale cap message must not come back.
+    fireEvent.click(screen.getByRole('button', { name: 'Abandonar dev' }))
+    await waitFor(() => {
+      expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(1)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '#general' }))
+
+    await waitFor(() => {
+      const state = useAppStore.getState()
+      const joined = Object.values(state.rooms).find((roomEntry) => roomEntry.name === 'general')
+      expect(joined).toBeDefined()
+      expect(state.activeView).toEqual({ kind: 'room', id: joined?.id })
+    })
+    expect(screen.queryByText('Límite de salas activas alcanzado (2)')).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Unirse por nombre' })).not.toBeInTheDocument()
+  })
+
   it('a password join shows the room under Activas but never persists it (issue #31)', async () => {
     await joinRoom('secreta', 'clave-secreta')
     render(<Sidebar />)

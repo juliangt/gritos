@@ -23,6 +23,8 @@ export function Sidebar(props: { onRoomOpened?: () => void }) {
   const { joinRoomFocused, leaveRoom } = useRoomManager()
 
   const [joinOpen, setJoinOpen] = useState(false)
+  // Last joinByName rejection; rendered inside the open popover (issue #87),
+  // so it is always set together with joinOpen and cleared on close/success.
   const [joinError, setJoinError] = useState<string | null>(null)
 
   const roomList = Object.values(rooms)
@@ -78,6 +80,9 @@ export function Sidebar(props: { onRoomOpened?: () => void }) {
         </button>
         {joinOpen && (
           <JoinRoomPopover
+            // Issue #87: a rejected joinByName (e.g. the RF-02 cap) surfaces
+            // inside this popover; onJoined/onDismiss clear it with it.
+            managerError={joinError}
             onJoined={() => {
               setJoinOpen(false)
               setJoinError(null)
@@ -88,11 +93,6 @@ export function Sidebar(props: { onRoomOpened?: () => void }) {
               setJoinError(null)
             }}
           />
-        )}
-        {joinError !== null && !joinOpen && (
-          <p role="alert" className="text-xs text-accent">
-            {joinError}
-          </p>
         )}
       </div>
 
