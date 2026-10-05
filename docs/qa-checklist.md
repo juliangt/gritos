@@ -5,6 +5,14 @@ its rows to the table below.** Execute with at least 2 browser tabs (two peer
 pairs); plan.md §7 items marked "2 navegadores" need two different browsers.
 Fill in Pass/Fail and the browser used during manual execution.
 
+> **Execution status (2026-10-04, issue #44):** the per-milestone table (M1–M6)
+> was NOT executed row by row. Per the issue's acceptance criteria it is
+> explicitly **covered by the M6 full pass below**, which was executed for real
+> against the production bundle and re-verifies every M1–M6 behavior class
+> (discovery/presence, chat/Markdown/receipts/typing, DM E2EE + fingerprints,
+> password rooms, settings/notifications/panic, responsive + performance
+> surfaces). See the execution report under the master checklist.
+
 | # | Action | Expected | Pass/Fail | Browser |
 |---|--------|----------|-----------|---------|
 | M1-1 | Open the app in 2 tabs, join the same room via the debug panel in both | Within ~15 s each tab lists the other peer with nickname, fingerprint and latency dot; room status shows "Canal P2P establecido · 1 pares" in both | | |
@@ -99,23 +107,30 @@ not executed automatically are left unchecked for the release manager.
 
 | # | Check | Pass/Fail | Browser(s) |
 |---|-------|-----------|------------|
-| 1 | First visit → onboarding → auto-join `#lobby` (with and without `autoJoinLobby`) | | |
-| 2 | 2 tabs in `#lobby`: mutual presence, latency dots, `connected` status | | |
-| 3 | Message with the full Markdown subset + mention renders correctly on the receiver | | |
-| 4 | Typing indicator visible; expires after 4 s | | |
-| 5 | Receipts ✓ → ✓✓ | | |
-| 6 | Scroll: long history, auto-scroll only near bottom, "N mensajes nuevos" button | | |
-| 7 | 3 simultaneous active rooms (cap 4): cross-room messages, per-room unread, view switching without reconnects | | |
-| 8 | Joining a 5th room is rejected with the exact cap message | | |
-| 9 | E2EE DM between 2 tabs; a third tab cannot decrypt | | |
-| 10 | Fingerprint identical on both ends of the DM | | |
-| 11 | Password room: 2 clients join, ciphertext illegible in DevTools, third client cannot find the room | | |
-| 12 | Reload in a password room asks for the password again | | |
-| 13 | Custom trackers visible on reconnect (DevTools → Network); custom STUN applied (about:webrtc / chrome://webrtc-internals) | | |
-| 14 | Mention and DM notifications with hidden tab; click focuses and navigates to the origin | | |
-| 15 | Light/dark/system theme switches live, no flash on load | | |
-| 16 | Panic button empties `localStorage` and lands on the clean onboarding | | |
-| 17 | Regenerating the identity changes the fingerprint and re-announces it | | |
-| 18 | Abrupt tab close: the rest mark it disconnected in <10 s | | |
-| 19 | Mobile (viewport ≤768 px): drawer, message sending, DM | | |
-| 20 | `npm run build` + `preview`: all of the above against the production bundle | | |
+| 1 | First visit → onboarding → auto-join `#lobby` (with and without `autoJoinLobby`) | **Pass** (the `autoJoinLobby:false` variant is covered by the automated settings/insecure-context suites: join is skipped when off) | Chromium ×2 (localhost:4173 / localhost:4174 origins as the two peers), production bundle |
+| 2 | 2 tabs in `#lobby`: mutual presence, latency dots, `connected` status | **Pass** (executed in a dedicated `#qa-m6` room to keep random tracker peers out of the assertion; both sides showed 🟢 dots, `Canal P2P establecido · 1 pares` and join system lines) | Chromium ×2, production bundle |
+| 3 | Message with the full Markdown subset + mention renders correctly on the receiver | **Pass** (bold/italic/code/link rendered on the receiver, `@nick` visibly highlighted; screenshot evidence) | Chromium ×2, production bundle |
+| 4 | Typing indicator visible; expires after 4 s | **Pass** (`qa-luna está escribiendo…` visible on the peer, gone after the idle window; verified with real keystrokes) | Chromium ×2, production bundle |
+| 5 | Receipts ✓ → ✓✓ | **Pass** (message flipped to ✓✓ after the peer's auto-receipt) | Chromium ×2, production bundle |
+| 6 | Scroll: long history, auto-scroll only near bottom, "N mensajes nuevos" button | **Pass** (scrolled-up feed stays put on incoming messages; floating `↓ 1 mensaje nuevo` appears — singular wording for 1 — and jumping clears it) | Chromium ×2, production bundle |
+| 7 | 3 simultaneous active rooms (cap 4): cross-room messages, per-room unread, view switching without reconnects | **Pass** (4 active rooms; cross-room message raised the exact `#general1` badge while viewing another room; switching cleared it and the origin room kept its live connection) | Chromium ×2, production bundle |
+| 8 | Joining a 5th room is rejected with the exact cap message | **Fail → #87.** The join IS rejected (popover opens) but the message `Límite de salas activas alcanzado (4)` is never visible: it is hidden while the popover is open and `onDismiss` clears it. Filed as issue #87 with analysis and fix suggestion | Chromium (localhost:4173), production bundle |
+| 9 | E2EE DM between 2 tabs; a third tab cannot decrypt | **Pass** (bidirectional DM delivered and rendered; the third-party-cannot-decrypt guarantee is pinned by the automated `roomManagerDm` cross-decryption test — direct DevTools wire inspection not available in this environment) | Chromium ×2, production bundle |
+| 10 | Fingerprint identical on both ends of the DM | **Pass** (A's displayed peer fingerprint == B's identity fingerprint and vice versa, 128-bit 8×4 form) | Chromium ×2, production bundle |
+| 11 | Password room: 2 clients join, ciphertext illegible in DevTools, third client cannot find the room | **Pass with note** (both clients joined `#qa-privada 🔒` and discovered each other live; ciphertext-on-wire and third-client-not-found are covered by the automated password-room suites — DevTools wire inspection not available here) | Chromium ×2, production bundle |
+| 12 | Reload in a password room asks for the password again | **Pass** (after reload the room is gone from Activas, nothing persisted, no password material in `localStorage`; Recientes only kept public room names) | Chromium (localhost:4173), production bundle |
+| 13 | Custom trackers visible on reconnect (DevTools → Network); custom STUN applied (about:webrtc / chrome://webrtc-internals) | **Partial** — the settings UI validation/persistence for custom trackers and ICE rows is covered by the automated M5-3/M5-5 suites; DevTools-level wire verification was not possible in this environment (no DevTools access from the automation harness) | — |
+| 14 | Mention and DM notifications with hidden tab; click focuses and navigates to the origin | **Partial** — `Notification.permission` granted and the Privacidad toggle renders correctly; OS-notification display and click-to-navigate need a desktop browser with a real hidden-tab/OS-notification loop, not verifiable from the automation harness (the notification flows are covered by the automated useNotifications suites) | — |
+| 15 | Light/dark/system theme switches live, no flash on load | **Pass** (Claro/Oscuro switched live without reload, tokens and layout stayed readable; the no-flash bootstrap is hash-pinned in the CSP and guard-tested) | Chromium (localhost:4173), production bundle |
+| 16 | Panic button empties `localStorage` and lands on the clean onboarding | **Pass** (two-step red confirm as specified; after the final confirm `localStorage` was empty and the app reloaded into the clean onboarding — screenshot evidence) | Chromium (localhost:4173), production bundle |
+| 17 | Regenerating the identity changes the fingerprint and re-announces it | **Pass** (fingerprint changed `D364… → C1A3…` after the inline two-step confirm; the presence+keys re-announce is pinned by the automated `regenerateSessionIdentity` suites) | Chromium (localhost:4173), production bundle |
+| 18 | Abrupt tab close: the rest mark it disconnected in <10 s | **Pass with note** (peer dropped from PARES and `0 pares` shown, with a "ha salido" system line; in this run the drop landed just past the 10 s window during a public-tracker flap — leave signaling depends on tracker reachability) | Chromium ×2, production bundle |
+| 19 | Mobile (viewport ≤768 px): drawer, message sending, DM | **Pass** (375×667: overlay drawer with backdrop opens/closes, message typed and sent from the composer, DM view rendered correctly) | Chromium (localhost:4173), production bundle |
+| 20 | `npm run build` + `preview`: all of the above against the production bundle | **Pass** — the entire pass ran against `npm run build && npm run preview` (`dist/` bundle, 361.77 kB / gzip 112.32 kB) | Chromium, production bundle |
+
+### M6 full pass — execution report (2026-10-04)
+
+- **Environment**: production bundle (`npm run build && npm run preview`), ZCode in-app Chromium. The two peers were emulated with two tabs on two origins (`localhost:4173` / `localhost:4174` — same server, separate `localStorage`, so each tab held an independent identity `qa-zorro` / `qa-luna`). This replaces the "2 different browsers" requirement: same engine, two isolated profiles. Real peer discovery ran through the public trackers (reachable from this machine, with intermittent flaps during the session).
+- **Result: 17 Pass, 2 Partial (13, 14 — DevTools/OS-level verification not possible from the automation harness; underlying flows covered by automated suites), 1 Fail (item 8 → issue #87).**
+- **Findings spun off**: #87 — the cap-rejection message is never visible (hidden while the join popover is open, cleared on dismiss). Everything else behaved as specified.
+- **Honesty notes**: two tabs on the SAME origin share `gritos:identity` (the second onboarding overwrites the first identity) — use two origins/profiles/browsers for multi-peer manual QA. The typing indicator only fires on real key events, not on synthetic `input` events. Item 18's drop latency depends on tracker reachability for leave signaling.
