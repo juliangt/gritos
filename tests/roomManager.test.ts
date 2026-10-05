@@ -6,7 +6,11 @@ import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
 import { formatFingerprint } from '../src/lib/crypto/identity'
 import { MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
 import { NICKNAME_MAX_LENGTH } from '../src/lib/nickname'
-import { PENDING_CHATS_CAP } from '../src/lib/p2p/roomManager'
+import {
+  PENDING_CHATS_CAP,
+  SYSTEM_LINE_RATE_CAP,
+  SYSTEM_LINE_RATE_WINDOW_MS,
+} from '../src/lib/p2p/roomManager'
 import { installFakeTrystero } from './fakeTrystero'
 
 let fake: ReturnType<typeof installFakeTrystero>
@@ -777,6 +781,55 @@ describe('M2 system feed lines (RF-06)', () => {
 
     room.receive('chat', chatEnvelope(), 'peer-1')
     expect(storedRoom(roomId).unread).toBe(1)
+  })
+})
+
+describe('issue #36 — system-line rate cap (per peer, rolling minute)', () => {
+  it('suppresses lines beyond the cap for one peer without touching other peers', async () => {
+    const { room, roomId } = await join('lobby')
+    const presence = { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }
+
+    // Join → leave → rejoin: exactly SYSTEM_LINE_RATE_CAP lines go through.
+    room.peerJoin('peer-1')
+    room.receive('presence', presence, 'peer-1')
+    room.peerLeave('peer-1')
+    room.peerJoin('peer-1')
+    room.receive('presence', presence, 'peer-1')
+    let texts = storedRoom(roomId).messages.map((message) => message.text)
+    expect(texts).toHaveLength(SYSTEM_LINE_RATE_CAP)
+
+    // The 4th line (a leave) and the 5th attempt (a rejoin announcement)
+    // are suppressed: the forged-churn flood cannot evict history.
+    room.peerLeave('peer-1')
+    room.peerJoin('peer-1')
+    room.receive('presence', presence, 'peer-1')
+    texts = storedRoom(roomId).messages.map((message) => message.text)
+    expect(texts).toHaveLength(SYSTEM_LINE_RATE_CAP)
+
+    // A different peer is never affected by peer-1's exhausted budget.
+    room.peerJoin('peer-2')
+    room.receive('presence', { nick: 'zorro-bravo', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-2')
+    texts = storedRoom(roomId).messages.map((message) => message.text)
+    expect(texts).toHaveLength(SYSTEM_LINE_RATE_CAP + 1)
+    expect(texts[texts.length - 1]).toBe('— zorro-bravo se ha unido —')
+
+    // Once the rolling window rolls off, the suppressed join announcement
+    // of peer-1 (still unannounced) goes through.
+    await vi.advanceTimersByTimeAsync(SYSTEM_LINE_RATE_WINDOW_MS + 1)
+    room.receive('presence', presence, 'peer-1')
+    texts = storedRoom(roomId).messages.map((message) => message.text)
+    expect(texts).toHaveLength(SYSTEM_LINE_RATE_CAP + 2)
+    expect(texts[texts.length - 1]).toBe('— luna-cauta se ha unido —')
+  })
+
+  it('never caps the first join line of a peer (fresh budget announces immediately)', async () => {
+    const { room, roomId } = await join('lobby')
+    // An instant before any churn: the very first presence becomes a line.
+    room.peerJoin('peer-1')
+    room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+    const messages = storedRoom(roomId).messages
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({ kind: 'system', text: '— luna-cauta se ha unido —' })
   })
 })
 

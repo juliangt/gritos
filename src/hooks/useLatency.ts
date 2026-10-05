@@ -20,6 +20,15 @@ export const PING_INTERVAL_MS = 5_000
 /** RF-06 — 3 consecutive pings without response → degraded. */
 export const MISSES_BEFORE_DEGRADED = 3
 
+/**
+ * Issue #36 — RTTs above this ceiling are clamped before they reach the
+ * latency dots. The pong `t` is attacker-controlled (the control plane is
+ * unauthenticated, spec §9.5): the dots are cosmetic, so a forged echo
+ * timestamped in the future (negative RTT) is discarded outright and an
+ * implausibly old one displays this bound instead of an absurd number.
+ */
+export const MAX_PLAUSIBLE_RTT_MS = 30_000
+
 /** What the engine needs from the room connection (mockable seam). */
 export interface LatencyTransport {
   /** Current peer ids of the room (drives pruning of departed peers). */
@@ -96,9 +105,15 @@ export function createLatencyEngine(
       if (state === undefined || state.lastPingT === null || !state.pongPending) {
         return
       }
+      // Issue #36 — `t` is attacker-controlled (any peer can forge a pong,
+      // spec §9.5): a "future" echo (negative RTT) is discarded without
+      // touching the pending state, so miss counting continues, and an RTT
+      // beyond MAX_PLAUSIBLE_RTT_MS is clamped to it — cosmetic dots only.
+      const rtt = now() - t
+      if (rtt < 0) return
       state.pongPending = false
       state.misses = 0
-      sink.recordRtt(peerId, Math.max(0, now() - t))
+      sink.recordRtt(peerId, Math.min(rtt, MAX_PLAUSIBLE_RTT_MS))
     },
 
     stop() {

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, renderHook } from '@testing-library/react'
 import * as manager from '../src/lib/p2p/roomManager'
 import {
+  MAX_PLAUSIBLE_RTT_MS,
   MISSES_BEFORE_DEGRADED,
   PING_INTERVAL_MS,
   createLatencyEngine,
@@ -75,6 +76,28 @@ describe('latency engine (RF-06)', () => {
     const harness = makeHarness()
     harness.engine.notePong('ghost', 5)
     expect(harness.rtts).toHaveLength(0)
+  })
+
+  it('discards a forged "future" echo (negative RTT) without clearing the window (issue #36)', () => {
+    const harness = makeHarness()
+    harness.peers.push('a')
+    harness.engine.tick() // ping t=0
+    harness.advanceMs(120)
+    harness.engine.notePong('a', 200) // attacker-controlled t from the future
+    expect(harness.rtts).toHaveLength(0)
+    // The pong never landed: the window stays pending and a later honest
+    // echo within it still records.
+    harness.engine.notePong('a', 0)
+    expect(harness.rtts).toEqual([{ peerId: 'a', rttMs: 120 }])
+  })
+
+  it(`clamps RTTs above ${MAX_PLAUSIBLE_RTT_MS} to the ceiling (issue #36)`, () => {
+    const harness = makeHarness()
+    harness.peers.push('a')
+    harness.engine.tick() // ping t=0
+    harness.advanceMs(MAX_PLAUSIBLE_RTT_MS * 2)
+    harness.engine.notePong('a', 0) // "honest" echo of an implausibly old ping
+    expect(harness.rtts).toEqual([{ peerId: 'a', rttMs: MAX_PLAUSIBLE_RTT_MS }])
   })
 
   it(`marks degraded after exactly ${MISSES_BEFORE_DEGRADED} missed windows, not before`, () => {
@@ -184,6 +207,25 @@ describe('useLatency hook (RF-06)', () => {
 
     const peer = storedPeer(roomId)
     expect(peer.latencyMs).toBe(120)
+    expect(peer.degraded).toBe(false)
+  })
+
+  it('discards a forged future-t pong and clamps an ancient one through the real pong path (issue #36)', async () => {
+    const { room, roomId } = await joinWithPeer()
+    renderHook(() => useLatency(roomId))
+
+    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS)
+    const pingT = (room.lastSend('ping').data as { t: number }).t
+
+    // A forged echo timestamped in the future (negative RTT) is dropped.
+    room.receive('pong', { t: pingT + 10_000 }, 'peer-1')
+    expect(storedPeer(roomId).latencyMs).toBeNull()
+
+    // An implausibly old echo is clamped to MAX_PLAUSIBLE_RTT_MS instead of
+    // showing an absurd number.
+    room.receive('pong', { t: pingT - MAX_PLAUSIBLE_RTT_MS * 2 }, 'peer-1')
+    const peer = storedPeer(roomId)
+    expect(peer.latencyMs).toBe(MAX_PLAUSIBLE_RTT_MS)
     expect(peer.degraded).toBe(false)
   })
 
