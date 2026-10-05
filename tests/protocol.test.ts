@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { NICKNAME_MAX_LENGTH } from '../src/lib/nickname'
 import {
   BoundedSeenIds,
   MAX_CLOCK_SKEW_MS,
@@ -72,6 +73,25 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
     expect(parseEnvelope(validChat({ nick: 7 as unknown as string }))).toBeNull()
     // Empty nick is a valid (if weird) string.
     expect(parseEnvelope(validChat({ nick: '' }))?.nick).toBe('')
+  })
+
+  it('sanitizes an oversized remote nick instead of trusting it (issue #28)', () => {
+    const oversized = validChat({ nick: 'x'.repeat(4000) })
+    const parsed = parseEnvelope(oversized)
+    expect(parsed).not.toBeNull()
+    expect(parsed?.body).toBe('hola mundo') // body accepted untouched
+    expect(parsed?.nick).toHaveLength(24)
+    expect(NICKNAME_MAX_LENGTH).toBe(24)
+  })
+
+  it('strips control and invisible characters from a remote nick (issue #28)', () => {
+    const parsed = parseEnvelope(validChat({ nick: 'lu\x00na\u200b-\u202eca\x1futa' }))
+    expect(parsed?.nick).toBe('luna-cauta')
+  })
+
+  it('keeps the empty-nick convention when nothing legible remains (issue #28)', () => {
+    // The caller falls back to the peerId-prefix display for ''.
+    expect(parseEnvelope(validChat({ nick: '\u0000\u200b\u202e' }))?.nick).toBe('')
   })
 
   it('rejects unknown kinds and enforces to iff kind dm', () => {

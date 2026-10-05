@@ -5,6 +5,7 @@ import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
 import { formatFingerprint } from '../src/lib/crypto/identity'
 import { MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
+import { NICKNAME_MAX_LENGTH } from '../src/lib/nickname'
 import { PENDING_CHATS_CAP } from '../src/lib/p2p/roomManager'
 import { installFakeTrystero } from './fakeTrystero'
 
@@ -186,6 +187,45 @@ describe('presence and keys on peer join (§7.1)', () => {
     expect(peer.fingerprint).toBe('A31F 09BC 77D2 4E5A')
   })
 
+  it('caps an oversized remote nick at the local max (issue #28)', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('presence', { nick: 'x'.repeat(4000), fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+    const peer = storedRoom(roomId).peers[0]
+    expect(peer.nickname).toHaveLength(NICKNAME_MAX_LENGTH)
+    // The join line shows the sanitized nick, never the raw broadcast.
+    expect(storedRoom(roomId).messages[0]?.text).toBe(
+      `— ${'x'.repeat(NICKNAME_MAX_LENGTH)} se ha unido —`,
+    )
+  })
+
+  it('strips control characters from a remote nick (issue #28)', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive(
+      'presence',
+      { nick: 'lu\x00na\u200b-\u202eca\x1futa', fp: 'A31F 09BC 77D2 4E5A' },
+      'peer-1',
+    )
+    expect(storedRoom(roomId).peers[0]?.nickname).toBe('luna-cauta')
+    expect(storedRoom(roomId).messages[0]?.text).toBe('— luna-cauta se ha unido —')
+  })
+
+  it('keeps the peerId-prefix default for a nick that sanitizes to empty (issue #28)', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.receive('presence', { nick: '\u0000\u200b\u202e', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+    // The unusable nick never overwrites the peerId-prefix display default…
+    expect(storedRoom(roomId).peers[0]?.nickname).toBe('peer-1'.slice(0, 8))
+    // …and no join line is announced for it.
+    expect(storedRoom(roomId).messages).toHaveLength(0)
+    // A later legible announcement still gets its (one) join line.
+    room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
+    const messages = storedRoom(roomId).messages
+    expect(messages).toHaveLength(1)
+    expect(messages[0]?.text).toBe('— luna-cauta se ha unido —')
+  })
+
   it('stores received raw public keys and derives the fingerprint', async () => {
     const { room, roomId } = await join('lobby')
     room.peerJoin('peer-1')
@@ -234,6 +274,51 @@ describe('presence and keys on peer join (§7.1)', () => {
     const devBroadcast = dev.room.lastSend('presence')
     expect(devBroadcast.options).toBeUndefined()
     expect(dev.room.action('presence').sends).toHaveLength(devSendsBefore + 1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #28 — the manager's setNickname validates with the local RF-01 rules
+// (the same isValidNickname the UI applies), so every path — including the
+// debug panel, which reaches it through useRoomManager.changeNickname —
+// produces spec-valid presence. Invalid input throws NicknameError (the
+// joinRoom/RoomNameError style) before any state or presence change.
+// ---------------------------------------------------------------------------
+
+describe('setNickname validation (issue #28, RF-01)', () => {
+  it('rejects an over-max nickname with the typed error, changing nothing', async () => {
+    const lobby = await join('lobby')
+    lobby.room.peerJoin('peer-1')
+    await flushMicrotasks()
+    const sendsBefore = lobby.room.action('presence').sends.length
+    const identityBefore = manager.getSessionIdentity()?.identity.nickname
+
+    const rejected = 'a'.repeat(NICKNAME_MAX_LENGTH + 1)
+    expect(() => manager.setNickname(rejected)).toThrowError(manager.NicknameError)
+    expect(() => manager.setNickname(rejected)).toThrowError(
+      `Apodo no válido: «${rejected}»`,
+    )
+    expect(manager.getSessionIdentity()?.identity.nickname).toBe(identityBefore)
+    expect(useAppStore.getState().identity?.nickname).toBe(identityBefore)
+    await flushMicrotasks()
+    expect(lobby.room.action('presence').sends).toHaveLength(sendsBefore)
+  })
+
+  it('rejects forbidden characters on every path, including the debug panel shape', () => {
+    for (const invalid of ['zorro!', 'a'.repeat(25), '', '   ', 'ñandú🐦', 'zorro.bravo']) {
+      expect(() => manager.setNickname(invalid)).toThrowError(manager.NicknameError)
+    }
+  })
+
+  it('accepts a spec-valid nickname and announces it (UI parity)', async () => {
+    const lobby = await join('lobby')
+    lobby.room.peerJoin('peer-1')
+    await flushMicrotasks()
+
+    manager.setNickname('  luna-cauta  ')
+    expect(manager.getSessionIdentity()?.identity.nickname).toBe('luna-cauta')
+    await flushMicrotasks()
+    expect(lobby.room.lastSend('presence').data).toMatchObject({ nick: 'luna-cauta' })
   })
 })
 

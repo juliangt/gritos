@@ -1,4 +1,5 @@
 import { newMessageId } from '../crypto/hashes'
+import { sanitizeRemoteNick } from '../nickname'
 
 /**
  * Application protocol — spec.md §7.
@@ -83,7 +84,7 @@ export type Envelope = {
   ts: number
   /** Author's Trystero peerId. */
   from: string
-  /** Author nickname at send time. */
+  /** Author nickname at send time; inbound ones arrive sanitized (issue #28). */
   nick: string
   kind: EnvelopeKind
   /** Recipient peerId — only when kind is 'dm'. */
@@ -210,11 +211,15 @@ export class BoundedSeenIds {
  * silently discarded.
  *
  * Rules: `v` must be exactly 1; `id`, `from`, `nick`, `body` are non-empty
- * strings (nick may be empty); `ts` a finite number; `kind` ∈ {chat, dm};
+ * strings; `ts` a finite number; `kind` ∈ {chat, dm};
  * `to` required (non-empty) iff kind is 'dm'; `enc` defaults to false, and
  * the body is capped before any decode work: plaintext bodies at
  * MAX_PLAINTEXT_LENGTH (4000 chars), base64 ciphertext bodies at
- * MAX_ENCRYPTED_BODY_CHARS (issue #21).
+ * MAX_ENCRYPTED_BODY_CHARS (issue #21). Issue #28 — `nick` never lands raw:
+ * it passes through `sanitizeRemoteNick` (control/invisible characters
+ * stripped, trimmed, capped at NICKNAME_MAX_LENGTH); when nothing legible
+ * remains the envelope keeps the '' convention and the UI falls back to the
+ * peerId-prefix display.
  */
 export function parseEnvelope(raw: unknown): Envelope | null {
   if (!isPlainObject(raw)) return null
@@ -223,6 +228,9 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   if (typeof raw.ts !== 'number' || !Number.isFinite(raw.ts)) return null
   if (typeof raw.from !== 'string' || raw.from.length === 0) return null
   if (typeof raw.nick !== 'string') return null
+  // Issue #28 — the remote nick is sanitized at the boundary; an empty
+  // result keeps the existing '' display-fallback convention.
+  const nick = sanitizeRemoteNick(raw.nick)
   if (raw.kind !== 'chat' && raw.kind !== 'dm') return null
 
   const kind: EnvelopeKind = raw.kind
@@ -250,7 +258,7 @@ export function parseEnvelope(raw: unknown): Envelope | null {
     id: raw.id,
     ts: raw.ts,
     from: raw.from,
-    nick: raw.nick,
+    nick: nick ?? '',
     kind,
     enc,
     iv,

@@ -5,6 +5,7 @@ import {
   useAppStore,
 } from '../../stores/useAppStore'
 import { getSelfPeerId } from '../../lib/p2p/roomManager'
+import { NICKNAME_ERROR_TEXT } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useLatency } from '../../hooks/useLatency'
 
@@ -59,7 +60,13 @@ export function DebugPanel() {
                 onChange={(event) => setNickDraft(event.target.value)}
                 onBlur={() => {
                   if (nickValue.trim() !== '' && nickValue !== identity.nickname) {
-                    changeNickname(nickValue)
+                    // Issue #28 — the manager validates with the RF-01 rules;
+                    // invalid input is surfaced instead of crashing the panel.
+                    try {
+                      changeNickname(nickValue)
+                    } catch {
+                      setError(NICKNAME_ERROR_TEXT)
+                    }
                   }
                   setNickDraft(null)
                 }}

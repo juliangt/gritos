@@ -149,6 +149,31 @@ export function normalizeNickname(nickname: string): string {
   return nickname.trim().replace(/\s+/g, ' ')
 }
 
+/**
+ * Issue #28 — Unicode Cc control characters plus the invisible-spoofing
+ * extras (soft hyphen, zero-width spaces/joiners, bidi marks and overrides,
+ * BOM). A remote-supplied nick carrying these would poison Peer.nickname,
+ * author/system feed lines and notification titles.
+ */
+const REMOTE_NICK_INVISIBLE_PATTERN =
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g
+
+/**
+ * Issue #28 — boundary sanitizer for REMOTE-supplied nicknames (envelope
+ * `nick`, presence payloads): strips control/invisible characters, trims and
+ * caps the length at NICKNAME_MAX_LENGTH (oversized input is capped, never
+ * rejected). The local RF-01 charset is deliberately NOT enforced — legit
+ * peers may use other scripts; the goal is control characters and gigantism,
+ * not cultural names (homoglyphs are out of scope). Returns null when
+ * nothing legible remains, so the caller keeps its peerId-prefix display
+ * fallback.
+ */
+export function sanitizeRemoteNick(nickname: string): string | null {
+  const cleaned = nickname.replace(REMOTE_NICK_INVISIBLE_PATTERN, '').trim()
+  if (cleaned === '') return null
+  return cleaned.slice(0, NICKNAME_MAX_LENGTH)
+}
+
 /** 2–24 chars: letters, numbers, spaces, hyphens, underscores (RF-01). */
 export function isValidNickname(nickname: string): boolean {
   return NICKNAME_PATTERN.test(normalizeNickname(nickname))
