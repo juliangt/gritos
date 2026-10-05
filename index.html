@@ -6,8 +6,19 @@
       CSP (RNF-05/M6): the inline bootstrap script (frame-bust + anti-flash)
       is allow-listed by its sha256 hash; 'unsafe-inline' in style-src covers
       Vite's dev-injected styles (the production bundle ships CSS as a file).
-      WebRTC is not governed by CSP; the wss:/ws: entries cover the torrent
-      trackers. frame-ancestors is NOT set here: browsers ignore it in <meta>
+      WebRTC is not governed by CSP; the wss: entry covers the torrent
+      trackers (issue #26 dropped cleartext ws:: both the settings UI and
+      the import validator only accept wss:// tracker URLs, so nothing
+      legitimate ever used it). form-action 'self' hardens the forms and
+      upgrade-insecure-requests upgrades any http:// subresource before it
+      is fetched (issue #26). style-src keeps 'unsafe-inline' (issue #26
+      investigation): MessageItem renders the per-author color as a runtime
+      style attribute (a hue derived from the author id — not enumerable as
+      static classes) and ErrorBoundary's fallback UI carries its own inline
+      styles; narrowing to style-src 'self' plus style-src-attr
+      'unsafe-inline' would break Safari, which lacks style-src-attr and
+      would fall back to the blocking style-src 'self'.
+      frame-ancestors is NOT set here: browsers ignore it in <meta>
       delivery (verified in Chromium), so serve it as an HTTP header at the
       host for defense in depth — hosts that cannot set headers (GitHub
       Pages) rely on the inline frame-bust below instead (issue #27; see
@@ -17,8 +28,12 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'sha256-L/0fM7/nm52V0EBeN57Mi3OoMCaxNUN87InOK0k1Hrs='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; media-src 'none'; object-src 'none'; base-uri 'self'"
+      content="default-src 'self'; script-src 'self' 'sha256-L/0fM7/nm52V0EBeN57Mi3OoMCaxNUN87InOK0k1Hrs='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
     />
+    <!-- Referrer-Policy (issue #26): outbound markdown links already carry
+         rel="noopener noreferrer" (src/lib/markdown/render.tsx); the meta
+         closes every other outbound path (link previews, navigations). -->
+    <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="light dark" />
     <!-- Browser chrome color per scheme (issue #49). Mirrors the anti-flash
          script below, which also keys off the OS preference: while the page
