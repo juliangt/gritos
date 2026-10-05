@@ -19,6 +19,7 @@ describe('settings store defaults (spec §8.1)', () => {
       theme: 'system',
       notifications: false,
       rememberRooms: true,
+      rememberTurnCredentials: true,
     })
   })
 

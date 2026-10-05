@@ -64,4 +64,52 @@ describe('settings persistence (spec §8.2)', () => {
       expect.objectContaining({ theme: 'system', maxActiveRooms: 4 }),
     )
   })
+
+  it('keeps TURN credentials in gritos:settings while rememberTurnCredentials is on (issue #30)', () => {
+    useSettingsStore.getState().setSettings({
+      iceServers: [{ urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' }],
+    })
+
+    const parsed = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string) as {
+      rememberTurnCredentials: boolean
+      iceServers: Array<Record<string, unknown>>
+    }
+    expect(parsed.rememberTurnCredentials).toBe(true)
+    expect(parsed.iceServers).toEqual([
+      { urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' },
+    ])
+  })
+
+  it('strips TURN credentials from gritos:settings while rememberTurnCredentials is off (issue #30)', () => {
+    useSettingsStore.getState().setSettings({
+      rememberTurnCredentials: false,
+      iceServers: [{ urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' }],
+    })
+
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY) as string
+    const parsed = JSON.parse(raw) as {
+      rememberTurnCredentials: boolean
+      iceServers: Array<Record<string, unknown>>
+    }
+    // urls/username still persist; no credential field survives anywhere.
+    expect(parsed.rememberTurnCredentials).toBe(false)
+    expect(parsed.iceServers).toEqual([{ urls: 'turn:turn.example:3478', username: 'ana' }])
+    expect(raw).not.toContain('"credential"')
+    // The session store keeps the credential so the relay config keeps
+    // working; only the persisted JSON lost it.
+    expect(useSettingsStore.getState().settings.iceServers).toEqual([
+      { urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' },
+    ])
+  })
+
+  it('rewrites stored settings without credentials when the toggle turns off (issue #30)', () => {
+    useSettingsStore.getState().setSettings({
+      iceServers: [{ urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' }],
+    })
+    expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toContain('"credential"')
+
+    useSettingsStore.getState().setSettings({ rememberTurnCredentials: false })
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY) as string
+    expect(raw).not.toContain('"credential"')
+  })
 })
