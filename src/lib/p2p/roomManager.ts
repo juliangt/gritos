@@ -95,6 +95,19 @@ export const TYPING_TTL_MS = 4_000
 export const RECEIPT_DEBOUNCE_MS = 300
 
 /**
+ * Issue #36 — a peer may trigger at most this many join/leave system feed
+ * lines per rolling SYSTEM_LINE_RATE_WINDOW_MS. Presence and peer churn are
+ * forgeable in the trustless mesh (spec §9.5), so without a cap repeated
+ * rejoins (or forged announcements) could spam the feed and evict real
+ * history through the 500-message FIFO. Only lines beyond the cap are
+ * dropped: the first announcements of a peer always go through.
+ */
+export const SYSTEM_LINE_RATE_CAP = 3
+
+/** Rolling window over which SYSTEM_LINE_RATE_CAP applies. */
+export const SYSTEM_LINE_RATE_WINDOW_MS = 60_000
+
+/**
  * Issue #20 — the §10.3 local chat queue (envelopes typed while the room has
  * no DataChannel) holds at most this many envelopes; the oldest is dropped.
  */
@@ -186,6 +199,14 @@ interface RoomInternals extends RoomConnection {
   readonly peerKeyFps: Map<string, string>
   /** Peers whose presence was already announced in the feed (join lines). */
   readonly announcedPeers: Set<string>
+  /**
+   * Issue #36 — timestamps of the join/leave system lines already emitted
+   * per peer (each queue holds at most SYSTEM_LINE_RATE_CAP entries),
+   * gating feed-line floods over the rolling window. Kept across peer
+   * leaves — clearing it there would let rejoin churn reset the cap — and
+   * freed with the connection itself (memory-only, like every queue here).
+   */
+  readonly systemLineTimes: Map<string, number[]>
   /**
    * Chat envelopes awaiting the first DataChannel (§10.3 local queue).
    * Issue #20 — capped at PENDING_CHATS_CAP, oldest dropped on overflow:
@@ -1006,6 +1027,7 @@ function createConnection(init: {
     peerKeys: new Map<string, Uint8Array>(),
     peerKeyFps: new Map<string, string>(),
     announcedPeers: new Set<string>(),
+    systemLineTimes: new Map<string, number[]>(),
     pendingChats: [],
     pendingReceipts: new Map<string, string[]>(),
     receiptTimer: null,
@@ -1031,9 +1053,14 @@ function createConnection(init: {
     useAppStore.getState().updatePeer(connection.roomId, peerId, patch)
     // RF-06 — the first presence announcement of a peer becomes a discrete
     // system feed line; later ones are nickname changes and stay silent.
+    // Issue #36 — beyond the per-peer rate cap the line is suppressed and
+    // the peer stays unannounced, so the join line is emitted (at most
+    // SYSTEM_LINE_RATE_CAP times) once the rolling window allows it again.
     if (nick !== null && !connection.announcedPeers.has(peerId)) {
-      connection.announcedPeers.add(peerId)
-      appendSystemMessage(connection.roomId, joinSystemLine(nick))
+      if (consumeSystemLineBudget(connection, peerId)) {
+        connection.announcedPeers.add(peerId)
+        appendSystemMessage(connection.roomId, joinSystemLine(nick))
+      }
     }
   }
 
@@ -1153,11 +1180,15 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
 
 function handlePeerLeave(connection: RoomInternals, peerId: string): void {
   // RF-06 — the leave becomes a discrete system line with the last known
-  // nickname, before the peer entry is dropped.
+  // nickname, before the peer entry is dropped. Issue #36 — leave lines
+  // share the per-peer budget with join lines, so rejoin churn cannot use
+  // them to flood the feed either.
   const room = useAppStore.getState().rooms[connection.roomId]
   const nickname = room?.peers.find((peer) => peer.id === peerId)?.nickname
   if (nickname !== undefined && nickname.trim() !== '') {
-    appendSystemMessage(connection.roomId, leaveSystemLine(nickname))
+    if (consumeSystemLineBudget(connection, peerId)) {
+      appendSystemMessage(connection.roomId, leaveSystemLine(nickname))
+    }
   }
   connection.peerKeys.delete(peerId)
   connection.peerKeyFps.delete(peerId)
@@ -1260,6 +1291,25 @@ async function decryptChatEnvelope(
     appendRoomChat(connection, envelope, senderId, ENCRYPTED_MESSAGE_PLACEHOLDER, true)
   }
   queueReceipt(connection, senderId, envelope.id)
+}
+
+/**
+ * Issue #36 — consumes one slot of `peerId`'s join/leave system-line budget
+ * over the rolling window: true when a line may be emitted. The per-peer
+ * queue never grows beyond SYSTEM_LINE_RATE_CAP entries (bounded memory);
+ * queues of peers that never return are freed with the connection.
+ */
+function consumeSystemLineBudget(connection: RoomInternals, peerId: string): boolean {
+  const now = Date.now()
+  const windowStart = now - SYSTEM_LINE_RATE_WINDOW_MS
+  const recent = (connection.systemLineTimes.get(peerId) ?? []).filter((ts) => ts > windowStart)
+  if (recent.length >= SYSTEM_LINE_RATE_CAP) {
+    connection.systemLineTimes.set(peerId, recent)
+    return false
+  }
+  recent.push(now)
+  connection.systemLineTimes.set(peerId, recent)
+  return true
 }
 
 /** Local-only feed line (RF-06): never sent over the wire, no dedup needed. */
