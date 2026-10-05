@@ -582,11 +582,7 @@ export async function reconnectAll(): Promise<void> {
   }
 }
 
-/** All active connections (UI/debug snapshot). */
-export function getActiveRooms(): RoomConnection[] {
-  return [...connections.values()].map(publicViewOf)
-}
-
+/** Public view of one live connection — the tests' observability seam. */
 export function getRoomConnection(roomId: string): RoomConnection | undefined {
   const connection = connections.get(roomId)
   return connection === undefined ? undefined : publicViewOf(connection)
@@ -685,7 +681,11 @@ export function sendChat(roomId: string, text: string): Envelope | null {
   return envelope
 }
 
-/** M1 debug-panel alias over the real send path (removed in M6). */
+/**
+ * Dev-only diagnosability alias over the real send path: the `?debug` panel
+ * (issue #32 — gated behind `import.meta.env.DEV`, so this never ships to
+ * production) broadcasts through it.
+ */
 export function sendTestChat(roomId: string, text: string): Envelope | null {
   return sendChat(roomId, text)
 }

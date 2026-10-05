@@ -9,7 +9,6 @@ import {
   sendChat,
   sendDm,
   sendDmTyping,
-  sendTestChat,
   sendTyping,
   setNickname,
   joinRoom,
@@ -38,7 +37,6 @@ export interface RoomManagerApi {
   leaveRoom: (roomId: string) => void
   sendChat: (roomId: string, text: string) => void
   sendTyping: (roomId: string, on: boolean) => void
-  sendTestChat: (roomId: string, text: string) => void
   /** M3 (RF-04) — encrypts and broadcasts a DM; null when it cannot send. */
   sendDm: (peerId: string, text: string) => Promise<boolean>
   /** M3 — directed DM typing signal. */
@@ -114,10 +112,6 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     sendTyping(roomId, on)
   }, [])
 
-  const testChat = useCallback((roomId: string, text: string) => {
-    sendTestChat(roomId, text)
-  }, [])
-
   const dm = useCallback(
     (peerId: string, text: string) => sendDm(peerId, text).then((envelope) => envelope !== null),
     [],
@@ -163,7 +157,6 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     leaveRoom: leave,
     sendChat: chat,
     sendTyping: typing,
-    sendTestChat: testChat,
     sendDm: dm,
     sendDmTyping: dmTyping,
     openDm,

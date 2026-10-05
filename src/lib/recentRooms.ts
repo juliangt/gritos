@@ -17,7 +17,12 @@ export function pushRecentRoom(list: string[], name: string): string[] {
   return next.slice(0, RECENT_ROOMS_CAP)
 }
 
-/** Pure: removes a name (used when a room is left and forgotten). */
+/**
+ * Pure: removes a name from the list. Issue #31 — the password-room purge
+ * path: `removeRecentRoom` drops it from `gritos:rooms` and the manager's
+ * `forgetRecentRoom` from the store state. Leaving a room does NOT remove
+ * its entry (RF-02 keeps it until the cap evicts).
+ */
 export function dropRecentRoom(list: string[], name: string): string[] {
   return list.filter((entry) => entry !== name)
 }
