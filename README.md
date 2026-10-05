@@ -116,6 +116,16 @@ Notes:
 
 Peer discovery relies on **public WebTorrent trackers** operated by third parties. Your browser contacts these trackers to find peers and exchange the initial connection handshake (SDP) for rooms you join; the **room name is hashed** before it is used for discovery, so the tracker sees an opaque id — but trackers can observe your IP address, the timing of joins, and those opaque room ids. If all public trackers are unreachable, existing connections keep working but no new peers can be discovered (the app surfaces this state and lets you configure alternative trackers and your own STUN/TURN servers in Ajustes → Red). If this threat model does not suit you, run your own tracker and set it in the network settings.
 
+**The effective default list** (issue #51): with the default settings (`trackers: []`) the app passes no tracker list to Trystero, so the trackers baked into the pinned library release are the ones actually in effect. For `@trystero-p2p/torrent@0.25.4` that is exactly these five:
+
+- `wss://open.ftorrent.com`
+- `wss://tracker.webtorrent.dev`
+- `wss://tracker.openwebtorrent.com`
+- `wss://tracker.btorrent.xyz`
+- `wss://tracker.files.fm:7073/announce`
+
+We deliberately **do not ship a curated replacement list**: the dependency is exact-pinned, so this list is deterministic per release and cannot drift underneath you; anything we curated would be the same class of third-party community trackers — duplicated upstream maintenance, just as free to silently rot; and upstream's defaults are the set the library is tested against. Every library bump surfaces as its own reviewable Dependabot PR, which is the natural checkpoint to re-verify the list above (re-derive it from `defaultRelayUrls` in `node_modules/@trystero-p2p/torrent/dist/index.mjs`). If these trackers decay, the tracker-error banner and the [tracker runbook](docs/runbook-trackers.md) cover the recovery path: add your own `wss://` trackers in Ajustes → Red (an empty list restores these defaults).
+
 ## Limitations (spec §11, summarized)
 
 1. **Full mesh:** optimal up to ~15 peers per room; beyond ~20 the mesh degrades (active rooms multiply the effect). Room (≤6) and message (500/room, FIFO) caps bound memory/CPU.
@@ -132,6 +142,7 @@ Peer discovery relies on **public WebTorrent trackers** operated by third partie
 - [Functional and technical specification](docs/spec.md) — requirements, protocol, crypto design, state model, UX.
 - [Development plan](docs/plan.md) — milestones M0–M6, QA strategy, risks.
 - [Manual QA checklist](docs/qa-checklist.md) — cumulative per-milestone checklist and the M6 full pass.
+- [Tracker runbook](docs/runbook-trackers.md) — one-page user guide for the "Sin acceso a trackers" state.
 
 ## Status
 
