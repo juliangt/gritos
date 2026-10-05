@@ -1,6 +1,7 @@
 /**
- * Exact Spanish wording of the settings validation messages (RF-07) —
- * shared by the tabs and their tests so the spec strings live in one place.
+ * Exact Spanish wording of the settings validation messages (RF-07) and of
+ * the shared P2P disclosure (issue #35) — shared by the components and
+ * their tests so the spec strings live in one place.
  */
 
 export const TRACKER_ERROR_TEXT = 'Las URLs de tracker deben empezar por wss://'
@@ -22,3 +23,15 @@ export const TURN_CREDENTIAL_STORAGE_HINT =
 /** Issue #30 — shown while «Recordar credenciales TURN» is off. */
 export const TURN_CREDENTIAL_MEMORY_HINT =
   'Las credenciales TURN solo se guardan en memoria y se pierden al cerrar la pestaña.'
+
+/**
+ * Issue #35 — P2P exposure disclosures (onboarding line and Privacidad-tab
+ * note): direct WebRTC connections reveal the IP to room peers (and, in
+ * less detail, to tracker operators); a configured TURN does not hide it
+ * (the browser still announces the public address among the ICE candidates).
+ */
+export const P2P_DISCLOSURE_TEXT =
+  'Las conexiones son P2P: quienes compartan sala contigo pueden ver tu dirección IP.'
+
+export const P2P_IP_EXPOSURE_NOTE =
+  'Las conexiones son P2P por diseño: quienes compartan sala contigo pueden ver tu dirección IP, y configurar TURN no la oculta a los pares (el navegador sigue anunciando tu dirección pública). Los operadores de trackers ven, con menos detalle, metadatos de conexión: tu IP, ids opacos e instantes de unión.'

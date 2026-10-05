@@ -9,6 +9,7 @@ import * as manager from '../src/lib/p2p/roomManager'
 import {
   ICE_ERROR_TEXT,
   MAX_ROOMS_ERROR_TEXT,
+  P2P_IP_EXPOSURE_NOTE,
   TRACKER_ERROR_TEXT,
   TURN_CREDENTIAL_MEMORY_HINT,
   TURN_CREDENTIAL_STORAGE_HINT,
@@ -325,6 +326,12 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     openTab('Privacidad')
     expect(screen.getByText(/se guardan sin cifrar en este navegador/)).toBeInTheDocument()
     expect(screen.getByText(/Recordar credenciales TURN en este navegador/)).toBeInTheDocument()
+  })
+
+  it('discloses the P2P IP exposure to room peers (issue #35)', () => {
+    renderModal()
+    openTab('Privacidad')
+    expect(screen.getByText(P2P_IP_EXPOSURE_NOTE)).toBeInTheDocument()
   })
 
   it('Regenerar identidad confirms with the exact warning and swaps the keypair', async () => {

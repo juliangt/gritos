@@ -9,14 +9,15 @@ import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { Toggle } from './Toggle'
-import { TURN_CREDENTIAL_STORAGE_HINT } from './messages'
+import { P2P_IP_EXPOSURE_NOTE, TURN_CREDENTIAL_STORAGE_HINT } from './messages'
 
 /**
  * Privacidad tab (RF-07/RF-08): the notifications toggle with its
- * permission request flow, remember-recents, an at-rest storage note for
- * the wrapped identity key (issue #24) and for the TURN credentials
- * (issue #30), identity regeneration behind a confirming dialog, and the
- * panic button behind a double confirmation.
+ * permission request flow, remember-recents, the P2P exposure disclosure
+ * (issue #35), an at-rest storage note for the wrapped identity key
+ * (issue #24) and for the TURN credentials (issue #30), identity
+ * regeneration behind a confirming dialog, and the panic button behind a
+ * double confirmation.
  */
 
 const PERMISSION_GRANTED_TEXT = 'Permiso concedido.'
@@ -101,6 +102,11 @@ export function PrivacyTab() {
         checked={settings.rememberRooms}
         onChange={(rememberRooms) => setSettings({ rememberRooms })}
       />
+
+      {/* Issue #35 — P2P transparency: what room peers (and trackers) see. */}
+      <div className="flex flex-col gap-2 border-t border-border pt-3">
+        <p className="text-xs text-muted">{P2P_IP_EXPOSURE_NOTE}</p>
+      </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted">
