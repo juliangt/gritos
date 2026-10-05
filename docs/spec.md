@@ -409,7 +409,7 @@ Todo con Web Crypto (`crypto.subtle`). Ninguna primitiva implementada a mano.
 - Sala pública: `roomId = hex(SHA-256("gritos/room/v1/" + nombre))[0..31]`
 - Sala con contraseña: `roomId = hex(SHA-256("gritos/room/v1/" + nombre + "\u0000" + contraseña))[0..31]`
 
-La derivación con contraseña hace que la sala sea **indescubrible** en el tracker sin la contraseña (decisión D4). `appId` de Trystero constante: `"gritos-app-v1"`.
+La derivación con contraseña hace que la sala sea **indescubrible** en el tracker sin la contraseña (decisión D4). El `appId` de Trystero ya no es una constante de código: se toma del entorno de compilación `VITE_TRYSTERO_APP_ID` (issue #90, plantilla en `.env.example`, resolución en `lib/p2p/appId.ts`). El valor se hornea en tiempo de build y, si falta, unir a salas falla de forma inmediata en lugar de recurrir a un valor por defecto silencioso (un fallback compartido separaría el enjambre sin aviso).
 
 ### 9.5 Modelo de amenazas
 
