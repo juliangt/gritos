@@ -34,7 +34,6 @@ vi.mock('../src/hooks/useRoomManager', () => ({
     leaveRoom: vi.fn(),
     sendChat: vi.fn(),
     sendTyping: vi.fn(),
-    sendTestChat: vi.fn(),
     sendDm,
     sendDmTyping,
     openDm,

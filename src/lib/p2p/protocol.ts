@@ -100,9 +100,6 @@ export type Envelope = {
 /** §7.1 — announce nickname + fingerprint. */
 export type PresencePayload = { nick: string; fp: string }
 
-/** §7.1 — raw ECDH P-256 public key, 65 bytes (spec §9.1). */
-export type KeysPayload = Uint8Array
-
 /**
  * §7.1 — typing indicator. M3 additive optional field `dm` (§7.3: unknown
  * fields are ignored): when true the signal refers to the direct-message
@@ -117,33 +114,6 @@ export type ReceiptPayload = { ids: string[] }
 /** §7.1 — latency probes; RTT = now − t on pong. */
 export type PingPayload = { t: number }
 export type PongPayload = { t: number }
-
-/** §7.1 — room messages travel as a JSON Envelope. */
-export type ChatPayload = Envelope
-/** §7.1 — DMs are always encrypted Envelopes; non-recipients discard. */
-export type DmPayload = Envelope
-
-/** Trystero action names registered per room — spec §7.1. */
-export type ActionName =
-  | 'presence'
-  | 'keys'
-  | 'chat'
-  | 'dm'
-  | 'typing'
-  | 'receipt'
-  | 'ping'
-  | 'pong'
-
-export const ACTION_NAMES: readonly ActionName[] = [
-  'presence',
-  'keys',
-  'chat',
-  'dm',
-  'typing',
-  'receipt',
-  'ping',
-  'pong',
-] as const
 
 // ---------------------------------------------------------------------------
 // Validation / dedup helpers (§7.3)

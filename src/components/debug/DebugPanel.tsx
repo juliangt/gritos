@@ -4,7 +4,7 @@ import {
   latencyDot,
   useAppStore,
 } from '../../stores/useAppStore'
-import { getSelfPeerId } from '../../lib/p2p/roomManager'
+import { getSelfPeerId, sendTestChat } from '../../lib/p2p/roomManager'
 import { NICKNAME_ERROR_TEXT } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useLatency } from '../../hooks/useLatency'
@@ -15,11 +15,16 @@ import { useLatency } from '../../hooks/useLatency'
  * its spec §10.3 status and peers, offers a join form (name + optional
  * password), a leave button, a test-chat broadcast and a nickname field
  * that re-announces presence. M2 replaces it with the real UI.
+ *
+ * Dev-only (issue #32): App.tsx gates the whole module behind
+ * `import.meta.env.DEV`, so it never ships to production. It calls the
+ * manager's `sendTestChat` directly — the hook does not thread it, keeping
+ * the debug-only path out of the shipped `useRoomManager` API.
  */
 export function DebugPanel() {
   const identity = useAppStore((state) => state.identity)
   const rooms = useAppStore((state) => state.rooms)
-  const { joinRoom, leaveRoom, sendTestChat, changeNickname } = useRoomManager()
+  const { joinRoom, leaveRoom, changeNickname } = useRoomManager()
 
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')

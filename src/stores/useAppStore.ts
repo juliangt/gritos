@@ -226,7 +226,6 @@ export function latencyDot(latencyMs: number | null, degraded: boolean): string 
  */
 export interface AppActions {
   setIdentity: (identity: Identity) => void
-  setNickname: (nickname: string) => void
   upsertRoom: (room: Room) => void
   removeRoom: (roomId: string) => void
   setRoomStatus: (roomId: string, status: RoomStatus) => void
@@ -270,11 +269,6 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
   ...INITIAL_APP_STATE,
 
   setIdentity: (identity) => set({ identity }),
-
-  setNickname: (nickname) =>
-    set((state) => ({
-      identity: state.identity === null ? null : { ...state.identity, nickname },
-    })),
 
   upsertRoom: (room) => set((state) => ({ rooms: { ...state.rooms, [room.id]: room } })),
 
