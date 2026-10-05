@@ -20,8 +20,12 @@ import robotsTxt from '../public/robots.txt?raw'
  * - Issue #49: public-site basics must ship — robots.txt with the deliberate
  *   allow-all policy, og:/twitter: share meta with a relative og:image, a
  *   theme-color per color scheme and PNG/apple-touch icon fallback links.
+ * - Issue #26: the CSP ships hardened — cleartext `ws:` is gone from
+ *   connect-src (only `wss:` trackers), `form-action 'self'` and
+ *   `upgrade-insecure-requests` are set, and the referrer policy meta is
+ *   present.
  *
- * Cheap checks keep all four from shipping again:
+ * Cheap checks keep all five from shipping again:
  *  1. the shared vite config registers the Tailwind plugin and resolves a
  *     relative base,
  *  2. a real production build emits expanded utilities (no raw directive)
@@ -115,7 +119,14 @@ function metaByName(html: string, name: string): string | undefined {
   return html.match(new RegExp(`<meta[^>]*name="${name}"[^>]*>`))?.[0]
 }
 
-describe('production build output (issues #37, #40, #27, #49)', () => {
+/** The policy text of the CSP meta tag of a built index.html. */
+function cspPolicy(html: string): string {
+  const meta = html.match(/<meta[^>]*Content-Security-Policy[^>]*>/)?.[0]
+  expect(meta, 'the built index.html must keep the CSP meta').toBeDefined()
+  return meta?.match(/content="([^"]+)"/)?.[1] ?? ''
+}
+
+describe('production build output (issues #37, #40, #27, #49, #26)', () => {
   it('registers the Tailwind Vite plugin', () => {
     const names = collectPluginNames(config.plugins ?? [])
     expect(
@@ -194,6 +205,24 @@ describe('production build output (issues #37, #40, #27, #49)', () => {
     const meta = html.match(/<meta[^>]*Content-Security-Policy[^>]*>/)?.[0]
     expect(meta, 'the built index.html must keep the CSP meta').toBeDefined()
     expect(meta).toContain(hash)
+  })
+
+  it('ships the hardened CSP and referrer policy (issue #26)', () => {
+    const html = emittedHtml(result)
+    const policy = cspPolicy(html)
+    // Cleartext ws: is gone; only wss: remains (trackers are wss: and the
+    // settings validation never accepted anything else). Assert against a
+    // standalone token, not a substring: guard the token with whitespace so
+    // a future `ws-whatever:` cannot sneak the match back in.
+    expect(policy).toContain("connect-src 'self' wss:")
+    expect(policy, 'cleartext ws: must not appear as a standalone token').not.toMatch(
+      /(^|\s)ws:(\s|$)/,
+    )
+    expect(policy).toContain("form-action 'self'")
+    expect(policy).toContain('upgrade-insecure-requests')
+    // Outbound links already use rel="noopener noreferrer"; the meta closes
+    // every other referrer path.
+    expect(metaByName(html, 'referrer')).toMatch(/content="no-referrer"/)
   })
 
   it('ships og: share meta with a relative image (issue #49)', () => {
