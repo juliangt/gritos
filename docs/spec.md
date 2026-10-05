@@ -83,7 +83,7 @@ El usuario puede estar conectado a **varias salas a la vez**. Unirse a una sala 
 - Alcanzado el límite, la UI ofrece abandonar una sala activa para unirse a la nueva.
 - Cada sala activa muestra su propio estado de conexión (sección 10.3) y contador de pares.
 - "Abandonar sala" cierra su conexión (libera la malla) y la elimina de la lista; opcionalmente se registra en "recientes".
-- Lista de salas recientes (solo nombres, nunca contenido) si `rememberRooms` está activo; clic reúne a la sala.
+- Lista de salas recientes (solo nombres, nunca contenido) si `rememberRooms` está activo; clic reúne a la sala. Los nombres de salas con contraseña no se registran y una entrada previa se purga al unirse con contraseña (issue #31).
 - Un cambio de sala activa no interrumpe las demás conexiones; los mensajes de salas no activas incrementan su badge de no leídos.
 
 ### RF-03 · Mensajería de sala
@@ -371,13 +371,13 @@ interface AppState {
 |---|---|---|
 | `gritos:settings` | `Settings` (JSON) | ✅ |
 | `gritos:identity` | `{nickname, fingerprint, createdAt, pubJwk, priv}` (JSON) — `priv` es un sobre cifrado (issue #24), nunca la JWK privada en claro | ✅ |
-| `gritos:rooms` | `{recent: string[]}` — solo nombres si `rememberRooms` | ✅ |
+| `gritos:rooms` | `{recent: string[]}` — solo nombres si `rememberRooms`; nunca nombres de salas con contraseña (issue #31: el alta las excluye y las purga) | ✅ |
 | `gritos:ui` | `{sidebarCollapsed: boolean}` | ✅ |
 | `gritos:tofu` | `{peerId: fingerprint}` — primera huella vista por par; detecta la rotación de claves (issue #22, TOFU) | ✅ |
 
 Además de `localStorage`, desde la issue #24 existe un pequeño almacén en **IndexedDB** (base de datos `gritos`, almacén `keys`, registro `identity-wrap`): la clave AES-GCM-256 **no exportable** que envuelve la JWK privada. Se borra con panic. Sin IndexedDB (o si falla al abrir), el sobre degrada a `{v:0, plain}` — texto en claro, comportamiento idéntico al previo a #24.
 
-**No se persiste jamás**: mensajes, contraseñas de sala, claves DM derivadas, presencia, latencias, peerIds — ni la JWK privada sin envolver (issue #24: `gritos:identity` guarda `priv = {v:1, iv, ct}` cifrado con AES-GCM; los registros previos con `privJwk` en claro se migran al sobre en cuanto se restauran).
+**No se persiste jamás**: mensajes, contraseñas de sala, nombres de salas con contraseña (issue #31), claves DM derivadas, presencia, latencias, peerIds — ni la JWK privada sin envolver (issue #24: `gritos:identity` guarda `priv = {v:1, iv, ct}` cifrado con AES-GCM; los registros previos con `privJwk` en claro se migran al sobre en cuanto se restauran).
 
 ## 9. Diseño criptográfico
 

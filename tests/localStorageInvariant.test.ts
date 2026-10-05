@@ -148,3 +148,37 @@ describe('spec §8.2 — only the documented gritos:* keys', () => {
     expect(useAppStore.getState().identity).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #31 — password-room names never persist: a password join purges an
+// entry recorded earlier with that name (older builds / public join), never
+// creates `gritos:rooms` when absent, and a public join of the same name
+// still records it.
+// ---------------------------------------------------------------------------
+
+describe('issue #31 — password-room names never persist', () => {
+  it('a password join purges a pre-existing gritos:rooms entry with that name', async () => {
+    localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify({ recent: ['secreta', 'lobby'] }))
+    await manager.joinRoom('secreta', 'clave-secreta')
+
+    expect(JSON.parse(localStorage.getItem(ROOMS_STORAGE_KEY) as string)).toEqual({
+      recent: ['lobby'],
+    })
+    // Nothing about the password join itself leaked into storage: the
+    // settings/ui records above come from the store resets, not the join.
+  })
+
+  it('a password join never creates gritos:rooms when nothing is stored', async () => {
+    await manager.joinRoom('secreta', 'clave-secreta')
+
+    expect(localStorage.getItem(ROOMS_STORAGE_KEY)).toBeNull()
+  })
+
+  it('joining the same name without a password still records it', async () => {
+    await manager.joinRoom('secreta')
+
+    expect(JSON.parse(localStorage.getItem(ROOMS_STORAGE_KEY) as string)).toEqual({
+      recent: ['secreta'],
+    })
+  })
+})

@@ -53,7 +53,7 @@ Requires Node.js ≥ 22 and npm ≥ 11. Browsers must support Web Crypto, WebRTC
 
 ## Architecture
 
-Gritos is a 100 % client-side static bundle: React 19 + TypeScript (strict) for the UI, Zustand for in-memory state, Tailwind CSS 4 for styling, and Trystero for decentralized WebRTC signaling. All cryptography uses the native Web Crypto API (no hand-rolled primitives, no crypto dependencies), and the only persisted data are settings, the local keypair (private key encrypted at rest), recent room names and UI state under the five `gritos:*` keys in `localStorage` plus a small IndexedDB vault holding the wrapping key.
+Gritos is a 100 % client-side static bundle: React 19 + TypeScript (strict) for the UI, Zustand for in-memory state, Tailwind CSS 4 for styling, and Trystero for decentralized WebRTC signaling. All cryptography uses the native Web Crypto API (no hand-rolled primitives, no crypto dependencies), and the only persisted data are settings, the local keypair (private key encrypted at rest), recent room names (password-room names are never stored, issue #31) and UI state under the five `gritos:*` keys in `localStorage` plus a small IndexedDB vault holding the wrapping key.
 
 ```
 src/

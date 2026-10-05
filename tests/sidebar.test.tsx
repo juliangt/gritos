@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Sidebar } from '../src/components/sidebar/Sidebar'
 import { joinRoom, resetManagerForTests, setJoinRoomFactory } from '../src/lib/p2p/roomManager'
+import { ROOMS_STORAGE_KEY } from '../src/lib/recentRooms'
+import { ENCRYPTED_ROOM_HINT } from '../src/lib/rooms'
 import { useAppStore, type Peer, type Room } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { installFakeTrystero } from './fakeTrystero'
@@ -121,9 +123,10 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     expect(screen.queryByLabelText('Contraseña de la sala')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: 'sala cifrada' }))
     expect(screen.getByLabelText('Contraseña de la sala')).toBeEnabled()
-    expect(
-      screen.getByText('Quien no tenga la contraseña no encontrará esta sala.'),
-    ).toBeInTheDocument()
+    // Issue #31 — the hint also discloses that the name is never saved here.
+    expect(screen.getByText(ENCRYPTED_ROOM_HINT)).toHaveTextContent(
+      'Quien no tenga la contraseña no encontrará esta sala. Su nombre no se guarda en este navegador.',
+    )
 
     // Invalid names get the exact inline error, no network call.
     fireEvent.change(nameField, { target: { value: '!!' } })
@@ -150,6 +153,22 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
       'Límite de salas activas alcanzado (2)',
     )
     expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(2)
+  })
+
+  it('a password join shows the room under Activas but never persists it (issue #31)', async () => {
+    await joinRoom('secreta', 'clave-secreta')
+    render(<Sidebar />)
+
+    const activas = screen.getByRole('region', { name: 'Salas activas' })
+    expect(activas.textContent).toContain('#secreta')
+    expect(screen.getByRole('img', { name: 'sala cifrada' })).toBeInTheDocument()
+    // The name is session-only: absent from Recientes and from `gritos:rooms`
+    // (the section only shows its empty state at this point).
+    expect(screen.getByRole('region', { name: 'Salas recientes' }).textContent).not.toContain(
+      '#secreta',
+    )
+    expect(useAppStore.getState().recentRooms).toEqual([])
+    expect(localStorage.getItem(ROOMS_STORAGE_KEY)).toBeNull()
   })
 
   it('clicking a suggested room joins and focuses it', async () => {
