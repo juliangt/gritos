@@ -13,7 +13,10 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * room password hides behind the 'sala cifrada' toggle with the one-line
  * explanation; when the toggle is on a non-empty password is required —
  * the room key and the §9.4 roomId both derive from it. Room-cap rejections
- * surface the exact manager message "Límite de salas activas alcanzado (N)".
+ * surface the exact manager message "Límite de salas activas alcanzado (N)":
+ * the popover's own submit sets it as the local error, and `managerError`
+ * carries one raised outside (issue #87: a suggested-room join rejected by
+ * the sidebar reuses this open popover instead of a hidden paragraph).
  * A wrong password is NOT a join error: the room simply never finds peers,
  * and the not-found message appears in the room view once the error
  * heuristic exhausts (lib/rooms roomStatusText). Esc dismisses the popover
@@ -26,6 +29,13 @@ export function JoinRoomPopover(props: {
   onDismiss?: () => void
   /** Prefilled room name (issue #41 deep-link password recovery). */
   initialName?: string
+  /**
+   * Manager rejection raised outside the popover (issue #87: the sidebar's
+   * joinByName). Shown in the same alert line as the local validation
+   * error, which keeps precedence when both exist (an in-popover submit at
+   * the cap re-derives the same message).
+   */
+  managerError?: string | null
 }) {
   const [name, setName] = useState(props.initialName ?? '')
   const [encrypted, setEncrypted] = useState(false)
@@ -33,6 +43,7 @@ export function JoinRoomPopover(props: {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const { joinRoomFocused } = useRoomManager()
+  const managerError = props.managerError ?? null
 
   const onDismiss = props.onDismiss
   // RNF-05 — Esc closes the popover (the Modal, the peer menu and the mobile
@@ -126,9 +137,9 @@ export function JoinRoomPopover(props: {
           <p className="text-xs text-muted">{ENCRYPTED_ROOM_HINT}</p>
         </>
       )}
-      {error !== null && (
+      {(error !== null || managerError !== null) && (
         <p role="alert" className="text-xs text-accent">
-          {error}
+          {error ?? managerError}
         </p>
       )}
       <div className="flex items-center gap-2">
