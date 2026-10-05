@@ -31,6 +31,7 @@ import {
   type TypingPayload,
 } from './protocol'
 import { computeFingerprint, createSessionIdentity, loadIdentity, persistIdentity, regenerateIdentity, restoreSessionIdentity, type PersistedIdentity, type SessionIdentity } from '../crypto/identity'
+import { isValidNickname, sanitizeRemoteNick } from '../nickname'
 import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
 import { mentionsNickname } from '../markdown/parse'
 import {
@@ -121,6 +122,14 @@ export class RoomNameError extends Error {
   constructor(rawName: string) {
     super(`Nombre de sala no válido: «${rawName}»`)
     this.name = 'RoomNameError'
+  }
+}
+
+/** RF-01 — invalid nicknames reject before any state/presence change. */
+export class NicknameError extends Error {
+  constructor(rawNickname: string) {
+    super(`Apodo no válido: «${rawNickname}»`)
+    this.name = 'NicknameError'
   }
 }
 
@@ -358,10 +367,18 @@ function repersistNickname(nickname: string): void {
   }
 }
 
-/** RF-01 — nickname changes are announced to every peer of every room. */
+/**
+ * RF-01 — nickname changes are announced to every peer of every room.
+ * Issue #28 — the manager validates with the same local RF-01 rules the UI
+ * applies (isValidNickname), so every path — including the debug panel —
+ * produces spec-valid presence. Invalid input throws NicknameError (the
+ * joinRoom/RoomNameError style) before any state or presence change.
+ */
 export function setNickname(nickname: string): void {
   const nick = nickname.trim()
-  if (nick === '') return
+  if (!isValidNickname(nick)) {
+    throw new NicknameError(nickname)
+  }
   if (sessionIdentity === null) {
     void ensureSessionIdentity(nick)
     return
@@ -981,17 +998,23 @@ function createConnection(init: {
     if (typeof payload?.nick !== 'string' || typeof payload?.fp !== 'string') {
       return
     }
+    // Issue #28 — the remote nick is sanitized at the boundary (control/
+    // invisible characters stripped, length capped). When nothing legible
+    // remains the peerId-prefix default set on peer join is kept, instead
+    // of overwriting it with an unusable nickname.
+    const nick = sanitizeRemoteNick(payload.nick)
     // The fingerprint derived from the peer's `keys` action is the trusted
     // one (§9.1): a diverging presence fingerprint never overwrites it and
     // nothing is logged (§7.3 silence).
-    const patch: Partial<Peer> = { nickname: payload.nick }
+    const patch: Partial<Peer> = {}
+    if (nick !== null) patch.nickname = nick
     if (!connection.peerKeyFps.has(peerId)) patch.fingerprint = payload.fp
     useAppStore.getState().updatePeer(connection.roomId, peerId, patch)
     // RF-06 — the first presence announcement of a peer becomes a discrete
     // system feed line; later ones are nickname changes and stay silent.
-    if (!connection.announcedPeers.has(peerId) && payload.nick.trim() !== '') {
+    if (nick !== null && !connection.announcedPeers.has(peerId)) {
       connection.announcedPeers.add(peerId)
-      appendSystemMessage(connection.roomId, joinSystemLine(payload.nick))
+      appendSystemMessage(connection.roomId, joinSystemLine(nick))
     }
   }
 

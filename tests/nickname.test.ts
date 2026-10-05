@@ -9,6 +9,7 @@ import {
   NICKNAME_MAX_LENGTH,
   NICKNAME_MIN_LENGTH,
   NICKNAME_NOUNS,
+  sanitizeRemoteNick,
 } from '../src/lib/nickname'
 
 /** Generated shape: lowercase sustantivo-adjetivo, es charset, one hyphen. */
@@ -88,6 +89,43 @@ describe('isValidNickname (RF-01: 2–24, letters/numbers/space/hyphen/underscor
     expect(NICKNAME_MIN_LENGTH).toBe(2)
     expect(NICKNAME_MAX_LENGTH).toBe(24)
     expect(NICKNAME_ERROR_TEXT).toContain('2 y 24')
+  })
+})
+
+describe('sanitizeRemoteNick (issue #28: boundary sanitizer for remote nicks)', () => {
+  it('strips Cc control characters (\\x00-\\x1f, \\x7f-\\x9f)', () => {
+    expect(sanitizeRemoteNick('zo\rro\tbravo\n')).toBe('zorobravo')
+    expect(sanitizeRemoteNick('lu\x00na\x1f-ca\x7futa')).toBe('luna-cauta')
+  })
+
+  it('strips zero-width and bidi-override invisibles', () => {
+    expect(sanitizeRemoteNick('zo\u200bro\u200dbo')).toBe('zorobo')
+    expect(sanitizeRemoteNick('luna\u202ecauta')).toBe('lunacauta')
+    expect(sanitizeRemoteNick('pon\u00adga\u2060me')).toBe('pongame')
+  })
+
+  it('trims surrounding whitespace after stripping', () => {
+    expect(sanitizeRemoteNick('  luna-cauta  ')).toBe('luna-cauta')
+    expect(sanitizeRemoteNick('\u0000 zorro \u0000')).toBe('zorro')
+  })
+
+  it('caps the length at NICKNAME_MAX_LENGTH instead of rejecting', () => {
+    const oversized = 'a'.repeat(NICKNAME_MAX_LENGTH * 10)
+    const sanitized = sanitizeRemoteNick(oversized)
+    expect(sanitized).toHaveLength(NICKNAME_MAX_LENGTH)
+    expect(oversized.startsWith(sanitized as string)).toBe(true)
+  })
+
+  it('returns null when nothing legible remains', () => {
+    expect(sanitizeRemoteNick('')).toBeNull()
+    expect(sanitizeRemoteNick('   ')).toBeNull()
+    expect(sanitizeRemoteNick('\u0000\u001f\u200b\u202e\u00ad')).toBeNull()
+  })
+
+  it('does not enforce the local charset: other scripts pass through', () => {
+    expect(sanitizeRemoteNick(' EventEmitter ')).toBe('EventEmitter')
+    expect(sanitizeRemoteNick('漢字テスト')).toBe('漢字テスト')
+    expect(sanitizeRemoteNick('Ñandú grande')).toBe('Ñandú grande')
   })
 })
 
