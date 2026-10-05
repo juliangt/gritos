@@ -24,8 +24,13 @@ import robotsTxt from '../public/robots.txt?raw'
  *   connect-src (only `wss:` trackers), `form-action 'self'` and
  *   `upgrade-insecure-requests` are set, and the referrer policy meta is
  *   present.
+ * - Issue #32: the M1 debug panel is gated behind `import.meta.env.DEV` in
+ *   App.tsx, so the production bundle must not contain any of it — the
+ *   panel's raw join/nickname paths widen the malformed-input surface
+ *   peers must tolerate. Only its absence from the emitted JS is checked
+ *   here (a dev build is not produced in this suite).
  *
- * Cheap checks keep all five from shipping again:
+ * Cheap checks keep all of these from shipping again:
  *  1. the shared vite config registers the Tailwind plugin and resolves a
  *     relative base,
  *  2. a real production build emits expanded utilities (no raw directive)
@@ -87,6 +92,19 @@ function emittedCss(result: Awaited<ReturnType<typeof build>>): string {
   return css.map((asset) => asset.source).join('\n')
 }
 
+/** Concatenates the JS chunks of a finished production build. */
+function emittedJs(result: Awaited<ReturnType<typeof build>>): string {
+  // Unlike CSS/HTML (emitted as `asset` entries), JS comes out as rollup
+  // `chunk` entries whose source lives in `code`.
+  const js = Array.isArray(result) ? result : 'output' in result ? [result] : []
+  const chunks = js
+    .flatMap((bundle) => bundle.output)
+    .filter((entry) => entry.type === 'chunk')
+    .map((chunk) => chunk.code)
+  expect(chunks.length, 'the production build must emit at least one JS chunk').toBeGreaterThan(0)
+  return chunks.join('\n')
+}
+
 /** The transformed index.html of a finished production build. */
 function emittedHtml(result: Awaited<ReturnType<typeof build>>): string {
   const html = emittedAssets(result).find((asset) => asset.fileName === 'index.html')
@@ -126,7 +144,16 @@ function cspPolicy(html: string): string {
   return meta?.match(/content="([^"]+)"/)?.[1] ?? ''
 }
 
-describe('production build output (issues #37, #40, #27, #49, #26)', () => {
+/**
+ * Vitest workers run this file under Node, but the app tsconfig ships no
+ * Node types (`types: []`), so the one field needed below is declared here
+ * instead of adding @types/node to the whole project.
+ */
+const nodeProcess = (globalThis as unknown as {
+  process?: { env: Record<string, string | undefined> }
+}).process
+
+describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => {
   it('registers the Tailwind Vite plugin', () => {
     const names = collectPluginNames(config.plugins ?? [])
     expect(
@@ -146,16 +173,28 @@ describe('production build output (issues #37, #40, #27, #49, #26)', () => {
   // Shared by the output assertions below: one production build, in memory.
   let result: Awaited<ReturnType<typeof build>>
   beforeAll(async () => {
-    result = await build({
-      ...config,
-      // Build with exactly the imported config object (no merge with the
-      // on-disk vite.config.ts), exercising the same pipeline as
-      // `npm run build` minus the disk write.
-      configFile: false,
-      mode: 'production',
-      logLevel: 'silent',
-      build: { ...config.build, write: false },
-    })
+    // Vitest runs its workers with NODE_ENV=test, which would make the
+    // in-memory build resolve `import.meta.env.DEV` to `true` (dev JSX
+    // transform, dev branches kept). The CLI `vite build` always runs with
+    // NODE_ENV=production; pin it around the build so this suite exercises
+    // the real production pipeline (issue #32 depends on it), and restore
+    // it so Vitest's own assumptions stay untouched.
+    const previousNodeEnv = nodeProcess?.env.NODE_ENV
+    if (nodeProcess != null) nodeProcess.env.NODE_ENV = 'production'
+    try {
+      result = await build({
+        ...config,
+        // Build with exactly the imported config object (no merge with the
+        // on-disk vite.config.ts), exercising the same pipeline as
+        // `npm run build` minus the disk write.
+        configFile: false,
+        mode: 'production',
+        logLevel: 'silent',
+        build: { ...config.build, write: false },
+      })
+    } finally {
+      if (nodeProcess != null) nodeProcess.env.NODE_ENV = previousNodeEnv
+    }
   }, 120_000)
 
   it('emits expanded Tailwind utilities instead of the raw @tailwind directive', () => {
@@ -275,6 +314,21 @@ describe('production build output (issues #37, #40, #27, #49, #26)', () => {
     const apple = html.match(/<link[^>]*rel="apple-touch-icon"[^>]*>/)?.[0]
     expect(apple, 'an apple-touch-icon must be linked').toBeDefined()
     expect(apple).toContain('href="./apple-touch-icon.png"')
+  })
+
+  it('eliminates the ?debug panel from the emitted JS (issue #32)', () => {
+    const js = emittedJs(result)
+    // Sanity first: the chunks are the real app code, not an empty shell.
+    expect(js).toContain('Comparte el nombre de la sala para que otros se unan.')
+    // Unique DebugPanel strings: App.tsx gates the panel behind
+    // `import.meta.env.DEV`, so tree-shaking must drop the module entirely
+    // (absent code cannot render, which is stronger than a hidden flag).
+    expect(js, 'the debug panel must not ship to production (issue #32)').not.toContain(
+      'Panel de depuración',
+    )
+    expect(js, 'the debug panel test-chat button must not ship').not.toContain(
+      'Enviar chat de prueba',
+    )
   })
 })
 

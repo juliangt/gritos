@@ -8,8 +8,10 @@ import { useAppStore } from './stores/useAppStore'
 
 /**
  * View routing (plan §3): no local identity → OnboardingScreen (RF-01);
- * otherwise the chat shell. The M1 debug panel remains available only
- * behind the `?debug` query flag (plan §4 — removed in M6).
+ * otherwise the chat shell. The M1 debug panel is dev-only (issue #32):
+ * `import.meta.env.DEV` is `false` in production builds, so the whole
+ * branch — and the DebugPanel module itself — is dead-code-eliminated from
+ * the bundle; `?debug` keeps working under `vite dev` (plan §4).
  */
 export default function App() {
   useTheme()
@@ -20,7 +22,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-bg text-text">
       {identity === null ? <OnboardingScreen /> : <ChatLayout />}
-      {showDebug && <DebugPanel />}
+      {import.meta.env.DEV && showDebug && <DebugPanel />}
     </div>
   )
 }
