@@ -400,6 +400,34 @@ export function getSessionIdentity(): SessionIdentity | null {
   return sessionIdentity
 }
 
+// ---------------------------------------------------------------------------
+// Identity-regeneration listeners (issue #97: the manual-DM path subscribes)
+// ---------------------------------------------------------------------------
+
+export type IdentityRegeneratedListener = () => void
+
+const identityRegeneratedListeners = new Set<IdentityRegeneratedListener>()
+
+/**
+ * Subscribes to RF-07 identity regenerations; returns the unsubscribe
+ * function. NOT cleared by `resetManagerForTests`: unlike the per-mount
+ * listeners below, the manualDmManager self-subscribes at module load —
+ * this seam is its wiring, not disposable listener state.
+ */
+export function onSessionIdentityRegenerated(listener: IdentityRegeneratedListener): () => void {
+  identityRegeneratedListeners.add(listener)
+  return () => {
+    identityRegeneratedListeners.delete(listener)
+  }
+}
+
+/** Fires the regeneration seam for every listener (gating lives with them). */
+function fireIdentityRegenerated(): void {
+  for (const listener of identityRegeneratedListeners) {
+    listener()
+  }
+}
+
 /**
  * RF-07 (M5) — regenerates the cryptographic identity: a new ECDH keypair
  * is created and persisted under `gritos:identity` (same nickname), the DM
@@ -407,6 +435,9 @@ export function getSessionIdentity(): SessionIdentity | null {
  * presence + keys are re-announced to every peer of every active room.
  * Issue #93 (spec §12.1) — the session-ephemeral keypair is reset and a
  * fresh one is generated and re-announced (`ephkeys`) to the same peers.
+ * Issue #97 (spec §12.2) — the manual-DM path listens on this seam: its
+ * pending flows and live channels are invalidated (their keys announced the
+ * OLD identity) by the subscription installed in manualDmManager.
  * Returns the new session, or null when there was no session identity yet.
  */
 export async function regenerateSessionIdentity(): Promise<SessionIdentity | null> {
@@ -417,6 +448,10 @@ export async function regenerateSessionIdentity(): Promise<SessionIdentity | nul
   sessionIdentity = session
   identityPromise = Promise.resolve(session)
   clearDmKeyCache()
+  // The old key material is dead from here: the manual engines hold the
+  // OLD identity + ephemeral keys, so the seam fires before anything can
+  // announce or use them again.
+  fireIdentityRegenerated()
   useAppStore.getState().setIdentity(session.identity)
   broadcastPresence()
   // Issue #93 (spec §12.1) — hygiene: a new identity gets fresh session

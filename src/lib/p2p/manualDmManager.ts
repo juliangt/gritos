@@ -1,7 +1,12 @@
 import { ManualPeerEngine, ManualPeerError, type ManualPeerState } from './manualPeer'
 import type { Envelope } from './protocol'
 import { canonicalFingerprint } from '../crypto/dm'
-import { ensureSessionIdentity, getSessionIdentity, TYPING_TTL_MS } from './roomManager'
+import {
+  ensureSessionIdentity,
+  getSessionIdentity,
+  onSessionIdentityRegenerated,
+  TYPING_TTL_MS,
+} from './roomManager'
 import { ensureEphemeralSession, type EphemeralSession } from '../crypto/sessionEphemeral'
 import type { SessionIdentity } from '../crypto/identity'
 import { sanitizeRemoteNick } from '../nickname'
@@ -22,7 +27,9 @@ import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '.
  * `ensureEphemeralSession` (sessionEphemeral). Keys are never regenerated
  * here — the blob announces the session's existing identity + ephemeral
  * public keys, so a manual peer verifies exactly the fingerprint shown in
- * rooms (RF-04).
+ * rooms (RF-04). When the identity IS regenerated (RF-07), this manager
+ * listens on the `onSessionIdentityRegenerated` seam and invalidates every
+ * manual flow (spec §12.2) — the room path never imports this module.
  *
  * TOFU (§12.2): manual peers have no Trystero peerId, so the pin rides the
  * SAME flat `gritos:tofu` map under the reserved key
@@ -57,6 +64,8 @@ export type ManualDmEventCallback = (state: ManualPeerState, error?: ManualPeerE
 
 interface PendingFlow {
   readonly engine: ManualPeerEngine
+  /** The wizard's forwarded event, kept so the RF-07 seam can tell it. */
+  readonly onEvent: ManualDmEventCallback
 }
 
 /** The wizard's in-progress exchange, if any (pre-connect). */
@@ -257,7 +266,7 @@ export async function startManualDmInvite(onEvent: ManualDmEventCallback): Promi
     throw new ManualPeerError('illegal-transition', 'La conexión manual fue cancelada')
   }
   pendingCreation = null
-  pendingFlow = { engine }
+  pendingFlow = { engine, onEvent }
   return engine.createInvite()
 }
 
@@ -276,7 +285,7 @@ export async function startManualDmAnswer(onEvent: ManualDmEventCallback): Promi
     throw new ManualPeerError('illegal-transition', 'La conexión manual fue cancelada')
   }
   pendingCreation = null
-  pendingFlow = { engine }
+  pendingFlow = { engine, onEvent }
 }
 
 /**
@@ -379,27 +388,71 @@ export function sendManualDmTyping(key: string, on: boolean): void {
 }
 
 /**
+ * Tears down every manual transport: pending flow first (cancelManualDm),
+ * then every connected engine. `markDisconnected` flips the surviving store
+ * channels to the RF-04 disconnected state — the regeneration path keeps
+ * the dead channels listed (history in memory); the panic path relies on
+ * the caller's store reset instead.
+ */
+function disposeManualTransports(markDisconnected: boolean): void {
+  cancelManualDm()
+  for (const [key, engine] of [...connectedEngines]) {
+    engineKeys.delete(engine)
+    engine.dispose()
+    connectedEngines.delete(key)
+    if (markDisconnected) useAppStore.getState().setManualDmAvailable(key, false)
+  }
+  if (typingTimer !== null) {
+    clearInterval(typingTimer)
+    typingTimer = null
+  }
+}
+
+/**
  * RF-08 support — synchronously disposes every manual engine (pending flow
  * and connected channels): the panic path must leave no live manual
  * transport behind. Pins under `gritos:tofu` are wiped by the panic storage
  * sweep; identity regeneration keeps them by design (spec §12.2).
  */
 export function abortAllManualDms(): void {
-  cancelManualDm()
-  for (const [key, engine] of [...connectedEngines]) {
-    engineKeys.delete(engine)
-    engine.dispose()
-    connectedEngines.delete(key)
-  }
-  if (typingTimer !== null) {
-    clearInterval(typingTimer)
-    typingTimer = null
-  }
+  disposeManualTransports(false)
   const view = useAppStore.getState().activeView
   if (view?.kind === 'dm' && view.peerId.startsWith(MANUAL_DM_KEY_PREFIX)) {
     useAppStore.getState().setActiveView(null)
   }
 }
+
+/**
+ * RF-07 seam (spec §12.2) — identity regeneration invalidates every manual
+ * flow: pending invites/answers are cancelled (all of it ephemeral state,
+ * nothing persisted to clean) and every live channel dies with its keys —
+ * the engines announce the OLD identity/ephemeral material — landing in the
+ * RF-04 disconnected state («El par se ha desconectado», composer blocked,
+ * history in memory), the room-DM regeneration semantics. The `manual:` pin
+ * of the previous identity is kept (public value, same policy as rooms).
+ * Subscribed to `onSessionIdentityRegenerated` at module load below; an
+ * open wizard is told through its forwarded event so it shows the failure
+ * screen instead of waiting on a dead engine.
+ */
+export function invalidateManualDmsOnIdentityRegeneration(): void {
+  const flow = pendingFlow
+  disposeManualTransports(true)
+  // After dispose (whose `closed` event the wizard ignores), so the failed
+  // screen is the state the wizard is left in.
+  flow?.onEvent(
+    'failed',
+    new ManualPeerError(
+      'illegal-transition',
+      'La identidad cambió: la conexión manual fue cancelada',
+    ),
+  )
+}
+
+// The seam, installed once at module load (module-lifetime on purpose: the
+// room path's resetManagerForTests clears its PER-MOUNT listeners, but this
+// subscription is the manual manager's own wiring — resetManualDmForTests
+// drops the state, never the seam).
+onSessionIdentityRegenerated(invalidateManualDmsOnIdentityRegeneration)
 
 /** Test-only reset: drops every manual engine and typing timer. */
 export function resetManualDmForTests(): void {

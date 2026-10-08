@@ -398,7 +398,7 @@ interface AppState {
 | `gritos:ui`       | `{sidebarCollapsed: boolean}`                                                                                                              | ✅                 |
 | `gritos:tofu`     | `{peerId: fingerprint}` — primera huella vista por par; detecta la rotación de claves (issue #22, TOFU)                                    | ✅                 |
 
-La lista de silenciados (issue #95) no estrena clave: viaja en el campo `mutedFingerprints` de `gritos:settings` (8.1), de modo que el invariante de exactamente cinco claves `gritos:*` queda intacto y el _panic button_ (RF-08) la borra sin código adicional.
+La lista de silenciados (issue #95) no estrena clave: viaja en el campo `mutedFingerprints` de `gritos:settings` (8.1), de modo que el invariante de exactamente cinco claves `gritos:*` queda intacto y el _panic button_ (RF-08) la borra sin código adicional. Los pines de los pares manuales de #97 (12.2) tampoco estrenan clave: comparten `gritos:tofu` bajo el prefijo reservado `manual:<huella-canónica>` — la misma clave, el mismo borrado de pánico.
 
 Además de `localStorage`, desde la issue #24 existe un pequeño almacén en **IndexedDB** (base de datos `gritos`, almacén `keys`, registro `identity-wrap`): la clave AES-GCM-256 **no exportable** que envuelve la JWK privada. Se borra con panic. Sin IndexedDB (o si falla al abrir), el sobre degrada a `{v:0, plain}` — texto en claro, comportamiento idéntico al previo a #24.
 
@@ -418,7 +418,7 @@ Todo con Web Crypto (`crypto.subtle`). Ninguna primitiva implementada a mano.
 
 La derivación vigente es la **v2** (issue #93; nota de diseño en 12.1): el secreto DM procede de un ECDH **efímero de sesión**, no de las claves de identidad de larga vida.
 
-1. Cada par genera un par ECDH P-256 **efímero por sesión de la app** al arrancar (y lo regenera con la identidad): vive solo en memoria, jamás se persiste —ni `localStorage` ni el almacén IndexedDB— y lo borra el panic button (RF-08). Su clave pública cruda (65 B) se anuncia con la acción dirigida `ephkeys` al conectar y tras regenerar identidad (7.1).
+1. Cada par genera un par ECDH P-256 **efímero por sesión de la app** al arrancar (y lo regenera con la identidad): vive solo en memoria, jamás se persiste —ni `localStorage` ni el almacén IndexedDB— y lo borra el panic button (RF-08). Su clave pública cruda (65 B) se anuncia con la acción dirigida `ephkeys` al conectar y tras regenerar identidad (7.1). Los canales DM manuales de #97 (12.2) no tienen anuncio `ephkeys` —no hay enjambre donde colgarlo—: su efímera viaja dentro del blob de invitación y la derivación es exactamente la de esta sección.
 2. El anuncio se guarda junto a su fingerprint **sin pin TOFU**: solo el fingerprint de identidad queda anclado en `gritos:tofu` (8.2) y solo la identidad se muestra para verificación manual (9.1, RF-04). Una clave efímera sustituida no deriva la misma clave DM: el dual-salt del punto 4 hace que el GCM falle a la vista.
 3. Para enviar o recibir, cada extremo computa `secreto = ECDH(miPrivEfímera, suPubEfímera)` → 256 bits.
 4. `claveDM = HKDF-SHA256(secreto, salt = SHA-256(los cuatro fingerprints canónicos ordenados ascendente: identidad y efímero de ambos extremos), info = "gritos/dm/v2", 32 B)` → clave AES-GCM-256 **no exportable** (_dual-salt_: al entrar ambas parejas de fingerprints en la sal, el enlace identidad→efímero queda atado sin firmas; ver 12.1). Los `fp` son los de 9.1 en forma canónica (sin espacios, mayúsculas); cada extremo calcula los suyos desde las claves crudas anunciadas.
@@ -540,7 +540,7 @@ El _discovery_ en trackers públicos tarda típicamente 2–6 s; la UI debe comu
 5. PWA (service worker, iconos, offline shell).
 6. i18n y mensajes editables/borrables.
 7. Secrecía hacia delante en DMs (issue #25; nota de diseño en 12.1): **el mínimo está implementado** (issue #93) — claves DM efímeras por sesión (9.2); queda como trabajo futuro la solución completa: _prekeys_ + _double ratchet_ (fase B del issue).
-8. DMs sin sala compartida por conexión manual de pares (issue #97; nota de diseño en 12.2): señalización copiar/pegar con infraestructura literalmente cero — complementario del ítem 3 (canal global de señalización), que sigue siendo trabajo futuro.
+8. DMs sin sala compartida por conexión manual de pares (issue #97; nota de diseño en 12.2): **implementado** — señalización copiar/pegar con infraestructura literalmente cero; complementario del ítem 3 (canal global de señalización), que sigue siendo trabajo futuro.
 
 ### 12.1 Nota de diseño: secrecía hacia delante en DMs (issue #25)
 
@@ -564,7 +564,7 @@ El _discovery_ en trackers públicos tarda típicamente 2–6 s; la UI debe comu
 
 ### 12.2 Nota de diseño: DMs sin trackers — conexión manual de pares (issue #97)
 
-**Estado: diseño aprobado, pendiente de implementación (issue #97).** Un canal 1:1 directo (WebRTC DataChannel) establecido intercambiando a mano dos blobs de invitación —copiar/pegar hoy, QR opcional después—: la señalización no necesita trackers ni servidor alguno, el único camino de descubrimiento con infraestructura literalmente cero (11.2, 11.7). Todo lo demás se reutiliza intacto: derivación DM v2 (9.2), sobres `dm` v:2 (7.2), receipts y typing (7.1), TOFU (8.2) y el estado `DmChannel` (8.1). Los pares manuales no comparten enjambre alguno: lo que en salas hace Trystero aquí lo hace el pegado humano. Alcance estricto: un DM 1:1.
+**Estado: implementado (issue #97).** Lo esbozado aquí está en producción sin desviaciones sobre lo decidido: el motor (blobs, máquinas de estado, marcos `{"action", "payload"}`, deduplicación) vive en `lib/p2p/manualPeer.ts` —la única superficie `RTCPeerConnection`—, el gestor de cara a la UI en `lib/p2p/manualDmManager.ts` (el espejo del roomManager para la ruta manual: alimenta la porción `manualDms` del store, 8.1, y fija los pines TOFU bajo el prefijo reservado `manual:` de 8.2) y el asistente cubre los dos roles con las cadenas en `settings/messages.ts`. Las dos invalidaciones de la nota son costura: el RF-07 (regenerar identidad) destruye los flujos pendientes y mata los canales vivos vía el suscriptor `onSessionIdentityRegenerated` que instala el gestor manual, y el pánico (RF-08) los aborta en la misma pasada (`abortAllManualDms`). Lo que sigue es la nota de diseño aprobada que la implementación siguió. Un canal 1:1 directo (WebRTC DataChannel) establecido intercambiando a mano dos blobs de invitación —copiar/pegar hoy, QR opcional después—: la señalización no necesita trackers ni servidor alguno, el único camino de descubrimiento con infraestructura literalmente cero (11.2, 11.7). Todo lo demás se reutiliza intacto: derivación DM v2 (9.2), sobres `dm` v:2 (7.2), receipts y typing (7.1), TOFU (8.2) y el estado `DmChannel` (8.1). Los pares manuales no comparten enjambre alguno: lo que en salas hace Trystero aquí lo hace el pegado humano. Alcance estricto: un DM 1:1.
 
 **Sobre de invitación (blob).** Cada rol emite un único blob autocontenido, JSON → base64 estándar (decodificado tolerando los espacios y saltos que el portapapeles añada):
 

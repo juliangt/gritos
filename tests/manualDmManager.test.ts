@@ -26,13 +26,14 @@ import {
   startManualDmAnswer,
   startManualDmInvite,
 } from '../src/lib/p2p/manualDmManager'
-import { resetManagerForTests } from '../src/lib/p2p/roomManager'
+import { resetManagerForTests, regenerateSessionIdentity } from '../src/lib/p2p/roomManager'
 import { createSessionIdentity, type SessionIdentity } from '../src/lib/crypto/identity'
 import { generateEphemeralSession, type EphemeralSession } from '../src/lib/crypto/sessionEphemeral'
 import { canonicalFingerprint, clearDmKeyCache } from '../src/lib/crypto/dm'
 import type { Envelope } from '../src/lib/p2p/protocol'
 import { INITIAL_APP_STATE, useAppStore } from '../src/stores/useAppStore'
 import { TOFU_STORAGE_KEY } from '../src/lib/tofu'
+import { panicWipe } from '../src/lib/panic'
 
 /**
  * Phase 3 store/manager wiring of issue #97 (spec §12.2): the
@@ -365,5 +366,75 @@ describe('manualDmManager (issue #97, spec §12.2)', () => {
     cancelManualDm()
     // Post-connect cancel is a no-op: the channel is real now.
     expect(useAppStore.getState().manualDms[key]?.available).toBe(true)
+  })
+
+  // -- RF-07 × #97 (spec §12.2): identity regeneration invalidates everything --
+
+  it('identity regeneration cancels the pending wizard flow (ephemeral state only)', async () => {
+    const pair = createFakePeerPair()
+    installFakePeerConnectionFactory([pair.pcA, pair.pcB])
+    const states: ManualPeerState[] = []
+    const inviting = startManualDmInvite((state) => {
+      states.push(state)
+    })
+    await untilParked(() => pair.pcA)
+    pair.pcA.completeGathering()
+    await inviting
+
+    // The seam: the manager listens on onSessionIdentityRegenerated — no
+    // explicit call from the room path.
+    await regenerateSessionIdentity()
+
+    // The pending engine is disposed (transport closed) and the wizard is
+    // told, so it lands on the failure screen instead of waiting forever.
+    expect(pair.pcA.closed).toBe(true)
+    expect(states[states.length - 1]).toBe('failed')
+    // No store trace was ever created (channels exist only on connect) and
+    // a late paste finds no flow: nothing resurrects.
+    expect(useAppStore.getState().manualDms).toEqual({})
+    await expect(pasteManualAnswer('AAAA')).rejects.toThrow()
+  })
+
+  it('identity regeneration kills the live manual channel, pin kept', async () => {
+    const { key, pair } = await connectThroughManager()
+    await sendManualDm(key, 'antes de regenerar')
+    await flushCrypto()
+    const pinsBefore = JSON.parse(localStorage.getItem(TOFU_STORAGE_KEY) ?? '{}') as Record<
+      string,
+      string
+    >
+    expect(pinsBefore[key]).toBe(sessionB.identity.fingerprint)
+
+    await regenerateSessionIdentity()
+
+    // The channel dies with its keys: RF-04 disconnected state («El par se
+    // ha desconectado»), history in memory, sends refused. The remote pin
+    // (a public value) survives the regeneration, like the room pins.
+    expect(pair.pcA.closed).toBe(true)
+    const channel = useAppStore.getState().manualDms[key]
+    expect(channel?.available).toBe(false)
+    expect(channel?.messages).toHaveLength(1)
+    expect(await sendManualDm(key, 'tras regenerar')).toBe(false)
+    const pinsAfter = JSON.parse(localStorage.getItem(TOFU_STORAGE_KEY) ?? '{}') as Record<
+      string,
+      string
+    >
+    expect(pinsAfter[key]).toBe(sessionB.identity.fingerprint)
+  })
+
+  it('panicWipe aborts the live manual transport (RF-08 × #97)', async () => {
+    const { key, pair } = await connectThroughManager()
+    const reload = vi.fn()
+    vi.stubGlobal('location', { reload })
+
+    panicWipe({ reload: false })
+
+    // The engine transport is really closed — the store reset alone would
+    // not prove abortAllManualDms ran.
+    expect(pair.pcA.closed).toBe(true)
+    expect(useAppStore.getState().manualDms).toEqual({})
+    expect(useAppStore.getState().activeView).toBeNull()
+    expect(await sendManualDm(key, 'tras el pánico')).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
   })
 })
