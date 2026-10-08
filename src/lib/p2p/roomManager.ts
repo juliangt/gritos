@@ -1523,6 +1523,82 @@ export async function sendDm(peerId: string, text: string, ttl?: number): Promis
   }
 }
 
+// ---------------------------------------------------------------------------
+// File-transfer key resolution (issue #103 phase 2, spec §12.4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Which conversation a file transfer rides — the two contexts the engine
+ * (Phase 3, `lib/p2p/fileTransfer.ts`) can offer a transfer in. `room`
+ * covers public rooms (no key) and password rooms (§9.3 key); `dm` is
+ * always sealed (§9.2 v2 key).
+ */
+export type TransferKeyContext =
+  | { readonly kind: 'room'; readonly roomId: string }
+  | { readonly kind: 'dm'; readonly peerId: string }
+
+/**
+ * Issue #103 phase 2 (spec §12.4) — resolves the AES-GCM key that seals and
+ * opens the chunks of a P2P file transfer, mirroring EXACTLY how sendChat
+ * and sendDm resolve theirs: same caches, same guards, same failure modes.
+ * The engine feeds the result to `sealChunk`/`openChunk`
+ * (lib/crypto/chunkCipher.ts) and never touches key state itself.
+ *
+ * - `room`: the connection's cached `deriveRoomKey` promise — the very
+ *   promise sendChat awaits (§9.3). A public (or unknown) room has no key
+ *   and resolves `null` → the engine sends `enc: false` (DTLS-only, with
+ *   the §12.4 pre-send warning). A password room whose derivation REJECTS
+ *   propagates the rejection — never `null` — so a broken key state can
+ *   never downgrade a transfer to cleartext (fail closed).
+ * - `dm`: the cached v2 key (`getCachedDmKeyV2`) behind sendDm's exact
+ *   guard sequence — session identity, available channel, a shared room
+ *   holding the peer's identity key and fingerprint, and an announced
+ *   session-ephemeral key (its absence is a legacy v1 build: `null`).
+ *   Crypto failures on the way (ECDH/HKDF) resolve `null` like sendDm's
+ *   catch. DMs are ALWAYS sealed (§12.4), so the engine must treat `null`
+ *   here as a refused transfer — never as a cleartext fallback.
+ */
+export async function resolveTransferKey(ctx: TransferKeyContext): Promise<CryptoKey | null> {
+  if (ctx.kind === 'room') {
+    const roomKey = connections.get(ctx.roomId)?.roomKey
+    if (roomKey === undefined || roomKey === null) {
+      return null // public or unknown room: no key → §12.4 enc=false (DTLS-only)
+    }
+    // Rejections propagate: a failed derivation must fail the transfer,
+    // never fall back to cleartext (fail closed, unlike the send path's
+    // silent catch — there the message simply is not delivered).
+    return roomKey
+  }
+  // DM branch — the sendDm guard sequence, verbatim.
+  const identity = sessionIdentity
+  if (identity === null) return null
+  const channel = useAppStore.getState().dms[ctx.peerId]
+  if (channel === undefined || !channel.available) return null
+  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(ctx.peerId))
+  if (shared === undefined) return null
+  const theirFp = shared.peerKeyFps.get(ctx.peerId)
+  if (theirFp === undefined) return null
+  // No session-ephemeral announce: a legacy (v1) build that can never open
+  // a v2 key — the DM channel's `legacyPeer` state makes this visible.
+  const eph = peerEphemeralKeyOf(ctx.peerId)
+  if (eph === null) return null
+  try {
+    // The ephemeral keypair is generated lazily on first use — after the
+    // guards, so a refused resolution never triggers a pointless keygen.
+    const session = await ensureEphemeralSession()
+    return await getCachedDmKeyV2(
+      session.keypair.privateKey,
+      eph.rawKey,
+      identity.identity.fingerprint,
+      theirFp,
+      session.fingerprint,
+      eph.fingerprint,
+    )
+  } catch {
+    return null // same failure mode as sendDm's catch: no key, no transfer
+  }
+}
+
 /** §7.1 — DM typing signal, directed at the peer and flagged `dm`. */
 export function sendDmTyping(peerId: string, on: boolean): void {
   const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
