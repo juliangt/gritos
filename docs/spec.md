@@ -44,7 +44,7 @@ Principios rectores:
 - Mensajes directos 1:1 cifrados E2EE entre pares que comparten al menos una sala.
 - Presencia con estado de conexión e indicador de latencia por par.
 - Ajustes: trackers personalizados, STUN/TURN personalizados, auto-join, tema, notificaciones de escritorio, límite de salas activas.
-- Privacidad: regeneración de identidad y _panic button_.
+- Privacidad: silencio local de pares por fingerprint (issue #95), regeneración de identidad y _panic button_.
 - Tema claro / oscuro / sistema.
 - Despliegue como sitio estático.
 
@@ -158,6 +158,7 @@ Modal con tres pestañas. Todos los cambios se guardan en `localStorage` al inst
 - Notificaciones de escritorio (on/off + botón "Permitir notificaciones" que solicita el permiso).
 - Recordar salas recientes (on/off, por defecto on).
 - Regenerar identidad criptográfica (con confirmación y aviso de que el fingerprint cambia y las claves DM dejan de coincidir).
+- Pares silenciados (issue #95): lista local de pares silenciados por fingerprint, con botón para dejar de silenciar; el apodo se muestra solo si el silencio data de la sesión actual.
 - _Panic button_: "Borrar todo y salir" (ver RF-08).
 
 **Apariencia**
@@ -308,6 +309,7 @@ Los trackers solo intervienen en el _discovery_ e intercambio SDP inicial. El tr
 - **Desconexión**: `onPeerLeave` limpia presencia y typing del par en esa sala; sus DMs quedan en modo "par desconectado".
 - **Compatibilidad y versionado**: los campos desconocidos del Envelope se ignoran; `v` es discriminatorio por `kind` — `chat` exige `v: 1` y `dm` exige `v: 2` (issue #93) — y cualquier otro valor se descarta en silencio. En salas con builds mezclados, un par v1 descarta en silencio los `dm` v2 y un par nuevo los `dm` v1, en ambas direcciones, hasta que las builds convergen (12.1).
 - **Silencio**: jamás se retransmite un mensaje recibido a terceros (no hay relay en v1; el `to` de un `dm` ajeno se ignora y se descarta).
+- **Silenciado local (issue #95)**: la lista `mutedFingerprints` (8.1) filtra las rutas de recepción por el fingerprint de identidad del par —el derivado de sus claves anunciadas (9.1), no el `fp` auto-declarado del anuncio `presence`—. De un par silenciado se descartan: el `chat` de sala, antes de parsear, deduplicar, añadir al feed, valorar menciones (y su notificación, RF-09) o encolar el acuse; el `dm` dirigido, antes de cualquier trabajo (sin canal nuevo, sin hueco de dedup, sin descifrado); los indicadores `typing` (sala y DM); y las líneas de sistema de unión/salida —el par queda «sin anunciar»: levantado el silencio, su siguiente `presence` revela la línea diferida—. De ese mismo par se siguen procesando `receipt` y `ping/pong` (los ✓✓ y los puntos de latencia siguen honestos) y los anuncios `keys`/`ephkeys` con su pin TOFU (8.2). Carrera: un sobre que llega antes del anuncio de claves del autor se procesa (_fail-open_; el anuncio aterriza en la misma ráfaga de unión, 6.3).
 
 ## 8. Modelo de estado y datos
 
@@ -322,6 +324,7 @@ interface Settings {
   theme: 'light' | 'dark' | 'system' // default: 'system'
   notifications: boolean // default: false (requiere además permiso del navegador)
   rememberRooms: boolean // default: true
+  mutedFingerprints: string[] // issue #95 — pares silenciados, por fingerprint en forma canónica (9.2: sin espacios, mayúsculas); default: []. Tope de 100: la 101.ª se rechaza y una lista sobre el tope hallada al cargar se descarta entera (nunca se recorta). Vive dentro de gritos:settings (8.2), de modo que el panic button la borra
 }
 
 interface Identity {
@@ -382,11 +385,13 @@ interface AppState {
 
 | Clave             | Contenido                                                                                                                                  | Se borra con panic |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| `gritos:settings` | `Settings` (JSON)                                                                                                                          | ✅                 |
+| `gritos:settings` | `Settings` (JSON), incluida la lista de silenciados (issue #95)                                                                            | ✅                 |
 | `gritos:identity` | `{nickname, fingerprint, createdAt, pubJwk, priv}` (JSON) — `priv` es un sobre cifrado (issue #24), nunca la JWK privada en claro          | ✅                 |
 | `gritos:rooms`    | `{recent: string[]}` — solo nombres si `rememberRooms`; nunca nombres de salas con contraseña (issue #31: el alta las excluye y las purga) | ✅                 |
 | `gritos:ui`       | `{sidebarCollapsed: boolean}`                                                                                                              | ✅                 |
 | `gritos:tofu`     | `{peerId: fingerprint}` — primera huella vista por par; detecta la rotación de claves (issue #22, TOFU)                                    | ✅                 |
+
+La lista de silenciados (issue #95) no estrena clave: viaja en el campo `mutedFingerprints` de `gritos:settings` (8.1), de modo que el invariante de exactamente cinco claves `gritos:*` queda intacto y el _panic button_ (RF-08) la borra sin código adicional.
 
 Además de `localStorage`, desde la issue #24 existe un pequeño almacén en **IndexedDB** (base de datos `gritos`, almacén `keys`, registro `identity-wrap`): la clave AES-GCM-256 **no exportable** que envuelve la JWK privada. Se borra con panic. Sin IndexedDB (o si falla al abrir), el sobre degrada a `{v:0, plain}` — texto en claro, comportamiento idéntico al previo a #24.
 
@@ -440,7 +445,7 @@ La derivación con contraseña hace que la sala sea **indescubrible** en el trac
 **No cubierto (documentado, aceptado)**
 
 - Suplantación de apodo: cualquier par puede usar el apodo de otro; la defensa es comparar fingerprints en DMs (TOFU — _trust on first use_), sin base de identidad persistente global.
-- Plano de control sin autenticar (issue #36): las señales ajenas al contenido del chat —confirmaciones `receipt` (los ✓✓), «escribiendo…» (`typing`), líneas de sistema «se ha unido / ha salido» y ecos `pong` de latencia— viajan sin autenticación de mensaje, de modo que cualquier par puede forjarlas (marcar entregados mensajes ajenos, fingir que escribe, emitir líneas de sistema con apodos arbitrarios —que además desplazan historial real por el FIFO de 500 mensajes— o inflar los puntos de latencia) o inundar el chat para saturar insignias de no leídos y notificaciones de mención. Es inherente a la malla sin confianza de v1 —misma raíz que la suplantación de apodo, más arriba—; la mitigación de v1 es cosmética: tope de líneas de sistema por par y minuto, y descarte de RTT negativos y acotado de RTT absurdos en el eco `pong`.
+- Plano de control sin autenticar (issue #36): las señales ajenas al contenido del chat —confirmaciones `receipt` (los ✓✓), «escribiendo…» (`typing`), líneas de sistema «se ha unido / ha salido» y ecos `pong` de latencia— viajan sin autenticación de mensaje, de modo que cualquier par puede forjarlas (marcar entregados mensajes ajenos, fingir que escribe, emitir líneas de sistema con apodos arbitrarios —que además desplazan historial real por el FIFO de 500 mensajes— o inflar los puntos de latencia) o inundar el chat para saturar insignias de no leídos y notificaciones de mención. Es inherente a la malla sin confianza de v1 —misma raíz que la suplantación de apodo, más arriba—; la mitigación de v1 es cosmética: tope de líneas de sistema por par y minuto, y descarte de RTT negativos y acotado de RTT absurdos en el eco `pong`. La issue #95 añade la primera mitigación a pedido del usuario —silenciar pares por fingerprint: la lista local de 8.1/8.2 (semántica exacta en 7.3) oculta el chat de sala, los DM, la escritura y las líneas de sistema del par silenciado—. Límites aceptados, coherentes con la malla sin confianza: rotar la clave de identidad elude la lista (el pin TOFU, 8.2, hace visible la rotación con su aviso de clave cambiada) y la ventana de carrera hasta que aterrizan las claves anunciadas del par falla en abierto (7.3).
 - Compromiso del dispositivo o del origen (XSS): la clave privada se guarda cifrada en reposo (issue #24), pero un script del propio origen tiene acceso a `localStorage` **y** a IndexedDB, por lo que un contexto totalmente comprometido sigue pudiendo usar la clave (suplantar al usuario). Mitigación: la envoltura eleva el listón frente a volcados ingenuos de `localStorage` (extensiones con permisos de lectura, acceso físico al disco); contra el compromiso del propio origen no hay defensa local. El renderer Markdown propio con tests de XSS y la superficie mínima de dependencias siguen siendo la primera barrera.
 - Metadatos: los pares conectados ven tu IP (naturaleza de WebRTC); usar TURN mitiga parcialmente.
 - Avances criptoanalíticos / contraseña de sala débil: PBKDF2 eleva el coste, pero una contraseña trivial es comprometible por fuerza bruta offline por quien conozca el nombre de sala. En los DMs, el riesgo _harvest now, decrypt later_ (issue #25) queda **mitigado a alcance de sesión** con la derivación v2 (issue #93; 9.2): al cerrar la sesión desaparece la clave privada efímera y lo grabado deja de ser descifrable. Riesgo residual, a secas: capturar el tráfico **durante** una sesión activa y comprometer después el dispositivo expone esa sesión —y habilita la suplantación de identidad hasta la alerta de rotación TOFU (8.2)—. Los pares v1, y lo grabado en v1 antes de la migración, siguen bajo la exposición estático-estático original (12.1).
@@ -472,7 +477,7 @@ Estética: minimalista, rápida, limpia. Densidad de información moderada, tipo
   - Sección _Activas_: salas conectadas con badge de no leídos y punto de estado.
   - Sección _Sugeridas_ y _Recientes_ (si `rememberRooms`).
   - Botón **[+ Unirse]**: popover con nombre (y contraseña opcional).
-  - Sección _Pares_ de la vista activa: apodo, punto de latencia, clic → menú (Mensaje directo / Copiar fingerprint).
+  - Sección _Pares_ de la vista activa: apodo, punto de latencia, clic → menú (Mensaje directo / Copiar fingerprint / Silenciar).
 - **Área principal**: encabezado (nombre con `#`, 🔒 si aplica, estado, nº de pares, ajustes), feed, barra de entrada.
 - **Modal de ajustes** con las pestañas Red / Privacidad / Apariencia (RF-07).
 
@@ -494,7 +499,7 @@ El _discovery_ en trackers públicos tarda típicamente 2–6 s; la UI debe comu
 ### 10.4 Feed y entrada
 
 - Burbujas planas (sin cajas por mensaje): autor en color estable derivado de `hash(peerId)` → hue, hora `HH:MM`, cuerpo Markdown.
-- Separadores de sistema discretos para uniones/salidas y para el cap FIFO.
+- Separadores de sistema discretos para uniones/salidas, para el cap FIFO y para los silencios locales (issue #95: «@nick fue silenciado»).
 - Entrada: textarea auto-creciente (máx. 6 líneas), contador de caracteres a partir de 3800/4000, ayuda contextual de Markdown (`**negrita** · *cursiva* · \`código\``).
 - Los mensajes propios se alinean a la derecha con `✓`/`✓✓` atenuado.
 
