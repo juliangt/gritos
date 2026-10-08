@@ -83,6 +83,31 @@ export function unmutePeerAction(identifier: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Issue #98 — message reactions (MessageItem quick-pick bar and aggregated
+// chips row). All Spanish wording lives here so components and tests share
+// the exact texts, like the mute affordance above.
+// ---------------------------------------------------------------------------
+
+/** Accessible name and tooltip of the row affordance that opens the quick-pick bar. */
+export const REACTION_ADD_LABEL = 'Reaccionar'
+
+/** Accessible label of the quick-pick bar container (the 7-whitelist row). */
+export const REACTION_BAR_LABEL = 'Reacciones rápidas'
+
+/** Accessible label of the aggregated chips row under the bubble. */
+export const REACTIONS_ROW_LABEL = 'Reacciones'
+
+/** Accessible name and tooltip of one quick-pick button. */
+export function reactQuickPickLabel(emo: string): string {
+  return `Reaccionar con ${emo}`
+}
+
+/** Tooltip of an aggregated chip: the reactor nicknames, comma-separated. */
+export function reactionChipTooltip(nicknames: readonly string[]): string {
+  return nicknames.join(', ')
+}
+
+// ---------------------------------------------------------------------------
 // Issue #96 — composer TTL selector (ChatInput, room and DM modes). Only the
 // wording lives here: the selection itself is memory-only component state and
 // is never persisted.
