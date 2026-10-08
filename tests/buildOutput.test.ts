@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { readFile } from 'node:fs/promises'
-import { build, resolveConfig } from 'vite'
+import { readFile, readdir } from 'node:fs/promises'
+import { build, resolveConfig, type Plugin } from 'vite'
 import config from '../vite.config'
 import robotsTxt from '../public/robots.txt?raw'
 import manifestSource from '../public/manifest.webmanifest?raw'
@@ -36,9 +36,17 @@ import manifestSource from '../public/manifest.webmanifest?raw'
  *   standalone with relative start_url/scope and relative icon srcs so
  *   installs resolve under any subpath (GitHub Pages project sites). Every
  *   referenced icon must exist in dist/ at exactly its advertised pixel
- *   size (PNG signature + IHDR parse), the manifest colors pin the light
- *   --gritos-bg token (the anti-flash bootstrap's fallback), and no
- *   service worker ships yet — phase 2 adds it and replaces that guard.
+ *   size (PNG signature + IHDR parse), and the manifest colors pin the
+ *   light --gritos-bg token (the anti-flash bootstrap's fallback).
+ * - Issue #104 (phase 2): the offline app shell ships. public/sw.js is
+ *   rewritten at build time (gritosSwManifest in vite.config.ts, which
+ *   overwrites the verbatim public copy emitted into dist/) with a
+ *   content-hashed `gritos-shell-v…` cache version and the exact precache
+ *   list of that build. The worker stays scope-relative (no absolute URLs,
+ *   cross-origin requests untouched), answers navigations with the cached
+ *   shell, deletes stale caches on activation, and is registered from the
+ *   bundle — never from index.html. The phase-1 boundary guard ("no SW
+ *   yet") is replaced by these dist/sw.js assertions.
  *
  * Cheap checks keep all of these from shipping again:
  *  1. the shared vite config registers the Tailwind plugin and resolves a
@@ -198,6 +206,34 @@ const nodeProcess = (
   }
 ).process
 
+// Shared with the issue #104 phase-2 block below: the sw.js emitted by the
+// in-memory build, for the deterministic-version comparison against the
+// dist build (identical build inputs must inject an identical version).
+let inMemorySwSource = ''
+
+/**
+ * A quiet in-memory production build (NODE_ENV pinned exactly like the
+ * blocks above) returning only the sw.js asset it emits — the harness for
+ * the issue #104 phase-2 cache-version assertions.
+ */
+async function buildSw(plugins: Plugin[]): Promise<string> {
+  const previousNodeEnv = nodeProcess?.env.NODE_ENV
+  if (nodeProcess != null) nodeProcess.env.NODE_ENV = 'production'
+  try {
+    const result = await build({
+      ...config,
+      configFile: false,
+      mode: 'production',
+      logLevel: 'silent',
+      plugins: [...(config.plugins ?? []), ...plugins],
+      build: { ...config.build, write: false },
+    })
+    return emittedAssets(result).find((asset) => asset.fileName === 'sw.js')?.source ?? ''
+  } finally {
+    if (nodeProcess != null) nodeProcess.env.NODE_ENV = previousNodeEnv
+  }
+}
+
 describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => {
   it('registers the Tailwind Vite plugin', () => {
     const names = collectPluginNames(config.plugins ?? [])
@@ -240,6 +276,9 @@ describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => 
     } finally {
       if (nodeProcess != null) nodeProcess.env.NODE_ENV = previousNodeEnv
     }
+    // Shared with the phase-2 block below (see the declaration).
+    inMemorySwSource =
+      emittedAssets(result).find((asset) => asset.fileName === 'sw.js')?.source ?? ''
   }, 120_000)
 
   it('emits expanded Tailwind utilities instead of the raw @tailwind directive', () => {
@@ -387,7 +426,7 @@ describe('robots.txt (issue #49)', () => {
   })
 })
 
-describe('PWA manifest + icons (issue #104, phase 1)', () => {
+describe('PWA manifest, icons + service worker (issue #104)', () => {
   interface ManifestIcon {
     src: string
     sizes: string
@@ -408,10 +447,17 @@ describe('PWA manifest + icons (issue #104, phase 1)', () => {
   // Filled by the beforeAll: the disk state that installers actually
   // consume (unlike the in-memory build of the block above).
   let built: Awaited<ReturnType<typeof build>>
+  let dist: URL
   let distHtml = ''
   let distManifest = ''
   let manifest: WebManifest
   const iconBytes = new Map<string, Uint8Array>()
+
+  // Phase 2 (issue #104): the injected service worker of the dist build,
+  // parsed once for the assertions below.
+  let distSw = ''
+  let cacheVersion = ''
+  let precacheUrls: string[] = []
 
   beforeAll(async () => {
     // Same NODE_ENV pin as the in-memory build above: exercise the real
@@ -424,7 +470,7 @@ describe('PWA manifest + icons (issue #104, phase 1)', () => {
     } finally {
       if (nodeProcess != null) nodeProcess.env.NODE_ENV = previousNodeEnv
     }
-    const dist = new URL('../dist/', import.meta.url)
+    dist = new URL('../dist/', import.meta.url)
     const decode = new TextDecoder()
     distHtml = decode.decode(await readFile(new URL('index.html', dist)))
     distManifest = decode.decode(await readFile(new URL('manifest.webmanifest', dist)))
@@ -432,6 +478,13 @@ describe('PWA manifest + icons (issue #104, phase 1)', () => {
     for (const icon of manifest.icons) {
       iconBytes.set(icon.src, await readFile(new URL(icon.src, dist)))
     }
+    distSw = decode.decode(await readFile(new URL('sw.js', dist)))
+    cacheVersion = distSw.match(/const CACHE_VERSION = '([^']+)'/)?.[1] ?? ''
+    // Greedy to the end of the line: the injected value must BE the array,
+    // not an array nested inside a leftover placeholder literal.
+    precacheUrls = JSON.parse(
+      distSw.match(/const PRECACHE_URLS = (\[.*\])/)?.[1] ?? '[]',
+    ) as string[]
   }, 120_000)
 
   it('links ./manifest.webmanifest from the built index.html with a relative URL', () => {
@@ -513,10 +566,102 @@ describe('PWA manifest + icons (issue #104, phase 1)', () => {
     }
   })
 
-  it('ships no service worker yet (phase 1 boundary — phase 2 replaces this)', () => {
-    // Phase 2 of issue #104 registers a ./sw.js from the bundle; until
-    // then, nothing worker-related may ship at all.
-    expect(emittedJs(built), 'no SW registration before phase 2').not.toContain('serviceWorker')
-    expect(distHtml).not.toContain('sw.js')
+  it('registers the shell service worker from the bundle (issue #104, phase 2)', () => {
+    // The phase-1 boundary guard ("no SW yet"), reversed: the registration
+    // ships in the JS bundle (src/lib/pwa/registerSw.ts, wired from
+    // main.tsx), while index.html itself must not reference sw.js at all.
+    expect(emittedJs(built), 'the production bundle must register the worker').toContain(
+      'serviceWorker',
+    )
+    expect(emittedJs(built)).toContain('./sw.js')
+    expect(distHtml, 'index.html must not reference the worker directly').not.toContain('sw.js')
+  })
+
+  it('ships dist/sw.js with the build-time placeholders injected', () => {
+    expect(distSw, 'the placeholders must be rewritten into the dist copy').not.toContain(
+      '__GRITOS_',
+    )
+    expect(cacheVersion, 'content-hashed cache version format').toMatch(
+      /^gritos-shell-v[0-9a-f]{12}$/,
+    )
+    // The offline document, the manifest and the static assets are pinned
+    // relatively — resolved against the worker URL, subpath-safe (issue #40).
+    expect(precacheUrls).toContain('./')
+    expect(precacheUrls).toContain('./index.html')
+    expect(precacheUrls).toContain('./manifest.webmanifest')
+  })
+
+  it('precache list covers exactly the served files of dist/', async () => {
+    // './' and './index.html' cache the same document under both keys, and
+    // sw.js itself carries no entry (it is the updater, not payload): the
+    // deduplicated list must equal the dist walk. This is what keeps the
+    // explicitly enumerated SW_PUBLIC_ASSETS honest — a public/ file added
+    // without updating that list fails here.
+    const listed = [
+      ...new Set(precacheUrls.map((url) => (url === './' ? 'index.html' : url.slice(2)))),
+    ].sort()
+    const distDir = decodeURIComponent(dist.pathname).replace(/\/$/, '')
+    const served = (await readdir(distDir, { recursive: true, withFileTypes: true }))
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const parent = entry.parentPath.slice(distDir.length + 1)
+        return parent === '' ? entry.name : `${parent}/${entry.name}`
+      })
+      .filter((file) => file !== 'sw.js')
+      .sort()
+    expect(
+      listed,
+      'the worker must precache every served file — and nothing that does not exist',
+    ).toEqual(served)
+  })
+
+  it('touches only scope-relative URLs: no absolute targets anywhere', () => {
+    expect(
+      distSw,
+      'no absolute fetch targets: cross-origin traffic (the wss: trackers) is none of the worker business',
+    ).not.toMatch(/https?:\/\//)
+    expect(distSw, 'the same-origin gate must run before any respondWith').toContain(
+      'url.origin !== self.location.origin',
+    )
+  })
+
+  it('answers navigations with the cached shell and deletes stale caches on activation', () => {
+    expect(distSw, 'navigations get the offline shell').toContain("caches.match('./index.html')")
+    expect(distSw).toContain("request.mode === 'navigate'")
+    expect(distSw, 'stale gritos-shell caches must be deleted on activation').toContain(
+      "startsWith('gritos-shell-')",
+    )
+    expect(distSw).toContain('caches.delete')
+  })
+
+  it('injects a deterministic cache version for identical build inputs', () => {
+    const version = inMemorySwSource.match(/const CACHE_VERSION = '([^']+)'/)?.[1]
+    expect(version, 'the in-memory build and the dist build must agree').toBe(cacheVersion)
+  })
+
+  it('busts the cache version when the build content changes', async () => {
+    // One extra emitted asset → one extra precached URL → a new version, so
+    // a deploy always replaces (and cleans) the previous cache on activation.
+    const changed = await buildSw([
+      {
+        name: 'version-canary',
+        generateBundle() {
+          this.emitFile({ type: 'asset', fileName: 'version-canary.txt', source: 'bump' })
+        },
+      },
+    ])
+    const version = changed.match(/const CACHE_VERSION = '([^']+)'/)?.[1]
+    expect(version, 'the canary build must still inject a version').toBeDefined()
+    expect(version, 'changed content must change the cache version').not.toBe(cacheVersion)
+  }, 120_000)
+
+  it('keeps the dev server SW-free (stripCspMetaInDev philosophy)', async () => {
+    const serve = await resolveConfig({ ...config, configFile: false }, 'serve', 'development')
+    expect(
+      collectPluginNames(serve.plugins),
+      'the dev server must not load the SW manifest plugin',
+    ).not.toContain('gritos-sw-manifest')
+    const prod = await resolveConfig({ ...config, configFile: false }, 'build', 'production')
+    expect(collectPluginNames(prod.plugins)).toContain('gritos-sw-manifest')
   })
 })
