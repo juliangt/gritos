@@ -298,8 +298,11 @@ Los trackers solo intervienen en el _discovery_ e intercambio SDP inicial. El tr
   "enc": false, // true si body es base64(IV ‖ ct)
   "iv": null, // base64 de 12 B cuando enc
   "body": "hola mundo", // texto plano | base64(ciphertext) | máx. 4000 car. en claro
+  "ttl": 300, // opcional (issue #96): caducidad en segundos enteros, 30–3600 inclusive; ausente = el mensaje vive toda la sesión (7.3)
 }
 ```
+
+**El campo `ttl` (issue #96)** es aditivo y **no estrena versión**: `v` sigue siendo por `kind` — `chat` v:1, `dm` v:2 (issue #93) — y un sobre con `ttl` viaja exactamente con la versión que le corresponde por su `kind`. La degradación con builds mezclados es la ya documentada en 7.3 para campos desconocidos: un build antiguo ignora el campo en silencio y **conserva el mensaje toda la sesión** (nunca falla al parsearlo). Un `ttl` presente pero inválido (0, negativo, fuera de rango, no entero, no numérico) invalida el **sobre entero**, que se descarta como cualquier otra violación de campo — jamás solo el campo, para que un mensaje no degrade silenciosamente a una vida distinta de la que pidió el autor.
 
 ### 7.3 Reglas del protocolo
 
@@ -307,7 +310,8 @@ Los trackers solo intervienen en el _discovery_ e intercambio SDP inicial. El tr
 - **Orden**: se muestra por orden de llegada; dentro de una ventana de 2 s se ordena por `ts`. No hay orden global consensuado (sin servidor) — documentado como limitación aceptable para chat informal.
 - **Tamaño**: cuerpo ≤4000 caracteres en claro; payloads binarios >64 KB se descartan por seguridad.
 - **Desconexión**: `onPeerLeave` limpia presencia y typing del par en esa sala; sus DMs quedan en modo "par desconectado".
-- **Compatibilidad y versionado**: los campos desconocidos del Envelope se ignoran; `v` es discriminatorio por `kind` — `chat` exige `v: 1` y `dm` exige `v: 2` (issue #93) — y cualquier otro valor se descarta en silencio. En salas con builds mezclados, un par v1 descarta en silencio los `dm` v2 y un par nuevo los `dm` v1, en ambas direcciones, hasta que las builds convergen (12.1).
+- **Compatibilidad y versionado**: los campos desconocidos del Envelope se ignoran; `v` es discriminatorio por `kind` — `chat` exige `v: 1` y `dm` exige `v: 2` (issue #93) — y cualquier otro valor se descarta en silencio. En salas con builds mezclados, un par v1 descarta en silencio los `dm` v2 y un par nuevo los `dm` v1, en ambas direcciones, hasta que las builds convergen (12.1). El `ttl` (issue #96, 7.2) es el ejemplo canónico de campo aditivo: un build antiguo lo ignora y conserva el mensaje toda la sesión — la caducidad es cortesía de cada receptor, nunca una garantía del emisor.
+- **Caducidad por mensaje (issue #96)**: un sobre con `ttl` (7.2) caduca **en el reloj del receptor**: al añadirlo al feed, cada par calcula `expiresAt = receivedAt + ttl·1000`, donde `receivedAt` es el `Date.now()` local de ese instante — el `ts` del autor solo se tolera con un sesgo de ±90 s y **jamás se usa para expirar**. Un barrido de 1 s (un único temporizador por sesión, sobre todas las salas y DMs; el scan queda acotado por el cap FIFO de 500 por feed) retira el mensaje vencido — inclusivo: `expiresAt ≤ now` — y sin `ttl` el mensaje vive toda la sesión (el cap FIFO sigue siendo la única evacuación; un mensaje expirado **libera su hueco** antes de que el cap importe). El retiro deja un separador local "— N mensajes expirados —" (espejo del de FIFO), solo en memoria y acumulativo por feed mientras viva. Dos garantías del barrido: **no resurrección** — los ids retirados pasan a un conjunto acotado de expirados, de modo que una repetición del sobre cuya entrada de dedup ya fue evacuada se descarta antes de cualquier efecto (sin feed, sin acuse, sin mención) — y **no retrotoque** — los acuses ya entregados no se revocan, y los no leídos y las notificaciones (menciones y DMs, RF-09) disparadas en la recepción no se deshacen: la caducidad solo muta el feed.
 - **Silencio**: jamás se retransmite un mensaje recibido a terceros (no hay relay en v1; el `to` de un `dm` ajeno se ignora y se descarta).
 - **Silenciado local (issue #95)**: la lista `mutedFingerprints` (8.1) filtra las rutas de recepción por el fingerprint de identidad del par —el derivado de sus claves anunciadas (9.1), no el `fp` auto-declarado del anuncio `presence`—. De un par silenciado se descartan: el `chat` de sala, antes de parsear, deduplicar, añadir al feed, valorar menciones (y su notificación, RF-09) o encolar el acuse; el `dm` dirigido, antes de cualquier trabajo (sin canal nuevo, sin hueco de dedup, sin descifrado); los indicadores `typing` (sala y DM); y las líneas de sistema de unión/salida —el par queda «sin anunciar»: levantado el silencio, su siguiente `presence` revela la línea diferida—. De ese mismo par se siguen procesando `receipt` y `ping/pong` (los ✓✓ y los puntos de latencia siguen honestos) y los anuncios `keys`/`ephkeys` con su pin TOFU (8.2). Carrera: un sobre que llega antes del anuncio de claves del autor se procesa (_fail-open_; el anuncio aterriza en la misma ráfaga de unión, 6.3).
 
@@ -351,6 +355,7 @@ interface Message {
   ts: number
   encrypted: boolean // se recibió cifrado (contraseña de sala)
   status: 'sent' | 'delivered' // solo aplica a mensajes propios
+  expiresAt?: number // issue #96 — instante de caducidad en el reloj del receptor (receivedAt + ttl·1000, 7.3); sin ttl = vive toda la sesión
 }
 
 interface Room {
@@ -362,6 +367,7 @@ interface Room {
   messages: Message[] // cap 500 FIFO
   typing: Record<string, number> // peerId → ts última señal typing
   unread: number
+  expiredCount: number // issue #96 — mensajes TTL retirados por el barrido de este feed; alimenta el separador local (espejo del FIFO, 7.3)
 }
 
 interface DmChannel {
@@ -369,6 +375,7 @@ interface DmChannel {
   peerNick: string
   messages: Message[] // cap 500 FIFO
   unread: number
+  expiredCount: number // issue #96 — mismo acumulador de expirados que Room, para el separador del canal DM
   available: boolean // false si no comparte ninguna sala
 }
 
