@@ -53,7 +53,13 @@ function userMessage(text: string): Message {
 describe('M6 empty states (Spanish, discrete)', () => {
   it('MessageFeed shows the room invitation only while empty', () => {
     const { rerender } = render(
-      <MessageFeed messages={[]} peers={[]} fifoTrimmed={false} ariaLabel="Mensajes" />,
+      <MessageFeed
+        messages={[]}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        ariaLabel="Mensajes"
+      />,
     )
     // Default: without an explicit empty text nothing extra renders.
     expect(screen.queryByText(EMPTY_ROOM_FEED_TEXT)).not.toBeInTheDocument()
@@ -63,6 +69,7 @@ describe('M6 empty states (Spanish, discrete)', () => {
         messages={[]}
         peers={[]}
         fifoTrimmed={false}
+        expiredCount={0}
         ariaLabel="Mensajes"
         emptyStateText={EMPTY_ROOM_FEED_TEXT}
       />,
@@ -74,6 +81,7 @@ describe('M6 empty states (Spanish, discrete)', () => {
         messages={[userMessage('hola')]}
         peers={[]}
         fifoTrimmed={false}
+        expiredCount={0}
         ariaLabel="Mensajes"
         emptyStateText={EMPTY_ROOM_FEED_TEXT}
       />,

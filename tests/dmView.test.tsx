@@ -71,12 +71,19 @@ function room(overrides: Partial<Room> = {}): Room {
     hasPassword: false,
     status: 'connected',
     peers: [
-      { id: 'peer-9', nickname: 'zorro-bravo', fingerprint: 'A31F 09BC 77D2 4E5A', latencyMs: 30, degraded: false },
+      {
+        id: 'peer-9',
+        nickname: 'zorro-bravo',
+        fingerprint: 'A31F 09BC 77D2 4E5A',
+        latencyMs: 30,
+        degraded: false,
+      },
     ],
     messages: [],
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
     ...overrides,
   }
 }
@@ -238,7 +245,10 @@ describe('DM view (RF-04)', () => {
   it('shows the DM channels section with unread badges in the sidebar (RF-04)', () => {
     const store = useAppStore.getState()
     store.ensureDmChannel('peer-2', 'luna-clara', null)
-    store.appendDmMessage('peer-2', dmMessage({ id: 'dm-9', roomId: 'dm:peer-2', authorId: 'peer-2', authorNick: 'luna-clara' }))
+    store.appendDmMessage(
+      'peer-2',
+      dmMessage({ id: 'dm-9', roomId: 'dm:peer-2', authorId: 'peer-2', authorNick: 'luna-clara' }),
+    )
     render(<ChatLayout />)
 
     const section = screen.getByRole('region', { name: 'Mensajes directos' })

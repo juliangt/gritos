@@ -29,6 +29,7 @@ function room(id: string, name: string, overrides: Partial<Room> = {}): Room {
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
     ...overrides,
   }
 }
@@ -98,4 +99,3 @@ describe('Network error banner (RNF-07)', () => {
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })
-

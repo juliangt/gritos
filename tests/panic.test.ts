@@ -219,6 +219,7 @@ describe('post-wipe bootstrap shape (spec §8.1 store fields)', () => {
       typing: {},
       unread: 0,
       fifoTrimmed: false,
+      expiredCount: 0,
     }
     const identity: Identity = { nickname: 'x', fingerprint: 'fp', createdAt: 1 }
     useAppStore.setState({ rooms: { r1: room }, identity, activeView: { kind: 'room', id: 'r1' } })

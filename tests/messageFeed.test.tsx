@@ -55,6 +55,7 @@ describe('MessageFeed smart scroll past the FIFO cap (RF-03)', () => {
     const props = {
       peers: [],
       fifoTrimmed: true,
+      expiredCount: 0,
       ariaLabel: 'feed',
     }
     const base = makeMessages(MESSAGE_CAP)
@@ -70,6 +71,7 @@ describe('MessageFeed smart scroll past the FIFO cap (RF-03)', () => {
     const props = {
       peers: [],
       fifoTrimmed: true,
+      expiredCount: 0,
       ariaLabel: 'feed',
     }
     const base = makeMessages(MESSAGE_CAP)
@@ -84,6 +86,68 @@ describe('MessageFeed smart scroll past the FIFO cap (RF-03)', () => {
     // A second capped append accumulates.
     rerender(<MessageFeed {...props} messages={cappedAppend(one, 2)} />)
     expect(screen.getByRole('button', { name: '↓ 2 mensajes nuevos' })).toBeInTheDocument()
+  })
+})
+
+describe('MessageFeed TTL expiry separator (issue #96)', () => {
+  afterEach(cleanup)
+
+  it('renders the separator with the accumulated count, mirroring the FIFO line', () => {
+    const { container } = render(
+      <MessageFeed
+        messages={makeMessages(2)}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={2}
+        ariaLabel="feed"
+      />,
+    )
+    // Same rendering path as the FIFO separator: a muted centered line at
+    // the top of the log, above the history.
+    const line = screen.getByText('— 2 mensajes expirados —')
+    expect(line).toBeInTheDocument()
+    expect(line.className).toBe('my-1 text-center text-xs text-muted')
+    expect(container.querySelector('[role="log"]')?.firstElementChild).toBe(line)
+  })
+
+  it('pluralizes the count exactly like the other feed counters', () => {
+    render(
+      <MessageFeed
+        messages={makeMessages(1)}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={1}
+        ariaLabel="feed"
+      />,
+    )
+    expect(screen.getByText('— 1 mensaje expirado —')).toBeInTheDocument()
+  })
+
+  it('renders nothing when no message has expired', () => {
+    render(
+      <MessageFeed
+        messages={makeMessages(1)}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        ariaLabel="feed"
+      />,
+    )
+    expect(screen.queryByText(/expirado/)).not.toBeInTheDocument()
+  })
+
+  it('coexists with the FIFO separator above the history', () => {
+    render(
+      <MessageFeed
+        messages={makeMessages(1)}
+        peers={[]}
+        fifoTrimmed={true}
+        expiredCount={5}
+        ariaLabel="feed"
+      />,
+    )
+    expect(screen.getByText('— mensajes anteriores descartados —')).toBeInTheDocument()
+    expect(screen.getByText('— 5 mensajes expirados —')).toBeInTheDocument()
   })
 })
 
@@ -108,6 +172,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         messages={makeMessages(1)}
         peers={authorPeer(PEER_FP)}
         fifoTrimmed={false}
+        expiredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -127,6 +192,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         messages={[ownMessage]}
         peers={authorPeer(PEER_FP)}
         fifoTrimmed={false}
+        expiredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -141,6 +207,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         messages={makeMessages(1)}
         peers={authorPeer(null)}
         fifoTrimmed={false}
+        expiredCount={0}
         ariaLabel="feed"
       />,
     )

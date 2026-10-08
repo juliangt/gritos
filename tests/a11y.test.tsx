@@ -48,13 +48,22 @@ function seedSidebar() {
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
   })
   store.setRecentRooms([])
 }
 
 describe('Accessibility (RNF-05)', () => {
   it('message feed is a polite live log', () => {
-    render(<MessageFeed messages={[]} peers={[]} fifoTrimmed={false} ariaLabel="Mensajes" />)
+    render(
+      <MessageFeed
+        messages={[]}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        ariaLabel="Mensajes"
+      />,
+    )
     const log = screen.getByRole('log', { name: 'Mensajes' })
     expect(log).toHaveAttribute('aria-live', 'polite')
   })
@@ -100,7 +109,9 @@ describe('Accessibility (RNF-05)', () => {
     })
 
     // No aside on the desktop layer; the drawer opens on the ☰ toggle.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Mostrar u ocultar la barra lateral' })[0])
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Mostrar u ocultar la barra lateral' })[0],
+    )
     const drawer = screen.getByRole('dialog', { name: 'Barra lateral' })
     expect(drawer).toBeInTheDocument()
 

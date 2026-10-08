@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageItem } from './MessageItem'
 import { NewMessagesButton } from './NewMessagesButton'
-import { FIFO_SEPARATOR_TEXT, shouldAutoScroll } from '../../lib/feed'
+import { FIFO_SEPARATOR_TEXT, expiredSeparatorText, shouldAutoScroll } from '../../lib/feed'
 import type { Message, Peer } from '../../stores/useAppStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { useMentionCandidates } from '../../hooks/useMentionCandidates'
@@ -11,15 +11,18 @@ import { useMentionCandidates } from '../../hooks/useMentionCandidates'
  * bubbles with smart scrolling — auto-scroll only while the user is ≤150 px
  * from the bottom; otherwise a floating '↓ N mensajes nuevos' button
  * accumulates arrivals and jumps to the bottom on click. The FIFO separator
- * renders once the 500-message cap has trimmed the history. An empty feed
- * shows a discrete invitation (M6 empty states). `role="log"` + the polite
- * live region announce arrivals to assistive tech without stealing focus
- * (RNF-05).
+ * renders once the 500-message cap has trimmed the history, and the TTL
+ * separator once the expiry sweep has removed messages (issue #96). An empty
+ * feed shows a discrete invitation (M6 empty states). `role="log"` + the
+ * polite live region announce arrivals to assistive tech without stealing
+ * focus (RNF-05).
  */
 export function MessageFeed(props: {
   messages: readonly Message[]
   peers: readonly Peer[]
   fifoTrimmed: boolean
+  /** TTL messages removed by the expiry sweep (issue #96); 0 hides the line. */
+  expiredCount: number
   ariaLabel: string
   /** Shown when the feed has no messages (M6 empty state). */
   emptyStateText?: string
@@ -96,6 +99,11 @@ export function MessageFeed(props: {
       >
         {props.fifoTrimmed && (
           <p className="my-1 text-center text-xs text-muted">{FIFO_SEPARATOR_TEXT}</p>
+        )}
+        {props.expiredCount > 0 && (
+          <p className="my-1 text-center text-xs text-muted">
+            {expiredSeparatorText(props.expiredCount)}
+          </p>
         )}
         {props.messages.length === 0 && props.emptyStateText !== undefined && (
           <p role="status" className="my-8 text-center text-sm text-muted">

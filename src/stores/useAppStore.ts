@@ -89,6 +89,13 @@ export interface Message {
   /** Only meaningful for our own messages (RF-03 receipts). */
   status: MessageStatus
   kind?: MessageKind
+  /**
+   * Issue #96 — absolute receiver-clock expiry instant (append-time
+   * Date.now() + ttl*1000); undefined = session-lived (only the FIFO cap
+   * evicts it). Never derived from the author `ts`: that is only
+   * skew-tolerated ±90 s and must not be trusted for expiry.
+   */
+  expiresAt?: number
 }
 
 export type RoomStatus = 'searching' | 'connected' | 'error'
@@ -109,6 +116,13 @@ export interface Room {
   unread: number
   /** True once the FIFO cap has trimmed this room's history (RF-03). */
   fifoTrimmed: boolean
+  /**
+   * Issue #96 — how many TTL messages the expiry sweep has removed from this
+   * feed (drives the local "— N mensajes expirados —" separator). Same
+   * semantics as `fifoTrimmed`: per-feed, latched for the feed's lifetime
+   * (a leave/rejoin starts a fresh room at 0), memory-only.
+   */
+  expiredCount: number
 }
 
 export interface DmChannel {
@@ -123,6 +137,11 @@ export interface DmChannel {
   /** Hard cap of 500 messages, FIFO discard (RF-04). */
   messages: Message[]
   unread: number
+  /**
+   * Issue #96 — TTL messages removed from this channel by the expiry sweep;
+   * feeds the DM separator like the room's `expiredCount` (RF-03 analog).
+   */
+  expiredCount: number
   /** false once no active room is shared with the peer anymore. */
   available: boolean
   /**
@@ -206,6 +225,25 @@ export function appendMessageCapped(
 }
 
 /**
+ * Issue #96 — pure expiry partition of one feed (testable in isolation,
+ * like `appendMessageCapped`): messages whose `expiresAt` is due at `now`
+ * (inclusive) are expired; session-lived ones (no `expiresAt`) are never
+ * swept. Order of the kept prefix is preserved.
+ */
+export function partitionExpired(
+  messages: readonly Message[],
+  now: number,
+): { kept: Message[]; expired: Message[] } {
+  const kept: Message[] = []
+  const expired: Message[] = []
+  for (const message of messages) {
+    if (message.expiresAt !== undefined && message.expiresAt <= now) expired.push(message)
+    else kept.push(message)
+  }
+  return { kept, expired }
+}
+
+/**
  * spec §10.3 — exact connection status header texts, including the
  * best-effort transition state (searching with peers already discovered but
  * no DataChannel yet): "Conectando (N pares encontrados)…".
@@ -246,6 +284,16 @@ export interface AppActions {
   removePeer: (roomId: string, peerId: string) => void
   appendMessage: (roomId: string, message: Message) => void
   markMessagesDelivered: (roomId: string, ids: string[]) => void
+  /**
+   * Issue #96 — removes every message whose `expiresAt` is due at `now` from
+   * ALL room and DM feeds in one pass, accumulating each feed's
+   * `expiredCount` (the local separator). Delivered receipts are never
+   * revoked: removal is a feed-state change only. Returns the removed
+   * message ids (the caller records them so a replayed envelope cannot
+   * resurrect an expired message) — empty and state-untouched when nothing
+   * expired.
+   */
+  sweepExpiredMessages: (now: number) => string[]
   /** ts = null clears the peer's typing entry. */
   setTyping: (roomId: string, peerId: string, ts: number | null) => void
   /**
@@ -376,6 +424,45 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       return changed ? { rooms: { ...state.rooms, [roomId]: { ...room, messages } } } : state
     }),
 
+  // Issue #96 — one guarded pass over every room and DM feed per tick. The
+  // removed ids ride back to the caller (the room manager's no-resurrection
+  // guard); receipts are deliberately untouched (✓✓ stays).
+  sweepExpiredMessages: (now) => {
+    const removed: string[] = []
+    set((state) => {
+      let rooms: Record<string, Room> | null = null
+      for (const [roomId, room] of Object.entries(state.rooms)) {
+        const { kept, expired } = partitionExpired(room.messages, now)
+        if (expired.length === 0) continue
+        for (const message of expired) removed.push(message.id)
+        rooms = {
+          ...(rooms ?? state.rooms),
+          [roomId]: { ...room, messages: kept, expiredCount: room.expiredCount + expired.length },
+        }
+      }
+      let dms: Record<string, DmChannel> | null = null
+      for (const [peerId, channel] of Object.entries(state.dms)) {
+        const { kept, expired } = partitionExpired(channel.messages, now)
+        if (expired.length === 0) continue
+        for (const message of expired) removed.push(message.id)
+        dms = {
+          ...(dms ?? state.dms),
+          [peerId]: {
+            ...channel,
+            messages: kept,
+            expiredCount: channel.expiredCount + expired.length,
+          },
+        }
+      }
+      if (rooms === null && dms === null) return state
+      const patch: Partial<AppState> = {}
+      if (rooms !== null) patch.rooms = rooms
+      if (dms !== null) patch.dms = dms
+      return patch
+    })
+    return removed
+  },
+
   setTyping: (roomId, peerId, ts) =>
     set((state) => {
       const room = state.rooms[roomId]
@@ -434,6 +521,7 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
               peerFingerprint,
               messages: [],
               unread: 0,
+              expiredCount: 0,
               available: false,
               typing: {},
               keyChanged: false,

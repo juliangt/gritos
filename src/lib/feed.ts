@@ -7,6 +7,17 @@
 /** RF-03 — separator shown when the 500-message cap has trimmed history. */
 export const FIFO_SEPARATOR_TEXT = '— mensajes anteriores descartados —'
 
+/**
+ * Issue #96 — local separator for TTL messages the expiry sweep has removed
+ * from this feed. Mirrors the FIFO separator: one line above the history,
+ * memory-only; the count accumulates for the feed's lifetime (same latched
+ * semantics as the FIFO trim flag).
+ */
+export function expiredSeparatorText(count: number): string {
+  const noun = count === 1 ? 'mensaje expirado' : 'mensajes expirados'
+  return `— ${count} ${noun} —`
+}
+
 // ---------------------------------------------------------------------------
 // Empty states (M6, spec §10.4 — discrete, Spanish)
 // ---------------------------------------------------------------------------

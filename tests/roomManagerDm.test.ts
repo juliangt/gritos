@@ -265,6 +265,33 @@ describe('incoming DM (RF-04, §9.2, §12.1 v2)', () => {
     expect(listener).toHaveBeenCalledTimes(1)
   })
 
+  it('received ttl DM expires on the receiver clock and sweeps from the channel (issue #96)', async () => {
+    const { room } = await joinWithPeerA()
+    const mine = await myRawKeyAndFingerprint(room)
+
+    const envelope = await sealFromA('secreto fugaz', manager.getSelfPeerId(), mine)
+    // Real timers (Web Crypto): the append-time Date.now() sits between the
+    // receive and the assertion — a range pins the receiver-clock rule.
+    const receivedAt = Date.now()
+    room.receive('dm', { ...envelope, ttl: 30 }, A.id)
+    await flushMicrotasks()
+
+    const landed = dmChannel(A.id).messages[0]
+    expect(landed?.expiresAt).toBeGreaterThanOrEqual(receivedAt + 30_000)
+    expect(landed?.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000)
+
+    // One sweep past the expiry removes it and feeds the separator count.
+    expect(manager.pruneExpiredMessages(Date.now() + 31_000)).toEqual([envelope.id])
+    const channel = dmChannel(A.id)
+    expect(channel.messages).toHaveLength(0)
+    expect(channel.expiredCount).toBe(1)
+
+    // No resurrection: a replay of the same envelope never re-enters.
+    room.receive('dm', { ...envelope, ttl: 30 }, A.id)
+    await flushMicrotasks()
+    expect(dmChannel(A.id).messages).toHaveLength(0)
+  })
+
   it('a third peer (C) receiving the same envelope must not decrypt or store it', async () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)

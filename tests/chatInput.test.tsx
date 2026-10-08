@@ -4,7 +4,11 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ChatInput } from '../src/components/chat/ChatInput'
-import { DM_DISCONNECTED_TEXT, DM_LEGACY_PEER_TEXT, TYPING_SIGNAL_THROTTLE_MS } from '../src/lib/feed'
+import {
+  DM_DISCONNECTED_TEXT,
+  DM_LEGACY_PEER_TEXT,
+  TYPING_SIGNAL_THROTTLE_MS,
+} from '../src/lib/feed'
 import type { Room } from '../src/stores/useAppStore'
 
 const { sendChat, sendTyping, sendDm, sendDmTyping } = vi.hoisted(() => ({
@@ -30,6 +34,7 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
     ...overrides,
   }
 }

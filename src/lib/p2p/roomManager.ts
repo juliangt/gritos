@@ -298,6 +298,17 @@ const connections = new Map<string, RoomInternals>()
  */
 const seenDmIds = new BoundedSeenIds()
 
+/**
+ * Issue #96 — ids of TTL messages this session has already expired (fed by
+ * the sweep). Bounded with the same FIFO-eviction cap as the dedup windows:
+ * an id only leaves after SEEN_IDS_CAP other messages were appended AND
+ * expired after it — strictly harder than evicting it from any dedup window
+ * — so while it sits here a replay of its envelope (dedup entry long
+ * evicted, e.g. after a reconnect churn) is dropped before any append:
+ * expired messages never resurrect. Memory-only, like every queue here.
+ */
+const expiredMessageIds = new BoundedSeenIds()
+
 let joinRoomImpl: TrysteroJoinRoom = trysteroJoinRoom
 
 /**
@@ -613,6 +624,7 @@ async function doJoinRoom(normalized: string, password?: string): Promise<RoomCo
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
   })
 
   // Issue #31 — a password room's name stays session-only: never recorded
@@ -742,6 +754,9 @@ export function sendChat(roomId: string, text: string, ttl?: number): Envelope |
       })
   }
 
+  // Own echo expires on the receiver clock too (issue #96): the author's
+  // copy disappears together with every peer's.
+  const expiresAt = expiresAtFor(ttl, Date.now())
   useAppStore.getState().appendMessage(roomId, {
     id: envelope.id,
     roomId,
@@ -751,6 +766,7 @@ export function sendChat(roomId: string, text: string, ttl?: number): Envelope |
     ts: envelope.ts,
     encrypted: false,
     status: 'sent',
+    ...(expiresAt !== undefined ? { expiresAt } : {}),
   })
   return envelope
 }
@@ -935,6 +951,8 @@ export async function sendDm(peerId: string, text: string, ttl?: number): Promis
     safeSend(shared.actions.dm, envelope, { target: peerId })
     const nick = channel.peerNick !== '' ? channel.peerNick : peerId
     syncDmTofuState(peerId, nick, theirFp)
+    // Own echo expires on the receiver clock too (issue #96).
+    const expiresAt = expiresAtFor(ttl, Date.now())
     useAppStore.getState().appendDmMessage(peerId, {
       id: envelope.id,
       roomId: `dm:${peerId}`,
@@ -945,6 +963,7 @@ export async function sendDm(peerId: string, text: string, ttl?: number): Promis
       encrypted: false,
       status: 'sent',
       kind: 'user',
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
     })
     return envelope
   } catch {
@@ -1029,6 +1048,29 @@ export function pruneExpiredTyping(roomId: string, now: number): void {
       useAppStore.getState().setTyping(roomId, peerId, null)
     }
   }
+}
+
+/**
+ * Issue #96 — receiver-clock expiry instant for an envelope's optional ttl:
+ * `receivedAt` is THIS peer's Date.now() AT THE STORE APPEND — never the
+ * author `ts`, which is only skew-tolerated ±90 s (MAX_CLOCK_SKEW_MS) and
+ * must not be trusted for expiry. ttl-less messages stay session-lived
+ * (undefined = never swept).
+ */
+function expiresAtFor(ttl: number | undefined, receivedAt: number): number | undefined {
+  return ttl === undefined ? undefined : receivedAt + ttl * 1000
+}
+
+/**
+ * Issue #96 — one expiry sweep over every room and DM feed (the 1 s tick of
+ * useExpirySweep). The store action does the guarded removal and returns the
+ * removed ids; they land in `expiredMessageIds` so the receive paths can
+ * drop a replayed envelope instead of resurrecting the expired message.
+ */
+export function pruneExpiredMessages(now: number): string[] {
+  const removed = useAppStore.getState().sweepExpiredMessages(now)
+  for (const id of removed) expiredMessageIds.add(id)
+  return removed
 }
 
 // ---------------------------------------------------------------------------
@@ -1471,6 +1513,10 @@ function handleChatEnvelope(
   // Dedup BEFORE the async decrypt tail: full-mesh duplicates of an
   // encrypted envelope must be dropped exactly once (§7.3).
   if (!shouldProcess(envelope, connection.seenIds)) return
+  // Issue #96 — no resurrection: once this session has expired the message,
+  // a replay of its envelope (its dedup entry may long be evicted) is
+  // dropped before any append, receipt or mention side effect.
+  if (expiredMessageIds.has(envelope.id)) return
   if (envelope.enc) {
     const roomKey = connection.roomKey
     if (roomKey === null) return // public room has no key: discard (§7.3)
@@ -1492,6 +1538,9 @@ function appendRoomChat(
   text: string,
   encrypted: boolean,
 ): void {
+  // Issue #96 — expiry on the RECEIVER clock: Date.now() at the append,
+  // never the author `ts` (skew-tolerated only).
+  const expiresAt = expiresAtFor(envelope.ttl, Date.now())
   useAppStore.getState().appendMessage(connection.roomId, {
     id: envelope.id,
     roomId: connection.roomId,
@@ -1502,6 +1551,7 @@ function appendRoomChat(
     encrypted,
     status: 'delivered',
     kind: 'user',
+    ...(expiresAt !== undefined ? { expiresAt } : {}),
   })
   // RF-09 — a received message mentioning the own nickname surfaces through
   // the mention seam (the notifications hook applies the hidden/settings/
@@ -1590,6 +1640,9 @@ function handleDmEnvelope(connection: RoomInternals, data: unknown, transportPee
   // Issue #19 — dedup against the session-wide set, not the connection's:
   // replays through other rooms or fresh connections must still be dropped.
   if (!shouldProcess(envelope, seenDmIds)) return
+  // Issue #96 — same no-resurrection guard as the room chat path: an
+  // already-expired DM envelope never re-enters its channel.
+  if (expiredMessageIds.has(envelope.id)) return
   if (!envelope.enc || envelope.iv === null) return
 
   const identity = sessionIdentity
@@ -1655,6 +1708,8 @@ async function decryptDmEnvelope(
     // same §7.3 silence as the catch below.
     if (text.length > MAX_PLAINTEXT_LENGTH) return
     syncDmTofuState(senderId, envelope.nick, theirIdFp)
+    // Issue #96 — expiry on the RECEIVER clock: Date.now() at the append.
+    const expiresAt = expiresAtFor(envelope.ttl, Date.now())
     useAppStore.getState().appendDmMessage(senderId, {
       id: envelope.id,
       roomId: `dm:${senderId}`,
@@ -1665,6 +1720,7 @@ async function decryptDmEnvelope(
       encrypted: false,
       status: 'delivered',
       kind: 'user',
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
     })
     refreshDmAvailability()
     // §6.4/§7.1 — the DM answers with the same debounced directed receipt
@@ -1765,6 +1821,9 @@ export function resetManagerForTests(): void {
   connections.clear()
   pendingJoins.clear()
   seenDmIds.clear()
+  // Issue #96 — the expired-id guard dies with the session like every dedup
+  // window; tests must start pristine.
+  expiredMessageIds.clear()
   pongListeners.clear()
   dmListeners.clear()
   mentionListeners.clear()
