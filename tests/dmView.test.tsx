@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ChatLayout } from '../src/components/chat/ChatLayout'
 import * as manager from '../src/lib/p2p/roomManager'
+import { TTL_SELECT_LABEL } from '../src/components/settings/messages'
 import {
   INITIAL_APP_STATE,
   useAppStore,
@@ -71,12 +72,19 @@ function room(overrides: Partial<Room> = {}): Room {
     hasPassword: false,
     status: 'connected',
     peers: [
-      { id: 'peer-9', nickname: 'zorro-bravo', fingerprint: 'A31F 09BC 77D2 4E5A', latencyMs: 30, degraded: false },
+      {
+        id: 'peer-9',
+        nickname: 'zorro-bravo',
+        fingerprint: 'A31F 09BC 77D2 4E5A',
+        latencyMs: 30,
+        degraded: false,
+      },
     ],
     messages: [],
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
     ...overrides,
   }
 }
@@ -174,6 +182,19 @@ describe('DM view (RF-04)', () => {
     expect(textarea).toHaveValue('')
   })
 
+  // Issue #96 — the TTL selector lives in the shared composer, so the DM
+  // view offers it too and threads the pick into sendDm.
+  it('sends the picked ttl with the DM through the manager bridge', () => {
+    render(<ChatLayout />)
+    fireEvent.change(screen.getByRole('combobox', { name: TTL_SELECT_LABEL }), {
+      target: { value: '30' },
+    })
+    const textarea = screen.getByLabelText('Escribe un mensaje')
+    fireEvent.change(textarea, { target: { value: 'hola fugaz' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola fugaz', 30)
+  })
+
   it('blocks the composer with the exact text once the peer disconnects', () => {
     useAppStore.getState().setDmAvailable('peer-9', false)
     render(<ChatLayout />)
@@ -238,7 +259,10 @@ describe('DM view (RF-04)', () => {
   it('shows the DM channels section with unread badges in the sidebar (RF-04)', () => {
     const store = useAppStore.getState()
     store.ensureDmChannel('peer-2', 'luna-clara', null)
-    store.appendDmMessage('peer-2', dmMessage({ id: 'dm-9', roomId: 'dm:peer-2', authorId: 'peer-2', authorNick: 'luna-clara' }))
+    store.appendDmMessage(
+      'peer-2',
+      dmMessage({ id: 'dm-9', roomId: 'dm:peer-2', authorId: 'peer-2', authorNick: 'luna-clara' }),
+    )
     render(<ChatLayout />)
 
     const section = screen.getByRole('region', { name: 'Mensajes directos' })

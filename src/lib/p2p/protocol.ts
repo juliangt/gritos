@@ -46,6 +46,18 @@ export const MAX_ENCRYPTED_BODY_CHARS = 16_384
 export const MAX_RECEIPT_BATCH = 50
 
 /**
+ * Issue #96 — inclusive bounds of the optional per-message `ttl`, in whole
+ * seconds. Below 30 s the message would effectively self-destruct on mesh
+ * latency alone (peers regularly take seconds to relay); above 1 h it stops
+ * being a session-lived chat and starts being storage. The value rides the
+ * envelope WITHOUT a version bump: old builds drop the unknown field
+ * silently and keep the message for the session (the documented §7.3
+ * degradation), so the sender must never assume the peer honors it.
+ */
+export const MIN_MESSAGE_TTL_S = 30
+export const MAX_MESSAGE_TTL_S = 3600
+
+/**
  * Issue #19 — maximum age of an incoming envelope relative to the local
  * clock. Dedup state is memory-only and resets on every reload, rejoin or
  * (for DMs) connection churn, so a captured envelope replayed later passes
@@ -107,6 +119,13 @@ export type Envelope = {
   iv: string | null
   /** Plaintext | base64(ciphertext); ≤ 4000 chars in plaintext. */
   body: string
+  /**
+   * Issue #96 — optional self-destruct timer in whole seconds
+   * (MIN_MESSAGE_TTL_S..MAX_MESSAGE_TTL_S). Absent ⇒ session-lived (the
+   * FIFO cap remains the only eviction). Ships at the current per-kind
+   * version — no `v` bump; unknown to old builds, which ignore it.
+   */
+  ttl?: number
 }
 
 /** §7.1 — announce nickname + fingerprint. */
@@ -213,7 +232,11 @@ export class BoundedSeenIds {
  * it passes through `sanitizeRemoteNick` (control/invisible characters
  * stripped, trimmed, capped at NICKNAME_MAX_LENGTH); when nothing legible
  * remains the envelope keeps the '' convention and the UI falls back to the
- * peerId-prefix display.
+ * peerId-prefix display. Issue #96 — `ttl` is optional and additive (no `v`
+ * bump): absent keeps the session-lived semantics; a present value must be
+ * an integer within [MIN_MESSAGE_TTL_S, MAX_MESSAGE_TTL_S] seconds — any
+ * other value (0, negative, out of range, non-integer, non-number)
+ * invalidates the WHOLE envelope, like every other field violation.
  */
 export function parseEnvelope(raw: unknown): Envelope | null {
   if (!isPlainObject(raw)) return null
@@ -254,6 +277,24 @@ export function parseEnvelope(raw: unknown): Envelope | null {
     return null
   }
 
+  // Issue #96 — the per-message TTL: absent stays absent (session-lived);
+  // present, it must be an integer inside the inclusive bounds — anything
+  // else drops the WHOLE envelope (§7.3), never just the field, so a
+  // half-valid message cannot degrade silently into a different lifetime
+  // than the author asked for.
+  let ttl: number | undefined
+  if (raw.ttl !== undefined) {
+    if (
+      typeof raw.ttl !== 'number' ||
+      !Number.isInteger(raw.ttl) ||
+      raw.ttl < MIN_MESSAGE_TTL_S ||
+      raw.ttl > MAX_MESSAGE_TTL_S
+    ) {
+      return null
+    }
+    ttl = raw.ttl
+  }
+
   const envelope: Envelope = {
     // The normalized envelope carries the ACTUAL accepted version (1 or 2),
     // not a hardcoded 1: the DM receive path keys off it (v2 ⇒
@@ -269,6 +310,7 @@ export function parseEnvelope(raw: unknown): Envelope | null {
     body: raw.body,
   }
   if (isDm) envelope.to = to
+  if (ttl !== undefined) envelope.ttl = ttl
   return envelope
 }
 
@@ -276,13 +318,16 @@ export function parseEnvelope(raw: unknown): Envelope | null {
  * Builds a valid outgoing envelope with fresh id/timestamp (§7.2). The
  * version defaults to PROTOCOL_VERSION; DM senders pass
  * DM_PROTOCOL_VERSION (issue #93 phase 4, spec §12.1 — session-ephemeral
- * E2EE). Deliberately NO kind-vs-version validation here — the parser is
- * the single gate (§7.3); a mis-versioned envelope would simply be ignored
- * by every receiving peer.
+ * E2EE). Issue #96 — senders may attach `ttl` (seconds); when absent the
+ * field is left off the envelope entirely (the session-lived wire form is
+ * byte-identical to pre-TTL builds). Deliberately NO kind-vs-version or
+ * ttl-vs-bounds validation here — the parser is the single gate (§7.3); a
+ * mis-versioned envelope (or an out-of-bounds ttl) would simply be ignored
+ * — the ttl case dropped whole — by every receiving peer.
  */
 export function createEnvelope(
   fields: Pick<Envelope, 'from' | 'nick' | 'kind' | 'body'> &
-    Partial<Pick<Envelope, 'to' | 'enc' | 'iv' | 'v'>>,
+    Partial<Pick<Envelope, 'to' | 'enc' | 'iv' | 'v' | 'ttl'>>,
 ): Envelope {
   return {
     v: fields.v ?? PROTOCOL_VERSION,
@@ -295,6 +340,7 @@ export function createEnvelope(
     iv: fields.iv ?? null,
     body: fields.body,
     ...(fields.to !== undefined ? { to: fields.to } : {}),
+    ...(fields.ttl !== undefined ? { ttl: fields.ttl } : {}),
   }
 }
 
@@ -316,10 +362,7 @@ export function markSeen(seenIds: SeenIdSet, id: string): boolean {
  * MAX_CLOCK_SKEW_MS in the future. Enforced by `shouldProcess` in both
  * receive paths (chat and DM), before any dedup or store effect.
  */
-export function isWithinFreshnessWindow(
-  ts: number,
-  now: number = Date.now(),
-): boolean {
+export function isWithinFreshnessWindow(ts: number, now: number = Date.now()): boolean {
   const delta = now - ts
   return delta <= MAX_ENVELOPE_AGE_MS && delta >= -MAX_CLOCK_SKEW_MS
 }
@@ -347,10 +390,7 @@ export function isOversized(sizeBytes: number): boolean {
  * are already directed at the recipient, this filter is defense in depth:
  * peers running older builds may still broadcast their DM envelopes.
  */
-export function filterDmForSelf(
-  envelope: Envelope,
-  selfId: string,
-): Envelope | null {
+export function filterDmForSelf(envelope: Envelope, selfId: string): Envelope | null {
   return envelope.to === selfId ? envelope : null
 }
 

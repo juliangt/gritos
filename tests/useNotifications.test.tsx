@@ -27,6 +27,7 @@ class FakeNotification {
   onclick: (() => void) | null = null
   title: string
   options?: { body?: string }
+  close = vi.fn()
 
   constructor(title: string, options?: { body?: string }) {
     this.title = title
@@ -197,5 +198,35 @@ describe('useNotifications (RF-09 end to end)', () => {
     expect(window.focus).toHaveBeenCalledTimes(1)
     expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-a' })
     void connection
+  })
+})
+
+describe('TTL expiry vs notifications (issue #96 Phase 4)', () => {
+  it('a mention in a TTL message notifies at receive; the sweep never retracts it', async () => {
+    stubEnvironment({ hidden: true, permission: 'granted' })
+    renderHook(() => useNotifications())
+
+    const connection = await manager.joinRoom('general')
+    const room = fake.rooms[fake.rooms.length - 1]
+    room.peerJoin('peer-1')
+
+    const ownNick = manager.getSessionIdentity()?.identity.nickname as string
+    room.receive('chat', chatEnvelope({ body: `hola @${ownNick}`, ttl: 30 }), 'peer-1')
+    await flushCrypto()
+
+    // The mention notification fired at receive time, off the store append.
+    expect(FakeNotification.instances).toHaveLength(1)
+    expect(FakeNotification.instances[0]?.title).toBe('gritos — mención en #general')
+
+    // The expiry sweep removes ONLY the feed row; the raised notification is
+    // a fire-and-forget OS surface — no code path closes or re-raises it.
+    expect(useAppStore.getState().rooms[connection.roomId]?.messages).toHaveLength(1)
+    manager.pruneExpiredMessages(Date.now() + 31_000)
+    const stored = useAppStore.getState().rooms[connection.roomId]
+    expect(stored?.messages).toHaveLength(0)
+    expect(stored?.expiredCount).toBe(1)
+    expect(FakeNotification.instances).toHaveLength(1)
+    expect(FakeNotification.instances[0]?.title).toBe('gritos — mención en #general')
+    expect(FakeNotification.instances[0]?.close).not.toHaveBeenCalled()
   })
 })

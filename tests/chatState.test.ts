@@ -4,6 +4,7 @@ import {
   appendMessageCapped,
   connectionStatusText,
   latencyDot,
+  partitionExpired,
   useAppStore,
   type Message,
   type Room,
@@ -11,6 +12,7 @@ import {
 import { INVALID_ROOM_NAME_TEXT, SUGGESTED_ROOMS } from '../src/lib/rooms'
 import {
   FIFO_SEPARATOR_TEXT,
+  expiredSeparatorText,
   formatTimeHHMM,
   joinSystemLine,
   leaveSystemLine,
@@ -30,6 +32,7 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
     ...overrides,
   }
 }
@@ -129,6 +132,153 @@ describe('FIFO cap + separator flag (RF-03)', () => {
   })
 })
 
+describe('TTL expiry sweep (issue #96)', () => {
+  // A fixed receiver clock: every expiresAt below is expressed against T0.
+  const T0 = 1_760_000_000_000
+
+  beforeEach(() => {
+    useAppStore.setState({ ...INITIAL_APP_STATE })
+  })
+
+  it('sweeps only messages whose expiresAt is due, across room and DM feeds in one pass', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    store.ensureDmChannel('peer-1', 'luna-cauta', null)
+    store.setActiveView({ kind: 'room', id: 'room-1' })
+    store.appendMessage('room-1', userMessage({ id: 'expired-room', expiresAt: T0 }))
+    store.appendMessage('room-1', userMessage({ id: 'fresh', expiresAt: T0 + 1_000 }))
+    store.appendMessage('room-1', userMessage({ id: 'session-lived' }))
+    store.appendDmMessage(
+      'peer-1',
+      userMessage({ id: 'expired-dm', roomId: 'dm:peer-1', authorId: 'peer-1', expiresAt: T0 }),
+    )
+
+    const removed = useAppStore.getState().sweepExpiredMessages(T0)
+    expect(removed).toEqual(['expired-room', 'expired-dm'])
+    const room = useAppStore.getState().rooms['room-1']
+    expect(room?.messages.map((message) => message.id)).toEqual(['fresh', 'session-lived'])
+    expect(room?.expiredCount).toBe(1)
+    const channel = useAppStore.getState().dms['peer-1']
+    expect(channel?.messages).toHaveLength(0)
+    expect(channel?.expiredCount).toBe(1)
+  })
+
+  it('treats expiry as inclusive (expiresAt == now is due) and keeps feed order', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    store.appendMessage('room-1', userMessage({ id: 'a', expiresAt: T0 }))
+    store.appendMessage('room-1', userMessage({ id: 'b', expiresAt: T0 + 1 }))
+    expect(useAppStore.getState().sweepExpiredMessages(T0)).toEqual(['a'])
+    expect(useAppStore.getState().rooms['room-1']?.messages.map((m) => m.id)).toEqual(['b'])
+  })
+
+  it('accumulates expiredCount across sweeps for the feed lifetime (FIFO-flag semantics)', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    store.appendMessage('room-1', userMessage({ id: 'a', expiresAt: T0 }))
+    useAppStore.getState().sweepExpiredMessages(T0)
+    store.appendMessage('room-1', userMessage({ id: 'b', expiresAt: T0 }))
+    store.appendMessage('room-1', userMessage({ id: 'c', expiresAt: T0 }))
+    useAppStore.getState().sweepExpiredMessages(T0)
+    // Never resets while the feed lives — the separator count only grows.
+    expect(useAppStore.getState().rooms['room-1']?.expiredCount).toBe(3)
+  })
+
+  it('is a guarded write: a sweep with nothing due leaves the state untouched', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom({ unread: 2 }))
+    store.appendMessage('room-1', userMessage({ id: 'session-lived' }))
+    const before = useAppStore.getState().rooms['room-1']
+
+    expect(useAppStore.getState().sweepExpiredMessages(T0)).toEqual([])
+    expect(useAppStore.getState().rooms['room-1']).toBe(before)
+  })
+
+  it('frees FIFO slots before the 500 cap matters (no double-trim weirdness)', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    store.appendMessage('room-1', userMessage({ id: 'doomed', expiresAt: T0 }))
+    expect(useAppStore.getState().sweepExpiredMessages(T0)).toEqual(['doomed'])
+
+    // Refill from the swept feed: the cap trims exactly when it should.
+    for (let i = 0; i < 500; i += 1) {
+      store.appendMessage('room-1', userMessage({ id: `m${i}` }))
+    }
+    let room = useAppStore.getState().rooms['room-1']
+    expect(room?.messages).toHaveLength(500)
+    expect(room?.fifoTrimmed).toBe(false)
+
+    store.appendMessage('room-1', userMessage({ id: 'm500' }))
+    room = useAppStore.getState().rooms['room-1']
+    expect(room?.messages).toHaveLength(500)
+    expect(room?.messages[0]?.id).toBe('m1')
+    expect(room?.fifoTrimmed).toBe(true)
+  })
+
+  it('keeps fifoTrimmed latched after expiry shrinks a trimmed feed', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    for (let i = 0; i < 501; i += 1) {
+      store.appendMessage('room-1', userMessage({ id: `m${i}` }))
+    }
+    // The two TTL appends ride a full feed: each trims one session-lived row.
+    store.appendMessage('room-1', userMessage({ id: 'x1', expiresAt: T0 }))
+    store.appendMessage('room-1', userMessage({ id: 'x2', expiresAt: T0 }))
+
+    expect(useAppStore.getState().sweepExpiredMessages(T0)).toEqual(['x1', 'x2'])
+    const room = useAppStore.getState().rooms['room-1']
+    expect(room?.messages).toHaveLength(498)
+    // The trim flag never un-latches: history was already lost once.
+    expect(room?.fifoTrimmed).toBe(true)
+
+    store.appendMessage('room-1', userMessage({ id: 'tail' }))
+    expect(useAppStore.getState().rooms['room-1']?.messages.at(-1)?.id).toBe('tail')
+  })
+
+  it('never revokes delivered receipts: removal is feed-state only', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    store.setActiveView({ kind: 'room', id: 'room-1' })
+    store.appendMessage(
+      'room-1',
+      userMessage({ id: 'mine', authorId: 'self', status: 'delivered' }),
+    )
+    store.appendMessage('room-1', userMessage({ id: 'theirs', expiresAt: T0 }))
+
+    useAppStore.getState().sweepExpiredMessages(T0)
+    const own = useAppStore.getState().rooms['room-1']?.messages[0]
+    expect(own?.id).toBe('mine')
+    expect(own?.status).toBe('delivered')
+
+    // A receipt for an id the sweep already removed: no crash, no change.
+    expect(() => useAppStore.getState().markMessagesDelivered('room-1', ['theirs'])).not.toThrow()
+    expect(useAppStore.getState().rooms['room-1']?.messages[0]?.status).toBe('delivered')
+  })
+
+  it('does not retro-decrement unread (same no-retro rule as mention notifications)', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom({ unread: 1 }))
+    store.appendMessage('room-1', userMessage({ id: 'theirs', expiresAt: T0 }))
+
+    useAppStore.getState().sweepExpiredMessages(T0)
+    // The badge counts arrivals, not current rows: expiry is not a read.
+    expect(useAppStore.getState().rooms['room-1']?.unread).toBe(2)
+  })
+
+  it('partitionExpired is inclusive at the boundary and keeps the kept-prefix order', () => {
+    const messages = [
+      userMessage({ id: 'a' }),
+      userMessage({ id: 'b', expiresAt: T0 + 5 }),
+      userMessage({ id: 'c' }),
+      userMessage({ id: 'd', expiresAt: T0 }),
+    ]
+    // now == expiresAt is due; session-lived rows ('a', 'c') are never swept.
+    const { kept, expired } = partitionExpired(messages, T0 + 5)
+    expect(kept.map((message) => message.id)).toEqual(['a', 'c'])
+    expect(expired.map((message) => message.id)).toEqual(['b', 'd'])
+  })
+})
+
 describe('arrival order + 2 s ts-window (spec §7.3)', () => {
   const T0 = 1_760_000_000_000
 
@@ -152,10 +302,7 @@ describe('arrival order + 2 s ts-window (spec §7.3)', () => {
 
   it('own echoes and system lines stay at the tail (barriers)', () => {
     let acc = appendMessageCapped([], userMessage({ id: 'a', ts: T0 + 1_000 }))
-    acc = appendMessageCapped(
-      acc,
-      userMessage({ id: 'own', authorId: 'self', ts: T0 + 1_100 }),
-    )
+    acc = appendMessageCapped(acc, userMessage({ id: 'own', authorId: 'self', ts: T0 + 1_100 }))
     // Older than everything, but it must not cross the own message.
     acc = appendMessageCapped(acc, userMessage({ id: 'late', ts: T0 }))
     expect(acc.map((message) => message.id)).toEqual(['a', 'own', 'late'])
@@ -238,5 +385,10 @@ describe('feed presentation helpers', () => {
   it('builds the new-messages button label (RF-03)', () => {
     expect(newMessagesButtonText(1)).toBe('↓ 1 mensaje nuevo')
     expect(newMessagesButtonText(7)).toBe('↓ 7 mensajes nuevos')
+  })
+
+  it('builds the expiry separator line (issue #96, FIFO-separator wording)', () => {
+    expect(expiredSeparatorText(1)).toBe('— 1 mensaje expirado —')
+    expect(expiredSeparatorText(3)).toBe('— 3 mensajes expirados —')
   })
 })

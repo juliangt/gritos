@@ -14,6 +14,7 @@ import {
   DM_PROTOCOL_VERSION,
   MAX_CLOCK_SKEW_MS,
   MAX_ENVELOPE_AGE_MS,
+  parseEnvelope,
   type Envelope,
 } from '../src/lib/p2p/protocol'
 import {
@@ -84,9 +85,7 @@ beforeEach(async () => {
 
 /** Joins the manager into a room and introduces remote peer A into it as a
  * v2-capable peer (join + presence + `keys` + `ephkeys`). */
-async function joinWithPeerA(
-  name = 'lobby',
-): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
+async function joinWithPeerA(name = 'lobby'): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
   const connection = await manager.joinRoom(name)
   const room = fake.rooms[fake.rooms.length - 1]
   await fakePeerJoins(room, A, { nick: 'zorro-bravo' })
@@ -266,6 +265,33 @@ describe('incoming DM (RF-04, §9.2, §12.1 v2)', () => {
     expect(listener).toHaveBeenCalledTimes(1)
   })
 
+  it('received ttl DM expires on the receiver clock and sweeps from the channel (issue #96)', async () => {
+    const { room } = await joinWithPeerA()
+    const mine = await myRawKeyAndFingerprint(room)
+
+    const envelope = await sealFromA('secreto fugaz', manager.getSelfPeerId(), mine)
+    // Real timers (Web Crypto): the append-time Date.now() sits between the
+    // receive and the assertion — a range pins the receiver-clock rule.
+    const receivedAt = Date.now()
+    room.receive('dm', { ...envelope, ttl: 30 }, A.id)
+    await flushMicrotasks()
+
+    const landed = dmChannel(A.id).messages[0]
+    expect(landed?.expiresAt).toBeGreaterThanOrEqual(receivedAt + 30_000)
+    expect(landed?.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000)
+
+    // One sweep past the expiry removes it and feeds the separator count.
+    expect(manager.pruneExpiredMessages(Date.now() + 31_000)).toEqual([envelope.id])
+    const channel = dmChannel(A.id)
+    expect(channel.messages).toHaveLength(0)
+    expect(channel.expiredCount).toBe(1)
+
+    // No resurrection: a replay of the same envelope never re-enters.
+    room.receive('dm', { ...envelope, ttl: 30 }, A.id)
+    await flushMicrotasks()
+    expect(dmChannel(A.id).messages).toHaveLength(0)
+  })
+
   it('a third peer (C) receiving the same envelope must not decrypt or store it', async () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
@@ -419,6 +445,22 @@ describe('outgoing DM (RF-04, §9.2, §12.1 v2)', () => {
       text: 'hola desde B',
       status: 'sent',
     })
+  })
+
+  it('sendDm attaches an optional ttl to the v2 envelope (issue #96)', async () => {
+    await manager.ensureSessionIdentity()
+    const { room } = await joinWithPeerA()
+    manager.openDmChannel(A.id)
+
+    const envelope = await manager.sendDm(A.id, 'secreto efímero', 60)
+    expect(envelope).not.toBeNull()
+    // Test guard: ttl rides the CURRENT dm version (v2) — no v bump — and
+    // the receiving parser accepts the wire form whole.
+    const wire = envelope as Envelope
+    expect(wire.ttl).toBe(60)
+    expect(wire.v).toBe(DM_PROTOCOL_VERSION)
+    expect(room.lastSend('dm').data).toEqual(envelope)
+    expect(parseEnvelope(wire)?.ttl).toBe(60)
   })
 
   it('flips own DM messages to delivered when the peer receipts them', async () => {

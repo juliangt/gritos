@@ -43,6 +43,7 @@ function room(overrides: Partial<Room> = {}): Room {
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
     ...overrides,
   }
 }

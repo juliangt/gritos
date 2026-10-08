@@ -13,6 +13,7 @@ import { useUiStore } from '../../stores/useUiStore'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useLatency } from '../../hooks/useLatency'
+import { useExpirySweep } from '../../hooks/useExpirySweep'
 import { useNotifications } from '../../hooks/useNotifications'
 import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
 import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
@@ -50,6 +51,10 @@ export function ChatLayout() {
   const [linkedRoomName, setLinkedRoomName] = useState<string | null>(null)
 
   useNotifications()
+
+  // Issue #96 — one session-wide 1 s tick expires TTL messages from every
+  // room and DM feed (DM channels outlive rooms, so this is app-scoped).
+  useExpirySweep()
 
   // RF-01/RF-07 — auto-join #lobby on start when the setting is on. The
   // manager dedups concurrent/in-flight joins (StrictMode, onboarding race).
@@ -129,8 +134,7 @@ export function ChatLayout() {
   useFocusTrap({ open: drawerVisible, panelRef: drawerPanelRef })
 
   const activeRoom = activeView?.kind === 'room' ? (rooms[activeView.id] ?? null) : null
-  const activeDm =
-    activeView?.kind === 'dm' ? (dms[activeView.peerId] ?? null) : null
+  const activeDm = activeView?.kind === 'dm' ? (dms[activeView.peerId] ?? null) : null
 
   // The DM feed reuses the room components: the remote peer rides in as a
   // one-entry peer list (mention candidates, typing bar, author colors).
@@ -236,6 +240,7 @@ export function ChatLayout() {
               messages={activeDm.messages}
               peers={dmPeers}
               fifoTrimmed={false}
+              expiredCount={activeDm.expiredCount}
               ariaLabel={dmFeedLabel(activeDm.peerNick)}
               emptyStateText={EMPTY_DM_FEED_TEXT}
             />
@@ -262,6 +267,7 @@ export function ChatLayout() {
               messages={activeRoom.messages}
               peers={activeRoom.peers}
               fifoTrimmed={activeRoom.fifoTrimmed}
+              expiredCount={activeRoom.expiredCount}
               ariaLabel={`Mensajes de #${activeRoom.name}`}
               emptyStateText={EMPTY_ROOM_FEED_TEXT}
             />

@@ -50,6 +50,7 @@ function room(overrides: Partial<Room> = {}): Room {
     typing: {},
     unread: 0,
     fifoTrimmed: false,
+    expiredCount: 0,
     ...overrides,
   }
 }
@@ -127,7 +128,12 @@ describe('JoinRoomPopover — sala cifrada toggle (RF-05)', () => {
 
 describe('🔒 indicators and not-found status (RF-05)', () => {
   it('ChatHeader shows 🔒 next to the room name when hasPassword', () => {
-    render(<ChatHeader room={room({ id: 'room-x', name: 'secreta', hasPassword: true })} onToggleSidebar={vi.fn()} />)
+    render(
+      <ChatHeader
+        room={room({ id: 'room-x', name: 'secreta', hasPassword: true })}
+        onToggleSidebar={vi.fn()}
+      />,
+    )
     expect(screen.getByRole('img', { name: 'sala cifrada' })).toHaveTextContent('🔒')
     expect(screen.getByText(/#secreta/)).toBeInTheDocument()
   })
@@ -157,7 +163,9 @@ describe('🔒 indicators and not-found status (RF-05)', () => {
       />,
     )
     expect(
-      screen.getByText('Sin acceso a trackers — revisa tu conexión o configura trackers alternativos'),
+      screen.getByText(
+        'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos',
+      ),
     ).toBeInTheDocument()
   })
 
@@ -195,6 +203,7 @@ describe('encrypted placeholder rendering (RF-05)', () => {
         messages={[placeholder]}
         peers={[]}
         fifoTrimmed={false}
+        expiredCount={0}
         ariaLabel="Mensajes de la sala"
       />,
     )
