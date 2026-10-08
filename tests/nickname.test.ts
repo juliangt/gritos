@@ -88,7 +88,7 @@ describe('isValidNickname (RF-01: 2–24, letters/numbers/space/hyphen/underscor
   it('keeps the constants consistent with the spec', () => {
     expect(NICKNAME_MIN_LENGTH).toBe(2)
     expect(NICKNAME_MAX_LENGTH).toBe(24)
-    expect(NICKNAME_ERROR_TEXT).toContain('2 y 24')
+    expect(NICKNAME_ERROR_TEXT).toContain('2 to 24')
   })
 })
 

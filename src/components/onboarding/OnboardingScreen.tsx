@@ -15,7 +15,7 @@ import { P2P_DISCLOSURE_TEXT } from '../settings/messages'
 /**
  * First-visit onboarding (RF-01, spec §10.2): centered screen over the
  * theme background with the typographic logo, the nickname field, the
- * 'sorpréndeme' generator and the 'Entrar →' action. Entering persists the
+ * 'surprise me' generator and the 'Enter →' action. Entering persists the
  * identity profile and — when `autoJoinLobby` is on — joins #lobby, which
  * becomes the initial active view. A '#sala' deep link (issue #41) is
  * carried through: after the nickname is chosen the linked room is joined
@@ -73,7 +73,7 @@ export function OnboardingScreen() {
       if (useAppStore.getState().identity === null) setEntering(false)
     } catch {
       // Web Crypto unavailable (non-secure context): stay and explain.
-      setError('No se pudo crear la identidad local (contexto no seguro).')
+      setError('Could not create the local identity (insecure context).')
       setEntering(false)
     }
   }
@@ -83,18 +83,18 @@ export function OnboardingScreen() {
       <div className="flex flex-col items-center gap-3">
         <h1 className="text-5xl font-bold tracking-tight">gritos</h1>
         <p className="max-w-md text-center text-sm text-muted">
-          Sin servidor, sin cuentas: tus mensajes viajan directos entre navegadores y desaparecen al
-          recargar.
+          No server, no accounts: your messages travel directly between browsers and disappear on
+          reload.
         </p>
       </div>
 
       <form
-        aria-label="entrada"
+        aria-label="enter"
         onSubmit={(event) => void enter(event)}
         className="flex w-full max-w-sm flex-col gap-4"
       >
         <label className="flex flex-col gap-1 text-sm font-medium">
-          Tu apodo
+          Your nickname
           <NicknameInput
             value={value}
             onValueChange={(next) => {
@@ -113,25 +113,25 @@ export function OnboardingScreen() {
             disabled={entering}
             className="rounded-md border border-border px-3 py-2 text-sm hover:border-accent disabled:opacity-50"
           >
-            sorpréndeme
+            surprise me
           </button>
           <button
             type="submit"
             disabled={entering}
             className="ml-auto rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-text disabled:opacity-50"
           >
-            Entrar →
+            Enter →
           </button>
         </div>
         {autoJoinLobby && (
           <p className="text-center text-xs text-muted">
-            Entrarás en #lobby automáticamente; desde la barra lateral podrás unirte a otras salas.
+            You will join #lobby automatically; from the sidebar you can join other rooms.
           </p>
         )}
         {linkedRoom !== null && (
           <p className="text-center text-xs text-muted">
-            Entrarás en la sala <span className="font-mono text-text">#{linkedRoom}</span> del
-            enlace compartido.
+            You will join the room <span className="font-mono text-text">#{linkedRoom}</span> from
+            the shared link.
           </p>
         )}
         <p className="text-center text-xs text-muted">{P2P_DISCLOSURE_TEXT}</p>

@@ -35,7 +35,7 @@ self.addEventListener('install', (event) => {
 
 // Deliberately NO skipWaiting (issue #104, phase 4): a new version installs
 // and then WAITS while the page — still running the old one — shows the
-// «Nueva versión disponible — Recargar» toast, and only the user's reload
+// "New version available — Reload" toast, and only the user's reload
 // dismisses the old client so the waiting worker activates (the activate
 // handler below cleans the stale caches behind it). Swapping the shell
 // under a live chat session without asking is exactly what the toast

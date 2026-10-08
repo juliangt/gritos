@@ -322,7 +322,7 @@ export function clearDmKeyCache(): void {
  */
 export async function encryptDm(key: CryptoKey, plaintext: string): Promise<SealedPayload> {
   if (plaintext.length > MAX_PLAINTEXT_LENGTH) {
-    throw new RangeError(`El mensaje supera el límite de ${MAX_PLAINTEXT_LENGTH} caracteres`)
+    throw new RangeError(`The message exceeds the limit of ${MAX_PLAINTEXT_LENGTH} characters`)
   }
   const iv = crypto.getRandomValues(new Uint8Array(DM_IV_BYTES))
   const ciphertext = new Uint8Array(
@@ -346,7 +346,7 @@ export async function decryptDm(key: CryptoKey, payload: SealedPayload): Promise
     throw new RangeError('Payload DM demasiado corto')
   }
   if (payload.iv !== '' && payload.iv !== bytesToBase64(combined.slice(0, DM_IV_BYTES))) {
-    throw new RangeError('IV del sobre inconsistente con el payload')
+    throw new RangeError('Envelope IV inconsistent with the payload')
   }
   const iv = combined.slice(0, DM_IV_BYTES)
   const ciphertext = combined.slice(DM_IV_BYTES)

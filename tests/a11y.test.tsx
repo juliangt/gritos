@@ -75,14 +75,14 @@ describe('Accessibility (RNF-05)', () => {
     seedSidebar()
     render(<Sidebar />)
 
-    const activas = within(screen.getByRole('region', { name: 'Salas activas' }))
+    const activas = within(screen.getByRole('region', { name: 'Active rooms' }))
     expect(activas.getAllByRole('list')).toHaveLength(1)
     expect(activas.getAllByRole('listitem')).toHaveLength(1)
 
-    const pares = within(screen.getByRole('region', { name: 'Pares' }))
+    const pares = within(screen.getByRole('region', { name: 'Peers' }))
     expect(pares.getAllByRole('listitem')).toHaveLength(1)
 
-    const dms = within(screen.getByRole('region', { name: 'Mensajes directos' }))
+    const dms = within(screen.getByRole('region', { name: 'Direct messages' }))
     // Empty DM section: no list, just the empty-state line.
     expect(dms.queryByRole('list')).not.toBeInTheDocument()
   })
@@ -90,11 +90,11 @@ describe('Accessibility (RNF-05)', () => {
   it('the join popover closes with Esc', () => {
     seedSidebar()
     render(<Sidebar />)
-    fireEvent.click(screen.getByRole('button', { name: '[+ Unirse]' }))
-    expect(screen.getByRole('form', { name: 'Unirse por nombre' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '[+ Join]' }))
+    expect(screen.getByRole('form', { name: 'Join by name' })).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByRole('form', { name: 'Unirse por nombre' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Join by name' })).not.toBeInTheDocument()
   })
 
   it('the mobile drawer closes with Esc (≤768 px)', async () => {
@@ -112,15 +112,13 @@ describe('Accessibility (RNF-05)', () => {
     })
 
     // No aside on the desktop layer; the drawer opens on the ☰ toggle.
-    fireEvent.click(
-      screen.getAllByRole('button', { name: 'Mostrar u ocultar la barra lateral' })[0],
-    )
-    const drawer = screen.getByRole('dialog', { name: 'Barra lateral' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show or hide the sidebar' })[0])
+    const drawer = screen.getByRole('dialog', { name: 'Sidebar' })
     expect(drawer).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Barra lateral' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: 'Sidebar' })).not.toBeInTheDocument()
     })
   })
 })

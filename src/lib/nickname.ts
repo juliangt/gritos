@@ -202,9 +202,9 @@ export function generateNickname(): string {
   return candidate
 }
 
-/** RF-01 — inline validation message for an invalid nickname. */
+/** RF-01 — inline validation message for an invalid nickname (English UI copy, issue #112). */
 export const NICKNAME_ERROR_TEXT =
-  'Usa entre 2 y 24 caracteres: letras, números, espacios, guiones y guion bajo.'
+  'Use 2 to 24 characters: letters, numbers, spaces, hyphens and underscores.'
 
 /**
  * RF-06 — duplicate-nickname disambiguation: when two or more peers in the

@@ -27,27 +27,27 @@ import { useRoomManager } from '../../hooks/useRoomManager'
 
 /**
  * Trackerless manual DM wizard (spec §12.2, issue #97 phase 3): role pick →
- * copyable invite blob (A) or pasted invite → answer blob (B) → «Canal P2P
- * establecido» → the manager lands the user in the standard DM view.
+ * copyable invite blob (A) or pasted invite → answer blob (B) → «P2P channel
+ * established» → the manager lands the user in the standard DM view.
  *
- * - The exact §12.2 warning «La invitación puede contener información de tu
- *   net» accompanies EVERY blob shown for copying.
- * - Every state is cancellable («Cancelar», Esc, backdrop): the pending
+ * - The exact §12.2 warning «The invitation may contain information about
+ *   your network» accompanies EVERY blob shown for copying.
+ * - Every state is cancellable («Cancel», Esc, backdrop): the pending
  *   engine is disposed and the wizard closes with no store trace (channels
  *   are only created on connect).
  * - A rejected paste shows the inline error and keeps the wizard open — the
  *   engine semantics make the paste retryable (state untouched on rejection).
  * - Machine-guard failures (`failed`) and post-connect drops surface the
- *   visible error + «Volver a empezar» (RNF-07): a new exchange always needs
+ *   visible error + «Start over» (RNF-07): a new exchange always needs
  *   a fresh engine and fresh blobs (§12.2 reconnection).
  * - a11y: the Modal carries the focus trap (useFocusTrap), every control has
  *   an accessible name and the progress line is a polite live region.
  */
 
-/** How long the «Canal P2P establecido» confirmation stays before closing. */
+/** How long the «P2P channel established» confirmation stays before closing. */
 const CONNECTED_FEEDBACK_MS = 800
 
-/** How long the 'Copiado' feedback stays visible (ChatHeader pattern). */
+/** How long the 'Copied' feedback stays visible (ChatHeader pattern). */
 const COPIED_FEEDBACK_MS = 2_000
 
 type Screen =
@@ -59,11 +59,11 @@ type Screen =
   | 'connected' // brief confirmation, then the wizard closes itself
   | 'failed' // guard fired or link dropped: visible error + retry
 
-/** Maps an engine/blob rejection to its exact Spanish inline message. */
+/** Maps an engine/blob rejection to its exact English inline message. */
 function errorTextFor(error: unknown): string {
   if (error instanceof ManualBlobError) return MANUAL_BLOB_ERROR_TEXT[error.reason]
   if (error instanceof ManualPeerError) return MANUAL_PEER_ERROR_TEXT[error.code] ?? error.message
-  return error instanceof Error && error.message !== '' ? error.message : 'Error desconocido'
+  return error instanceof Error && error.message !== '' ? error.message : 'Unknown error'
 }
 
 export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {

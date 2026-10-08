@@ -117,7 +117,7 @@ describe('joinRoom (RF-02, spec §6.3)', () => {
     await manager.joinRoom('dev')
     const rejection = manager.joinRoom('random')
     await expect(rejection).rejects.toThrowError(manager.RoomLimitError)
-    await expect(rejection).rejects.toThrow('Límite de salas activas alcanzado (2)')
+    await expect(rejection).rejects.toThrow('Active room limit reached (2)')
     expect(manager.getActiveRoomCount()).toBe(2)
     expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(2)
   })
@@ -351,7 +351,7 @@ describe('setNickname validation (issue #28, RF-01)', () => {
 
     const rejected = 'a'.repeat(NICKNAME_MAX_LENGTH + 1)
     expect(() => manager.setNickname(rejected)).toThrowError(manager.NicknameError)
-    expect(() => manager.setNickname(rejected)).toThrowError(`Apodo no válido: «${rejected}»`)
+    expect(() => manager.setNickname(rejected)).toThrowError(`Invalid nickname: "${rejected}"`)
     expect(manager.getSessionIdentity()?.identity.nickname).toBe(identityBefore)
     expect(useAppStore.getState().identity?.nickname).toBe(identityBefore)
     await flushMicrotasks()
@@ -1738,7 +1738,7 @@ describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
       roomId,
       authorId: 'peer-1',
       authorNick: 'x',
-      text: '🔒 mensaje cifrado',
+      text: '🔒 encrypted message',
       ts: Date.now(),
       encrypted: true,
       status: 'delivered',
@@ -1830,7 +1830,7 @@ describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
 
 // ---------------------------------------------------------------------------
 // Issue #102 phase 3 — the request UX's transport seam (requestHistory, the
-// [Pedir] button) and the recovered-state append wiring (onRecovered →
+// [Ask] button) and the recovered-state append wiring (onRecovered →
 // store). The card dismisses on tap; the manager's per-room ask budget
 // rate-limits repeat joins. Recovered batches append in wire order as
 // `recovered: true` rows under the latched separator counter — never
@@ -1839,7 +1839,7 @@ describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
 // and receiver-clock TTL expiry mirrored from the live path.
 // ---------------------------------------------------------------------------
 
-describe('issue #102 phase 3 — requestHistory (the [Pedir] transport)', () => {
+describe('issue #102 phase 3 — requestHistory (the [Ask] transport)', () => {
   it('refuses an unknown room without throwing', () => {
     expect(manager.requestHistory('nope')).toBe(false)
   })
@@ -2134,6 +2134,6 @@ describe('issue #102 phase 3 — recovered append (onRecovered → store)', () =
     })
     const last = storedRoom(roomId).messages.at(-1)
     expect(last?.encrypted).toBe(true)
-    expect(last?.text).toBe('🔒 mensaje cifrado')
+    expect(last?.text).toBe('🔒 encrypted message')
   })
 })

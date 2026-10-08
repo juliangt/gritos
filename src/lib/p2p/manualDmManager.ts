@@ -125,7 +125,7 @@ function ensureManualTypingSweeper(): void {
 function manualPeerNickname(engine: ManualPeerEngine): string {
   const sanitized = sanitizeRemoteNick(engine.remoteNick ?? '')
   if (sanitized !== null) return sanitized
-  return `par ${engine.remoteFingerprint?.slice(0, 4) ?? '????'}`
+  return `peer ${engine.remoteFingerprint?.slice(0, 4) ?? '????'}`
 }
 
 /**
@@ -136,7 +136,7 @@ function manualPeerNickname(engine: ManualPeerEngine): string {
 function reconcileManualChannel(engine: ManualPeerEngine): string {
   const remoteFingerprint = engine.remoteFingerprint
   if (remoteFingerprint === null) {
-    throw new ManualPeerError('not-connected', 'No hay par validado')
+    throw new ManualPeerError('not-connected', 'No validated peer')
   }
   const key = manualDmKey(canonicalFingerprint(remoteFingerprint))
   pinTofuFingerprint(key, remoteFingerprint)
@@ -263,7 +263,7 @@ export async function startManualDmInvite(onEvent: ManualDmEventCallback): Promi
     // Cancelled (or superseded) while the engine was being created: dispose
     // and bail — a cancelled flow must never come back to life (§12.2).
     engine.dispose()
-    throw new ManualPeerError('illegal-transition', 'La conexión manual fue cancelada')
+    throw new ManualPeerError('illegal-transition', 'The manual connection was cancelled')
   }
   pendingCreation = null
   pendingFlow = { engine, onEvent }
@@ -282,7 +282,7 @@ export async function startManualDmAnswer(onEvent: ManualDmEventCallback): Promi
   const engine = await creating
   if (generation !== flowGeneration) {
     engine.dispose()
-    throw new ManualPeerError('illegal-transition', 'La conexión manual fue cancelada')
+    throw new ManualPeerError('illegal-transition', 'The manual connection was cancelled')
   }
   pendingCreation = null
   pendingFlow = { engine, onEvent }
@@ -298,12 +298,12 @@ async function requirePendingEngine(role: 'invite' | 'answer'): Promise<ManualPe
   const creating = pendingCreation
   if (creating !== null) {
     await creating.catch(() => {
-      throw new ManualPeerError('illegal-transition', 'No hay conexión manual pendiente')
+      throw new ManualPeerError('illegal-transition', 'No pending manual connection')
     })
   }
   const engine = pendingFlow?.engine
   if (engine === undefined || engine.role !== role) {
-    throw new ManualPeerError('illegal-transition', 'No hay invitación pendiente')
+    throw new ManualPeerError('illegal-transition', 'No pending invitation')
   }
   return engine
 }
@@ -443,7 +443,7 @@ export function invalidateManualDmsOnIdentityRegeneration(): void {
     'failed',
     new ManualPeerError(
       'illegal-transition',
-      'La identidad cambió: la conexión manual fue cancelada',
+      'The identity changed: the manual connection was cancelled',
     ),
   )
 }

@@ -87,7 +87,7 @@ describe('deep links — chat shell (existing identity)', () => {
       expect(useAppStore.getState().activeView).toEqual({ kind: 'room', id: lobbyRoomId })
     })
     expect(fake.joinRoomFn).toHaveBeenCalledTimes(1) // lobby only
-    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
     expect(window.location.hash).toBe('')
   })
 
@@ -104,8 +104,8 @@ describe('deep links — chat shell (existing identity)', () => {
     await new Promise((resolve) => setTimeout(resolve, 25))
     expect(useAppStore.getState().activeView).toBeNull()
     expect(fake.joinRoomFn).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '[+ Unirse]' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '[+ Join]' })).toBeInTheDocument()
     expect(window.location.hash).toBe('')
   })
 })
@@ -117,12 +117,12 @@ describe('deep links — onboarding carry-through', () => {
 
     // The onboarding screen announces the linked room.
     expect(screen.getByText('#pueblo-libre')).toBeInTheDocument()
-    expect(screen.getByText(/del enlace compartido\./)).toBeInTheDocument()
+    expect(screen.getByText(/from the shared link\./)).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Tu apodo'), {
+    fireEvent.change(screen.getByLabelText('Your nickname'), {
       target: { value: 'zorro-bravo' },
     })
-    fireEvent.submit(screen.getByRole('form', { name: 'entrada' }))
+    fireEvent.submit(screen.getByRole('form', { name: 'enter' }))
 
     await waitFor(() => {
       expect(useAppStore.getState().identity?.nickname).toBe('zorro-bravo')
@@ -139,10 +139,10 @@ describe('deep links — onboarding carry-through', () => {
     window.history.pushState({}, '', '/#sala=duo')
     render(<App />)
 
-    fireEvent.change(screen.getByLabelText('Tu apodo'), {
+    fireEvent.change(screen.getByLabelText('Your nickname'), {
       target: { value: 'zorro-bravo' },
     })
-    fireEvent.submit(screen.getByRole('form', { name: 'entrada' }))
+    fireEvent.submit(screen.getByRole('form', { name: 'enter' }))
 
     const linkedRoomId = await deriveRoomId('duo')
     await waitFor(() => {
@@ -172,14 +172,14 @@ describe('deep links — password rooms (RF-05)', () => {
 
     // The existing password-room join flow appears, prefilled with the
     // linked name; the URL carries no password ever.
-    const recovery = await screen.findByRole('region', { name: 'Unirse con contraseña' })
-    expect(within(recovery).getByLabelText('Nombre de la sala')).toHaveValue('secreta')
+    const recovery = await screen.findByRole('region', { name: 'Join with password' })
+    expect(within(recovery).getByLabelText('Room name')).toHaveValue('secreta')
 
-    fireEvent.click(within(recovery).getByLabelText('sala cifrada'))
-    fireEvent.change(within(recovery).getByLabelText('Contraseña de la sala'), {
+    fireEvent.click(within(recovery).getByLabelText('encrypted room'))
+    fireEvent.change(within(recovery).getByLabelText('Room password'), {
       target: { value: 'clave-secreta' },
     })
-    fireEvent.submit(within(recovery).getByRole('form', { name: 'Unirse por nombre' }))
+    fireEvent.submit(within(recovery).getByRole('form', { name: 'Join by name' }))
 
     const passwordRoomId = await deriveRoomId('secreta', 'clave-secreta')
     await waitFor(() => {
@@ -206,12 +206,10 @@ describe('deep links — password rooms (RF-05)', () => {
     })
     useAppStore.getState().setRoomStatus(publicRoomId, 'error')
 
-    await screen.findByRole('region', { name: 'Unirse con contraseña' })
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await screen.findByRole('region', { name: 'Join with password' })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => {
-      expect(
-        screen.queryByRole('region', { name: 'Unirse con contraseña' }),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Join with password' })).not.toBeInTheDocument()
     })
   })
 })

@@ -182,7 +182,7 @@ export function connectPair(pair: FakePeerPair): void {
   pair.pcB.remoteChannel?.open()
 }
 
-/** Simulates the link dying after connecting (§12.2 «El par se ha desconectado»). */
+/** Simulates the link dying after connecting (§12.2 «The peer has disconnected»). */
 export function dropPair(pair: FakePeerPair): void {
   pair.pcA.localChannel?.close()
   pair.pcB.remoteChannel?.close()

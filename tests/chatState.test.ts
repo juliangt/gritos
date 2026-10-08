@@ -449,11 +449,11 @@ describe('arrival order + 2 s ts-window (spec §7.3)', () => {
 
 describe('connection status texts (spec §10.3 exact)', () => {
   it('uses the exact spec strings', () => {
-    expect(connectionStatusText('searching', 0)).toBe('Buscando pares en la red torrent…')
-    expect(connectionStatusText('searching', 3)).toBe('Conectando (3 pares encontrados)…')
-    expect(connectionStatusText('connected', 5)).toBe('Canal P2P establecido · 5 pares')
+    expect(connectionStatusText('searching', 0)).toBe('Searching for peers on the torrent network…')
+    expect(connectionStatusText('searching', 3)).toBe('Connecting (3 peers found)…')
+    expect(connectionStatusText('connected', 5)).toBe('P2P channel established · 5 peers')
     expect(connectionStatusText('error', 0)).toBe(
-      'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos',
+      'No tracker access — check your connection or configure alternative trackers',
     )
   })
 })
@@ -483,7 +483,7 @@ describe('room-name normalization (RF-02)', () => {
     expect(normalizeRoomName('a'.repeat(32))).toBe('a'.repeat(32))
     expect(normalizeRoomName('a'.repeat(33))).toBeNull()
     expect(INVALID_ROOM_NAME_TEXT).toBe(
-      'Solo minúsculas, números, guiones y guion bajo (1–32 caracteres)',
+      'Only lowercase letters, numbers, hyphens and underscores (1–32 characters)',
     )
     expect(SUGGESTED_ROOMS).toEqual(['lobby', 'general', 'dev', 'random'])
   })
@@ -510,14 +510,14 @@ describe('feed presentation helpers', () => {
 
   it('builds the typing line (RF-03)', () => {
     expect(typingStatusText([])).toBeNull()
-    expect(typingStatusText(['luna-cauta'])).toBe('luna-cauta está escribiendo…')
-    expect(typingStatusText(['a', 'b'])).toBe('2 personas están escribiendo…')
-    expect(typingStatusText(['a', 'b', 'c'])).toBe('3 personas están escribiendo…')
+    expect(typingStatusText(['luna-cauta'])).toBe('luna-cauta is typing…')
+    expect(typingStatusText(['a', 'b'])).toBe('2 people are typing…')
+    expect(typingStatusText(['a', 'b', 'c'])).toBe('3 people are typing…')
   })
 
   it('builds the new-messages button label (RF-03)', () => {
-    expect(newMessagesButtonText(1)).toBe('↓ 1 mensaje nuevo')
-    expect(newMessagesButtonText(7)).toBe('↓ 7 mensajes nuevos')
+    expect(newMessagesButtonText(1)).toBe('↓ 1 new message')
+    expect(newMessagesButtonText(7)).toBe('↓ 7 new messages')
   })
 
   it('builds the expiry separator line (issue #96, FIFO-separator wording)', () => {

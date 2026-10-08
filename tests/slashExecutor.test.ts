@@ -142,19 +142,19 @@ describe('dispatch against a fake context', () => {
     })
     await run('/nick luna-cauta', ctx)
     expect(ctx.appendSystemLine).toHaveBeenCalledTimes(1)
-    expect(ctx.appendSystemLine).toHaveBeenCalledWith('Apodo no válido: «luna-cauta»')
+    expect(ctx.appendSystemLine).toHaveBeenCalledWith('Invalid nickname: "luna-cauta"')
   })
 
   it('/room: a rejected join prints the manager error verbatim (the #87 cap message)', async () => {
     const ctx = makeCtx({
       joinRoomFocused: vi.fn(async () => ({
         roomId: null,
-        error: 'Límite de salas activas alcanzado (4)',
+        error: 'Active room limit reached (4)',
       })),
     })
     await run('/room dev', ctx)
     expect(ctx.joinRoomFocused).toHaveBeenCalledWith('dev')
-    expect(ctx.appendSystemLine).toHaveBeenCalledWith('Límite de salas activas alcanzado (4)')
+    expect(ctx.appendSystemLine).toHaveBeenCalledWith('Active room limit reached (4)')
     expect(ctx.armPasswordRecovery).not.toHaveBeenCalled()
   })
 
@@ -283,9 +283,7 @@ describe('createSlashExecutorContext', () => {
 
     expect(manager.getActiveRoomCount()).toBe(1)
     expect(useUiStore.getState().recoveryRoom).toBeNull()
-    expect(storedRoom(lobby.roomId).messages.at(-1)?.text).toBe(
-      'Límite de salas activas alcanzado (1)',
-    )
+    expect(storedRoom(lobby.roomId).messages.at(-1)?.text).toBe('Active room limit reached (1)')
   })
 
   it('/room focuses the joined room and arms its password-recovery offer', async () => {
@@ -311,7 +309,7 @@ describe('createSlashExecutorContext', () => {
       id: 'm1',
       roomId: dev.roomId,
       authorId: 'peer-1',
-      authorNick: 'par',
+      authorNick: 'peer',
       text: 'hola',
       ts: Date.now(),
       encrypted: false,
@@ -379,7 +377,7 @@ describe('createSlashExecutorContext', () => {
         id: 'x1',
         ts: Date.now(),
         from: 'peer-1',
-        nick: 'par',
+        nick: 'peer',
         kind: 'chat',
         enc: false,
         iv: null,
@@ -424,7 +422,7 @@ describe('createSlashExecutorContext', () => {
       id: 'm1',
       roomId: lobby.roomId,
       authorId: 'peer-1',
-      authorNick: 'par',
+      authorNick: 'peer',
       text: 'hola',
       ts: Date.now(),
       encrypted: false,

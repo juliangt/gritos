@@ -131,29 +131,29 @@ describe('SlashHelpModal (/help overlay)', () => {
 describe('Sidebar join-popover prefill (/room password flow seam)', () => {
   it('opens the popover prefilled when the executor flips the ui-store seam', () => {
     render(<Sidebar />)
-    expect(screen.queryByLabelText('Nombre de la sala')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Room name')).not.toBeInTheDocument()
 
     act(() => {
       useUiStore.getState().openJoinPopover('sala-secreta')
     })
-    expect(screen.getByLabelText('Nombre de la sala')).toHaveValue('sala-secreta')
+    expect(screen.getByLabelText('Room name')).toHaveValue('sala-secreta')
 
     // Dismissing clears the seam: the popover closes for the store too.
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useUiStore.getState().joinPopoverName).toBeNull()
-    expect(screen.queryByLabelText('Nombre de la sala')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Room name')).not.toBeInTheDocument()
   })
 
-  it('the manual [+ Unirse] toggle and the seam share one popover', () => {
+  it('the manual [+ Join] toggle and the seam share one popover', () => {
     useUiStore.getState().openJoinPopover('desde-comando')
     render(<Sidebar />)
     // Toggling the button keeps the form open (the seam still holds the name)
     // and dismissing from the form clears both sources.
-    fireEvent.click(screen.getByRole('button', { name: '[+ Unirse]' }))
-    expect(screen.getByLabelText('Nombre de la sala')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: '[+ Join]' }))
+    expect(screen.getByLabelText('Room name')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useUiStore.getState().joinPopoverName).toBeNull()
-    expect(screen.queryByLabelText('Nombre de la sala')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Room name')).not.toBeInTheDocument()
   })
 })
 
@@ -219,7 +219,7 @@ describe('/clear confirmation (ChatLayout + ConfirmDialog)', () => {
     expect(screen.getByText(CLEAR_FEED_DIALOG_BODY)).toBeInTheDocument()
 
     // Cancel: untouched.
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
     expect(useAppStore.getState().rooms['room-lobby']?.messages).toHaveLength(1)
 
     // Confirm: the feed view empties, the room and its latched facts stay.
@@ -243,13 +243,13 @@ describe('/room password recovery (ChatLayout)', () => {
     useUiStore.getState().armPasswordRecovery('secreta')
 
     render(<ChatLayout />)
-    const recovery = screen.getByRole('region', { name: 'Unirse con contraseña' })
-    expect(within(recovery).getByLabelText('Nombre de la sala')).toHaveValue('secreta')
+    const recovery = screen.getByRole('region', { name: 'Join with password' })
+    expect(within(recovery).getByLabelText('Room name')).toHaveValue('secreta')
 
     // Dismissing retires the offer and clears the ui-store seam.
-    fireEvent.click(within(recovery).getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(within(recovery).getByRole('button', { name: 'Cancel' }))
     expect(useUiStore.getState().recoveryRoom).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Unirse con contraseña' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Join with password' })).not.toBeInTheDocument()
   })
 
   it('does not offer the form for other rooms', () => {
@@ -260,6 +260,6 @@ describe('/room password recovery (ChatLayout)', () => {
     useUiStore.getState().armPasswordRecovery('secreta')
 
     render(<ChatLayout />)
-    expect(screen.queryByRole('region', { name: 'Unirse con contraseña' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Join with password' })).not.toBeInTheDocument()
   })
 })

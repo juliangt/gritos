@@ -75,7 +75,7 @@ describe('QR invite codes documentation (issue #100)', () => {
     expect(spec).toContain('módulos casi negros sobre blanco')
     expect(spec).toContain('la escaneabilidad manda sobre el tema')
     expect(spec).toContain(`«${QR_DOWNLOAD_BUTTON}»`)
-    expect(spec).toContain('gritos-sala-<nombre>.png')
+    expect(spec).toContain('gritos-room-<nombre>.png')
     expect(spec).toContain(`«${QR_SAME_INSTALL_NOTE}»`)
     expect(spec).toContain('`VITE_TRYSTERO_APP_ID`')
   })
@@ -97,7 +97,7 @@ describe('QR invite codes documentation (issue #100)', () => {
       'iOS Camera',
       'Android Camera/Google Lens',
       'no password anywhere in the QR',
-      '«Descargar PNG»',
+      '«Download PNG»',
       'BOTH themes',
       '32 chars of [a-z0-9_-]',
       'subpath',

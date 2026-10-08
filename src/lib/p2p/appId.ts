@@ -16,7 +16,7 @@
 export class MissingAppIdError extends Error {
   constructor() {
     super(
-      'VITE_TRYSTERO_APP_ID no está definida: copia .env.example a .env (o define la variable en el entorno de compilación) y recompila.',
+      'VITE_TRYSTERO_APP_ID is not defined: copy .env.example to .env (or set the variable in the build environment) and rebuild.',
     )
     this.name = 'MissingAppIdError'
   }

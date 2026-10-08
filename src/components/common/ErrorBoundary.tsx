@@ -38,7 +38,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
           }}
         >
           <div style={{ maxWidth: '24rem', textAlign: 'center' }}>
-            <h1 style={{ fontSize: '1.25rem', fontWeight: 600, margin: 0 }}>Algo ha ido mal</h1>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 600, margin: 0 }}>
+              Something went wrong
+            </h1>
             <p
               style={{
                 color: 'var(--gritos-text-muted)',
@@ -46,7 +48,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
                 margin: '0.5rem 0 0',
               }}
             >
-              Ha ocurrido un error inesperado. Recarga la página para volver a empezar.
+              An unexpected error occurred. Reload the page to start over.
             </p>
             <button
               type="button"
@@ -63,7 +65,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
                 padding: '0.5rem 1rem',
               }}
             >
-              Recargar
+              Reload
             </button>
           </div>
         </div>

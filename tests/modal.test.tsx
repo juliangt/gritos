@@ -33,17 +33,21 @@ afterEach(() => {
 
 describe('Modal (RNF-05)', () => {
   it('renders role="dialog" with aria-modal and the accessible label', () => {
-    render(<Modal open onClose={() => {}} label="Ajustes">
-      <button type="button">x</button>
-    </Modal>)
-    expect(screen.getByRole('dialog', { name: 'Ajustes' })).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Ajustes' })).toHaveAttribute('aria-modal', 'true')
+    render(
+      <Modal open onClose={() => {}} label="Settings">
+        <button type="button">x</button>
+      </Modal>,
+    )
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toHaveAttribute('aria-modal', 'true')
   })
 
   it('renders nothing when closed', () => {
-    render(<Modal open={false} onClose={() => {}} label="Ajustes">
-      <button type="button">x</button>
-    </Modal>)
+    render(
+      <Modal open={false} onClose={() => {}} label="Settings">
+        <button type="button">x</button>
+      </Modal>,
+    )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -151,20 +155,20 @@ describe('ConfirmDialog (RF-07/RF-08)', () => {
     render(
       <ConfirmDialog
         open
-        title="Regenerar identidad"
-        body="¿Continuar?"
-        confirmLabel="Regenerar"
+        title="Regenerate identity"
+        body="Continue?"
+        confirmLabel="Regenerate"
         onConfirm={onConfirm}
         onCancel={onCancel}
       />,
     )
-    expect(screen.getByRole('dialog', { name: 'Regenerar identidad' })).toBeInTheDocument()
-    expect(screen.getByText('¿Continuar?')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Regenerate identity' })).toBeInTheDocument()
+    expect(screen.getByText('Continue?')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Regenerar'))
+    fireEvent.click(screen.getByText('Regenerate'))
     expect(onConfirm).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByText('Cancelar'))
+    fireEvent.click(screen.getByText('Cancel'))
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
@@ -172,8 +176,8 @@ describe('ConfirmDialog (RF-07/RF-08)', () => {
     render(
       <ConfirmDialog
         open
-        title="Borrar todo y salir"
-        body="¿Continuar?"
+        title="Wipe everything and leave"
+        body="Continue?"
         confirmLabel="Borrar todo"
         danger
         onConfirm={() => {}}
@@ -183,6 +187,6 @@ describe('ConfirmDialog (RF-07/RF-08)', () => {
     const confirm = screen.getByTestId('confirm-dialog-confirm')
     expect(confirm).toHaveClass('bg-red-600')
     // Focus starts on the safe Cancel button.
-    expect(document.activeElement).toBe(screen.getByText('Cancelar'))
+    expect(document.activeElement).toBe(screen.getByText('Cancel'))
   })
 })

@@ -29,11 +29,9 @@ export function RoomList(props: {
 
   return (
     <div className="flex flex-col gap-4">
-      <section aria-label="Salas activas" className="flex flex-col gap-1">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Activas</h2>
-        {props.rooms.length === 0 && (
-          <p className="text-xs text-muted">Ninguna sala activa todavía.</p>
-        )}
+      <section aria-label="Active rooms" className="flex flex-col gap-1">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Active</h2>
+        {props.rooms.length === 0 && <p className="text-xs text-muted">No active rooms yet.</p>}
         <ul className="flex flex-col">
           {props.rooms.map((room) => (
             <li key={room.id} className="group flex items-center gap-1">
@@ -48,7 +46,7 @@ export function RoomList(props: {
                 <StatusDot status={room.status} />
                 <span className="truncate">#{room.name}</span>
                 {room.hasPassword && (
-                  <span role="img" aria-label="sala cifrada" title="Sala con contraseña">
+                  <span role="img" aria-label="encrypted room" title="Password-protected room">
                     🔒
                   </span>
                 )}
@@ -57,8 +55,8 @@ export function RoomList(props: {
               <button
                 type="button"
                 onClick={() => props.onLeaveRoom(room.id)}
-                aria-label={`Abandonar ${room.name}`}
-                title={`Abandonar ${room.name}`}
+                aria-label={`Leave ${room.name}`}
+                title={`Leave ${room.name}`}
                 className="rounded px-1 text-muted opacity-0 hover:text-accent group-hover:opacity-100 focus-visible:opacity-100"
               >
                 ✕
@@ -69,8 +67,8 @@ export function RoomList(props: {
       </section>
 
       {suggested.length > 0 && (
-        <section aria-label="Salas sugeridas" className="flex flex-col gap-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Sugeridas</h2>
+        <section aria-label="Suggested rooms" className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Suggested</h2>
           <ul className="flex flex-col">
             {suggested.map((name) => (
               <li key={name}>
@@ -88,15 +86,15 @@ export function RoomList(props: {
       )}
 
       {props.showRecents && props.recentRooms.length === 0 && (
-        <section aria-label="Salas recientes" className="flex flex-col gap-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recientes</h2>
+        <section aria-label="Recent rooms" className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recent</h2>
           <p className="text-xs text-muted">{EMPTY_RECENTS_TEXT}</p>
         </section>
       )}
 
       {recents.length > 0 && (
-        <section aria-label="Salas recientes" className="flex flex-col gap-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recientes</h2>
+        <section aria-label="Recent rooms" className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recent</h2>
           <ul className="flex flex-col">
             {recents.map((name) => (
               <li key={name}>

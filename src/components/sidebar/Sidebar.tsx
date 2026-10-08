@@ -91,7 +91,7 @@ export function Sidebar(props: {
           aria-expanded={joinFormOpen}
           className="rounded-md border border-border px-2 py-1.5 text-left text-sm font-medium hover:border-accent"
         >
-          [+ Unirse]
+          [+ Join]
         </button>
         {joinFormOpen && (
           <JoinRoomPopover

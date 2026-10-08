@@ -124,14 +124,12 @@ export function PeerList({ room }: { room: Room | null }) {
   }
 
   return (
-    <section ref={sectionRef} aria-label="Pares" className="flex flex-col gap-1">
+    <section ref={sectionRef} aria-label="Peers" className="flex flex-col gap-1">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-        Pares ({room.peers.length})
+        Peers ({room.peers.length})
       </h2>
       {room.peers.length === 0 && (
-        <p className="text-xs text-muted">
-          Sin pares aún. Comparte el nombre de la sala para que otros se unan.
-        </p>
+        <p className="text-xs text-muted">No peers yet. Share the room name so others can join.</p>
       )}
       <ul className="flex flex-col">
         {room.peers.map((peer) => {
@@ -147,12 +145,12 @@ export function PeerList({ room }: { room: Room | null }) {
                 className="flex items-center gap-1.5 truncate rounded px-1.5 py-1 text-left hover:bg-surface"
                 title={fingerprint ?? undefined}
               >
-                <span role="img" aria-label="latencia">
+                <span role="img" aria-label="latency">
                   {latencyDot(peer.latencyMs, peer.degraded)}
                 </span>
                 <span className="truncate">{displayName}</span>
                 {keyChanged && (
-                  <span role="img" aria-label="fingerprint cambiado" className="text-accent">
+                  <span role="img" aria-label="fingerprint changed" className="text-accent">
                     ⚠
                   </span>
                 )}
@@ -160,12 +158,12 @@ export function PeerList({ room }: { room: Room | null }) {
               {menuPeerId === peer.id && (
                 <div
                   role="menu"
-                  aria-label={`Acciones para ${displayName}`}
+                  aria-label={`Actions for ${displayName}`}
                   className="absolute left-2 top-7 z-10 flex flex-col rounded-md border border-border bg-surface p-1 text-xs shadow-lg"
                 >
                   {keyChanged && (
                     <p role="alert" className="px-2 py-1 text-accent">
-                      ⚠ El fingerprint cambió desde tu última verificación
+                      ⚠ The fingerprint changed since your last verification
                     </p>
                   )}
                   <button
@@ -174,7 +172,7 @@ export function PeerList({ room }: { room: Room | null }) {
                     onClick={() => startDm(peer)}
                     className="rounded px-2 py-1 text-left hover:bg-bg"
                   >
-                    Mensaje directo
+                    Direct message
                   </button>
                   <button
                     type="button"
@@ -183,7 +181,7 @@ export function PeerList({ room }: { room: Room | null }) {
                     onClick={() => copyFingerprint(peer)}
                     className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
                   >
-                    Copiar fingerprint
+                    Copy fingerprint
                   </button>
                   {isPeerMuted(peer) ? (
                     <button
@@ -212,7 +210,7 @@ export function PeerList({ room }: { room: Room | null }) {
           )
         })}
       </ul>
-      {copied && <p className="text-xs text-muted">Fingerprint copiado.</p>}
+      {copied && <p className="text-xs text-muted">Fingerprint copied.</p>}
 
       {/* Issue #95 — muting a peer with an open DM channel discloses that its
           future DMs will be ignored too (phase 2 receive-path enforcement). */}

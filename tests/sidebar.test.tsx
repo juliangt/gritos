@@ -65,13 +65,13 @@ function seedStore() {
 }
 
 describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
-  it('renders Activas with unread badges, status dots and the lock placeholder', () => {
+  it('renders Active with unread badges, status dots and the lock placeholder', () => {
     seedStore()
     render(<Sidebar />)
 
     expect(screen.getByText('#lobby')).toBeInTheDocument()
-    expect(screen.getByLabelText('2 sin leer')).toBeInTheDocument()
-    expect(screen.getByLabelText('conectado')).toBeInTheDocument()
+    expect(screen.getByLabelText('2 unread')).toBeInTheDocument()
+    expect(screen.getByLabelText('connected')).toBeInTheDocument()
     expect(screen.getByText('#dev')).toBeInTheDocument()
     expect(screen.getByText('🔒')).toBeInTheDocument() // lock on dev
   })
@@ -79,29 +79,29 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
   it('hides suggested rooms that are already active and shows the rest', () => {
     seedStore()
     render(<Sidebar />)
-    const suggested = screen.getByRole('region', { name: 'Salas sugeridas' })
+    const suggested = screen.getByRole('region', { name: 'Suggested rooms' })
     expect(suggested.textContent).not.toContain('#lobby')
     expect(suggested.textContent).not.toContain('#dev')
     expect(suggested.textContent).toContain('#general')
     expect(suggested.textContent).toContain('#random')
   })
 
-  it('renders Recientes only when rememberRooms is on, minus active rooms', () => {
+  it('renders Recent only when rememberRooms is on, minus active rooms', () => {
     seedStore()
     const { rerender } = render(<Sidebar />)
-    const recientes = screen.getByRole('region', { name: 'Salas recientes' })
+    const recientes = screen.getByRole('region', { name: 'Recent rooms' })
     expect(recientes.textContent).toContain('#antigua')
     expect(recientes.textContent).not.toContain('#dev') // already active
 
     useSettingsStore.getState().setSettings({ rememberRooms: false })
     rerender(<Sidebar />)
-    expect(screen.queryByRole('region', { name: 'Salas recientes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Recent rooms' })).not.toBeInTheDocument()
   })
 
   it('lists the peers of the active view with latency dots and dedup suffixes', () => {
     seedStore()
     render(<Sidebar />)
-    const pares = screen.getByRole('region', { name: 'Pares' })
+    const pares = screen.getByRole('region', { name: 'Peers' })
     expect(pares.textContent).toContain('🟢')
     expect(pares.textContent).toContain('luna-cauta·a3f1')
     expect(pares.textContent).toContain('luna-cauta·b9c2')
@@ -110,32 +110,32 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
   it('shows a searching status dot for a disconnected room', () => {
     seedStore()
     render(<Sidebar />)
-    expect(screen.getByLabelText('buscando pares')).toBeInTheDocument()
+    expect(screen.getByLabelText('searching for peers')).toBeInTheDocument()
   })
 
   it('opens the join popover with live normalization preview and the password behind the toggle', async () => {
     seedStore()
     render(<Sidebar />)
-    fireEvent.click(screen.getByRole('button', { name: '[+ Unirse]' }))
+    fireEvent.click(screen.getByRole('button', { name: '[+ Join]' }))
 
-    const nameField = screen.getByLabelText('Nombre de la sala')
+    const nameField = screen.getByLabelText('Room name')
     fireEvent.change(nameField, { target: { value: 'Mi Sala' } })
-    expect(screen.getByText(/Se unirá a/)).toBeInTheDocument()
+    expect(screen.getByText(/You will join/)).toBeInTheDocument()
     expect(screen.getByText('#mi-sala')).toBeInTheDocument()
-    // M4 (RF-05): the password field only exists once 'sala cifrada' is on.
-    expect(screen.queryByLabelText('Contraseña de la sala')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'sala cifrada' }))
-    expect(screen.getByLabelText('Contraseña de la sala')).toBeEnabled()
+    // M4 (RF-05): the password field only exists once 'encrypted room' is on.
+    expect(screen.queryByLabelText('Room password')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'encrypted room' }))
+    expect(screen.getByLabelText('Room password')).toBeEnabled()
     // Issue #31 — the hint also discloses that the name is never saved here.
     expect(screen.getByText(ENCRYPTED_ROOM_HINT)).toHaveTextContent(
-      'Quien no tenga la contraseña no encontrará esta sala. Su nombre no se guarda en este navegador.',
+      'Whoever lacks the password will not find this room. Its name is never saved in this browser.',
     )
 
     // Invalid names get the exact inline error, no network call.
     fireEvent.change(nameField, { target: { value: '!!' } })
-    fireEvent.submit(screen.getByRole('form', { name: 'Unirse por nombre' }))
+    fireEvent.submit(screen.getByRole('form', { name: 'Join by name' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Solo minúsculas, números, guiones y guion bajo (1–32 caracteres)',
+      'Only lowercase letters, numbers, hyphens and underscores (1–32 characters)',
     )
     expect(fake.joinRoomFn).not.toHaveBeenCalled()
   })
@@ -146,15 +146,13 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     await joinRoom('dev')
     render(<Sidebar />)
 
-    fireEvent.click(screen.getByRole('button', { name: '[+ Unirse]' }))
-    fireEvent.change(screen.getByLabelText('Nombre de la sala'), {
+    fireEvent.click(screen.getByRole('button', { name: '[+ Join]' }))
+    fireEvent.change(screen.getByLabelText('Room name'), {
       target: { value: 'tercera' },
     })
-    fireEvent.submit(screen.getByRole('form', { name: 'Unirse por nombre' }))
+    fireEvent.submit(screen.getByRole('form', { name: 'Join by name' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Límite de salas activas alcanzado (2)',
-    )
+    expect(await screen.findByRole('alert')).toHaveTextContent('Active room limit reached (2)')
     expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(2)
   })
 
@@ -169,8 +167,8 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     // that opens, never in a hidden post-dismiss paragraph.
     fireEvent.click(screen.getByRole('button', { name: '#general' }))
 
-    expect(await screen.findByText('Límite de salas activas alcanzado (2)')).toBeInTheDocument()
-    expect(screen.getByRole('form', { name: 'Unirse por nombre' })).toBeInTheDocument()
+    expect(await screen.findByText('Active room limit reached (2)')).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Join by name' })).toBeInTheDocument()
     expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(2)
   })
 
@@ -180,14 +178,14 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     await joinRoom('dev')
     render(<Sidebar />)
     fireEvent.click(screen.getByRole('button', { name: '#general' }))
-    expect(await screen.findByText('Límite de salas activas alcanzado (2)')).toBeInTheDocument()
+    expect(await screen.findByText('Active room limit reached (2)')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     // Deliberate UX (issue #87): the message lives inside the popover, so
     // dismissing it removes the message with it — nothing lingers outside.
-    expect(screen.queryByRole('form', { name: 'Unirse por nombre' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Límite de salas activas alcanzado (2)')).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Join by name' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Active room limit reached (2)')).not.toBeInTheDocument()
   })
 
   it('a successful join after a capped rejection clears the error (issue #87)', async () => {
@@ -196,12 +194,12 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     await joinRoom('dev')
     render(<Sidebar />)
     fireEvent.click(screen.getByRole('button', { name: '#general' }))
-    expect(await screen.findByText('Límite de salas activas alcanzado (2)')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(await screen.findByText('Active room limit reached (2)')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     // Free a slot and retry the same suggested room: the join succeeds and
     // the stale cap message must not come back.
-    fireEvent.click(screen.getByRole('button', { name: 'Abandonar dev' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Leave dev' }))
     await waitFor(() => {
       expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(1)
     })
@@ -213,20 +211,20 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
       expect(joined).toBeDefined()
       expect(state.activeView).toEqual({ kind: 'room', id: joined?.id })
     })
-    expect(screen.queryByText('Límite de salas activas alcanzado (2)')).not.toBeInTheDocument()
-    expect(screen.queryByRole('form', { name: 'Unirse por nombre' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Active room limit reached (2)')).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Join by name' })).not.toBeInTheDocument()
   })
 
-  it('a password join shows the room under Activas but never persists it (issue #31)', async () => {
+  it('a password join shows the room under Active but never persists it (issue #31)', async () => {
     await joinRoom('secreta', 'clave-secreta')
     render(<Sidebar />)
 
-    const activas = screen.getByRole('region', { name: 'Salas activas' })
+    const activas = screen.getByRole('region', { name: 'Active rooms' })
     expect(activas.textContent).toContain('#secreta')
-    expect(screen.getByRole('img', { name: 'sala cifrada' })).toBeInTheDocument()
-    // The name is session-only: absent from Recientes and from `gritos:rooms`
+    expect(screen.getByRole('img', { name: 'encrypted room' })).toBeInTheDocument()
+    // The name is session-only: absent from Recent and from `gritos:rooms`
     // (the section only shows its empty state at this point).
-    expect(screen.getByRole('region', { name: 'Salas recientes' }).textContent).not.toContain(
+    expect(screen.getByRole('region', { name: 'Recent rooms' }).textContent).not.toContain(
       '#secreta',
     )
     expect(useAppStore.getState().recentRooms).toEqual([])
@@ -250,31 +248,31 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
   it('offers leaving an active room (RF-02)', async () => {
     const connection = await joinRoom('dev')
     render(<Sidebar />)
-    fireEvent.click(screen.getByRole('button', { name: 'Abandonar dev' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Leave dev' }))
 
     await waitFor(() => {
       expect(useAppStore.getState().rooms[connection.roomId]).toBeUndefined()
     })
   })
 
-  it('peer menu opens the M3 DM view: Mensaje directo focuses the channel (RF-04)', () => {
+  it('peer menu opens the M3 DM view: Direct message focuses the channel (RF-04)', () => {
     seedStore()
     render(<Sidebar />)
     // The peer button carries the latency dot in its accessible name; find
     // it by its visible text.
     fireEvent.click(screen.getByText('luna-cauta·a3f1').closest('button') as HTMLElement)
-    const menu = screen.getByRole('menu', { name: 'Acciones para luna-cauta·a3f1' })
+    const menu = screen.getByRole('menu', { name: 'Actions for luna-cauta·a3f1' })
     expect(menu).toBeInTheDocument()
-    const directMessage = screen.getByRole('menuitem', { name: 'Mensaje directo' })
+    const directMessage = screen.getByRole('menuitem', { name: 'Direct message' })
     expect(directMessage).toBeEnabled()
     // Without a received fingerprint there is nothing to copy yet.
-    expect(screen.getByRole('menuitem', { name: 'Copiar fingerprint' })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: 'Copy fingerprint' })).toBeDisabled()
 
     fireEvent.click(directMessage)
     expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-aaaa3f1' })
     // The menu closed after the action.
     expect(
-      screen.queryByRole('menu', { name: 'Acciones para luna-cauta·a3f1' }),
+      screen.queryByRole('menu', { name: 'Actions for luna-cauta·a3f1' }),
     ).not.toBeInTheDocument()
   })
 
@@ -282,7 +280,7 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     seedStore()
     render(<Sidebar />)
     fireEvent.click(screen.getByText('luna-cauta·a3f1').closest('button') as HTMLElement)
-    expect(screen.getByRole('menu', { name: 'Acciones para luna-cauta·a3f1' })).toBeInTheDocument()
+    expect(screen.getByRole('menu', { name: 'Actions for luna-cauta·a3f1' })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
@@ -298,7 +296,7 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     render(<Sidebar />)
 
     // Visible ⚠ marker on the peer entry.
-    expect(screen.getByLabelText('fingerprint cambiado')).toBeInTheDocument()
+    expect(screen.getByLabelText('fingerprint changed')).toBeInTheDocument()
     // The tooltip carries the pinned fingerprint, not the rotated one.
     expect(screen.getByText('luna-cauta·a3f1').closest('button')).toHaveAttribute(
       'title',
@@ -308,10 +306,10 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     // The menu shows the rotation warning.
     fireEvent.click(screen.getByText('luna-cauta·a3f1').closest('button') as HTMLElement)
     expect(screen.getByRole('alert')).toHaveTextContent(
-      '⚠ El fingerprint cambió desde tu última verificación',
+      '⚠ The fingerprint changed since your last verification',
     )
     // Only the flagged peer is marked; the clean one is untouched.
-    expect(screen.getAllByLabelText('fingerprint cambiado')).toHaveLength(1)
+    expect(screen.getAllByLabelText('fingerprint changed')).toHaveLength(1)
   })
 
   it('lists open DM channels with unread badges and clears on open (RF-04)', () => {
@@ -333,11 +331,11 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     })
     render(<Sidebar />)
 
-    const section = screen.getByRole('region', { name: 'Mensajes directos' })
+    const section = screen.getByRole('region', { name: 'Direct messages' })
     expect(section.textContent).toContain('luna-cauta')
     expect(section.textContent).toContain('zorro-bravo')
-    expect(screen.getByLabelText('1 sin leer')).toBeInTheDocument()
-    expect(screen.getByLabelText('par desconectado')).toBeInTheDocument() // unavailable channel
+    expect(screen.getByLabelText('1 unread')).toBeInTheDocument()
+    expect(screen.getByLabelText('peer disconnected')).toBeInTheDocument() // unavailable channel
 
     fireEvent.click(screen.getByText('zorro-bravo'))
     expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-bbbb9c2' })
@@ -368,8 +366,8 @@ describe('PeerList local mute (issue #95)', () => {
 
   function openPeerMenu(): void {
     // Scoped to the Pares section: an open DM channel would list the same
-    // nickname under Mensajes directos.
-    const pares = within(screen.getByRole('region', { name: 'Pares' }))
+    // nickname under Direct messages.
+    const pares = within(screen.getByRole('region', { name: 'Peers' }))
     fireEvent.click(pares.getByText('luna-cauta').closest('button') as HTMLElement)
   }
 
@@ -379,11 +377,11 @@ describe('PeerList local mute (issue #95)', () => {
     return stored.messages.filter((message) => message.kind === 'system').map((m) => m.text)
   }
 
-  it('Silenciar mutes by canonical fingerprint and announces the local line (issue #95)', () => {
+  it('Mute mutes by canonical fingerprint and announces the local line (issue #95)', () => {
     seedMutePeer(true)
     render(<Sidebar />)
     openPeerMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Silenciar' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mute' }))
 
     // The mute keys on the canonical fingerprint, never the nickname.
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([CANONICAL_FP])
@@ -396,43 +394,43 @@ describe('PeerList local mute (issue #95)', () => {
     useAppStore.getState().ensureDmChannel('peer-aaaa3f1', 'luna-cauta', PEER_FP)
     render(<Sidebar />)
     openPeerMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Silenciar' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mute' }))
 
     // The dialog discloses the DM loss; nothing is muted yet.
-    expect(screen.getByRole('dialog', { name: 'Silenciar par' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Mute peer' })).toBeInTheDocument()
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
     expect(systemLines()).not.toContain('@luna-cauta fue silenciado')
 
     // Confirming the second attempt applies the mute.
     openPeerMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Silenciar' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mute' }))
     fireEvent.click(screen.getByTestId('confirm-dialog-confirm'))
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([CANONICAL_FP])
     expect(systemLines()).toContain('@luna-cauta fue silenciado')
   })
 
-  it('a muted peer offers Dejar de silenciar and announces the local unmute line (issue #95)', () => {
+  it('a muted peer offers Unmute and announces the local unmute line (issue #95)', () => {
     seedMutePeer(true)
     expect(useSettingsStore.getState().muteFingerprint(PEER_FP, 'luna-cauta')).toBe(true)
     render(<Sidebar />)
     openPeerMenu()
-    expect(screen.queryByRole('menuitem', { name: 'Silenciar' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Dejar de silenciar' }))
+    expect(screen.queryByRole('menuitem', { name: 'Mute' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Unmute' }))
 
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
     expect(systemLines()).toContain('@luna-cauta ya no está silenciado')
   })
 
-  it('Silenciar stays disabled until the peer announces a fingerprint (issue #95)', () => {
+  it('Mute stays disabled until the peer announces a fingerprint (issue #95)', () => {
     seedMutePeer(false)
     render(<Sidebar />)
     openPeerMenu()
-    expect(screen.getByRole('menuitem', { name: 'Silenciar' })).toBeDisabled()
-    // Same gate as Copiar fingerprint: without an identity there is nothing
+    expect(screen.getByRole('menuitem', { name: 'Mute' })).toBeDisabled()
+    // Same gate as Copy fingerprint: without an identity there is nothing
     // to key the mute on.
-    expect(screen.getByRole('menuitem', { name: 'Copiar fingerprint' })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: 'Copy fingerprint' })).toBeDisabled()
   })
 })

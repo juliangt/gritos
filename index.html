@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <!--
@@ -28,7 +28,7 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'sha256-L/0fM7/nm52V0EBeN57Mi3OoMCaxNUN87InOK0k1Hrs='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+      content="default-src 'self'; script-src 'self' 'sha256-DZn1cBdnPcNDEBKkIyc1qzCv9fYXTTDaW8cqtSv6Shc='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
     />
     <!-- Referrer-Policy (issue #26): outbound markdown links already carry
          rel="noopener noreferrer" (src/lib/markdown/render.tsx); the meta
@@ -64,7 +64,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="gritos — chat P2P sin servidor: sin cuentas, cifrado de extremo a extremo y efímero. Los mensajes viajan directos entre navegadores."
+      content="gritos — serverless P2P chat: no accounts, end-to-end encryption, ephemeral. Messages travel directly between browsers."
     />
     <!--
       Social share meta (issue #49). No canonical domain is pinned (the app
@@ -79,20 +79,20 @@
     -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="gritos" />
-    <meta property="og:title" content="gritos — chat p2p sin servidor" />
+    <meta property="og:title" content="gritos — serverless p2p chat" />
     <meta
       property="og:description"
-      content="gritos — chat P2P sin servidor: sin cuentas, cifrado de extremo a extremo y efímero. Los mensajes viajan directos entre navegadores."
+      content="gritos — serverless P2P chat: no accounts, end-to-end encryption, ephemeral. Messages travel directly between browsers."
     />
     <meta property="og:image" content="./apple-touch-icon.png" />
     <meta property="og:image:width" content="180" />
     <meta property="og:image:height" content="180" />
     <meta
       property="og:image:alt"
-      content="Logotipo de gritos: burbuja de chat blanca con un signo de exclamación sobre fondo oscuro"
+      content="gritos logo: white chat bubble with an exclamation mark on a dark background"
     />
     <meta name="twitter:card" content="summary" />
-    <title>gritos — chat p2p sin servidor</title>
+    <title>gritos — serverless p2p chat</title>
     <script>
       // Frame-bust (issue #27) + anti-flash (spec §10.6). The frame-bust runs
       // first: browsers ignore frame-ancestors in <meta> CSP (see above), so
@@ -117,7 +117,7 @@
           window.stop()
           var html = document.documentElement
           html.textContent = ''
-          html.setAttribute('lang', 'es')
+          html.setAttribute('lang', 'en')
           var body = document.createElement('body')
           body.setAttribute(
             'style',
@@ -126,11 +126,11 @@
           var box = document.createElement('div')
           box.setAttribute('style', 'max-width:28rem;padding:2rem;text-align:center')
           var title = document.createElement('h1')
-          title.textContent = 'gritos no puede ejecutarse en un marco'
+          title.textContent = 'gritos cannot run inside a frame'
           title.setAttribute('style', 'font-size:1.125rem;margin:0 0 0.5rem')
           var text = document.createElement('p')
           text.textContent =
-            'Por seguridad, esta app no puede ejecutarse dentro de un marco o iframe. Ábrela en su propia pestaña para continuar.'
+            'For security, this app cannot run inside a frame or iframe. Open it in its own tab to continue.'
           text.setAttribute('style', 'margin:0;line-height:1.5')
           box.appendChild(title)
           box.appendChild(text)

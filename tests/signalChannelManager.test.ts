@@ -256,7 +256,7 @@ describe('toggle lifecycle (spec §12.5)', () => {
     expect(() => knockPeer(key)).toThrow(KnockError)
     expect(getSignalPresence()).toEqual([])
     expect(getPendingKnocks()).toEqual([])
-    // The affected channel passes to «El par se ha desconectado» (RF-04):
+    // The affected channel passes to «The peer has disconnected» (RF-04):
     // unavailable, history in memory, still listed.
     const channel = useAppStore.getState().dms[key]
     expect(channel?.available).toBe(false)
@@ -284,7 +284,7 @@ describe('presence LRU (MAX_SIGNAL_PRESENCE)', () => {
     const fpAt = (index: number): string =>
       `A31F09BC77D24E5A51C0FFEE${index.toString(16).padStart(8, '0').toUpperCase()}`
     for (let i = 0; i < MAX_SIGNAL_PRESENCE + 1; i += 1) {
-      room.receive('whoami', { nick: `par-${i}`, fp: fpAt(i) }, `peer-${i}`)
+      room.receive('whoami', { nick: `peer-${i}`, fp: fpAt(i) }, `peer-${i}`)
     }
     const presence = getSignalPresence()
     expect(presence).toHaveLength(MAX_SIGNAL_PRESENCE)

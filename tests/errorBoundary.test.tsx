@@ -32,7 +32,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     )
     expect(screen.getByRole('alert')).toBeInTheDocument()
-    expect(screen.getByText('Algo ha ido mal')).toBeInTheDocument()
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument()
     expect(screen.queryByText('Sala general')).not.toBeInTheDocument()
     // The crash is reported to console.error for diagnosability.
     expect(consoleSpy).toHaveBeenCalled()
@@ -49,7 +49,7 @@ describe('ErrorBoundary', () => {
         <Child shouldThrow />
       </ErrorBoundary>,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Recargar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
     expect(reload).toHaveBeenCalledTimes(1)
   })
 

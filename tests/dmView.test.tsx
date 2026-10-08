@@ -121,13 +121,13 @@ describe('DM view (RF-04)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'zorro-bravo' })).toBeInTheDocument()
     expect(screen.getByText(/A31F 09BC 77D2 4E5A/)).toBeInTheDocument()
     expect(
-      screen.getByText('Compáralo con tu interlocutor para verificar su identidad'),
+      screen.getByText('Compare it with your contact to verify their identity'),
     ).toBeInTheDocument()
     // Issue #22 — a clean channel shows no TOFU divergence warning.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     // Available: the header mirrors the room peer count.
-    expect(screen.getByText('1 par')).toBeInTheDocument()
-    expect(screen.queryByText('El par se ha desconectado')).not.toBeInTheDocument()
+    expect(screen.getByText('1 peer')).toBeInTheDocument()
+    expect(screen.queryByText('The peer has disconnected')).not.toBeInTheDocument()
   })
 
   it('warns in the header when the peer key changed (issue #22, TOFU)', () => {
@@ -136,15 +136,15 @@ describe('DM view (RF-04)', () => {
 
     // The visible warning with the reinstallation/impersonation explanation.
     expect(
-      screen.getByText('⚠ El fingerprint cambió desde tu última verificación'),
+      screen.getByText('⚠ The fingerprint changed since your last verification'),
     ).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'El par puede haber reinstalado la app o podría tratarse de una suplantación',
+      'The peer may have reinstalled the app or could be an impersonation',
     )
     // The pinned first-seen fingerprint stays displayed (never rotated away).
     expect(screen.getByText(/A31F 09BC 77D2 4E5A/)).toBeInTheDocument()
     // Advisory only: the conversation keeps working.
-    expect(screen.getByLabelText('Escribe un mensaje')).toBeEnabled()
+    expect(screen.getByLabelText('Write a message')).toBeEnabled()
   })
 
   it('reuses the room feed and composer: messages render with receipts', () => {
@@ -162,20 +162,20 @@ describe('DM view (RF-04)', () => {
     })
     render(<ChatLayout />)
 
-    const feed = screen.getByLabelText('Mensajes directos con zorro-bravo')
+    const feed = screen.getByLabelText('Direct messages with zorro-bravo')
     expect(feed.textContent).toContain('hola en secreto')
     expect(feed.textContent).toContain('respuesta propia')
-    expect(screen.getByLabelText('enviado, pendiente de recepción')).toHaveTextContent('✓')
-    const textarea = screen.getByLabelText('Escribe un mensaje')
+    expect(screen.getByLabelText('sent, pending receipt')).toHaveTextContent('✓')
+    const textarea = screen.getByLabelText('Write a message')
     expect(textarea).toBeEnabled()
     // The composer enables sending as soon as there is text.
     fireEvent.change(textarea, { target: { value: 'texto' } })
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
   })
 
   it('sends DMs and typing through the manager bridge', () => {
     render(<ChatLayout />)
-    const textarea = screen.getByLabelText('Escribe un mensaje')
+    const textarea = screen.getByLabelText('Write a message')
     fireEvent.change(textarea, { target: { value: 'hola dm' } })
     expect(sendDmTyping).toHaveBeenCalledWith('peer-9', true)
     fireEvent.keyDown(textarea, { key: 'Enter' })
@@ -191,7 +191,7 @@ describe('DM view (RF-04)', () => {
     fireEvent.change(screen.getByRole('combobox', { name: TTL_SELECT_LABEL }), {
       target: { value: '30' },
     })
-    const textarea = screen.getByLabelText('Escribe un mensaje')
+    const textarea = screen.getByLabelText('Write a message')
     fireEvent.change(textarea, { target: { value: 'hola fugaz' } })
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola fugaz', 30)
@@ -202,12 +202,12 @@ describe('DM view (RF-04)', () => {
     render(<ChatLayout />)
 
     // Header status and composer status share the exact RF-04 wording.
-    expect(screen.getAllByText('El par se ha desconectado')).toHaveLength(2)
-    expect(screen.getByLabelText('Escribe un mensaje')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+    expect(screen.getAllByText('The peer has disconnected')).toHaveLength(2)
+    expect(screen.getByLabelText('Write a message')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
 
     // The sidebar channel entry keeps the history with a disconnected marker.
-    expect(screen.getByLabelText('par desconectado')).toBeInTheDocument()
+    expect(screen.getByLabelText('peer disconnected')).toBeInTheDocument()
   })
 
   // Issue #93 (spec §12.1): a connected peer running a legacy build (no
@@ -219,28 +219,28 @@ describe('DM view (RF-04)', () => {
 
     // The peer is still connected: header shows the normal peer count and
     // no disconnected marker anywhere.
-    expect(screen.getByText('1 par')).toBeInTheDocument()
-    expect(screen.queryByText('El par se ha desconectado')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('par desconectado')).not.toBeInTheDocument()
+    expect(screen.getByText('1 peer')).toBeInTheDocument()
+    expect(screen.queryByText('The peer has disconnected')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('peer disconnected')).not.toBeInTheDocument()
 
     // The composer is hard-blocked with the exact legacy hint.
     expect(
-      screen.getByText('Este par usa una versión anterior sin DM cifrado por sesión'),
+      screen.getByText('This peer runs an older version without per-session encrypted DMs'),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Escribe un mensaje')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+    expect(screen.getByLabelText('Write a message')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
   })
 
   it('keeps the composer enabled for a v2-capable peer (legacyPeer false)', () => {
     // Default channel state from beforeEach: legacyPeer is false.
     render(<ChatLayout />)
     expect(
-      screen.queryByText('Este par usa una versión anterior sin DM cifrado por sesión'),
+      screen.queryByText('This peer runs an older version without per-session encrypted DMs'),
     ).not.toBeInTheDocument()
-    const textarea = screen.getByLabelText('Escribe un mensaje')
+    const textarea = screen.getByLabelText('Write a message')
     expect(textarea).toBeEnabled()
     fireEvent.change(textarea, { target: { value: 'texto' } })
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
   })
 
   it('opens the DM view from the peer menu (§10.1)', () => {
@@ -251,7 +251,7 @@ describe('DM view (RF-04)', () => {
     // The peer entry and the sidebar DM channel share the nickname; the
     // Pares section renders first in the sidebar DOM.
     fireEvent.click(screen.getAllByText('zorro-bravo')[0]?.closest('button') as HTMLElement)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mensaje directo' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Direct message' }))
 
     expect(openDm).toHaveBeenCalledWith('peer-9')
     expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-9' })
@@ -267,9 +267,9 @@ describe('DM view (RF-04)', () => {
     )
     render(<ChatLayout />)
 
-    const section = screen.getByRole('region', { name: 'Mensajes directos' })
+    const section = screen.getByRole('region', { name: 'Direct messages' })
     expect(section.textContent).toContain('luna-clara')
-    expect(screen.getByLabelText('1 sin leer')).toBeInTheDocument()
+    expect(screen.getByLabelText('1 unread')).toBeInTheDocument()
 
     // Clicking navigates and clears the badge.
     fireEvent.click(screen.getByText('luna-clara'))

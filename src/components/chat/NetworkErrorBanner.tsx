@@ -9,8 +9,8 @@ import { MANUAL_DM_BANNER_SHORTCUT } from '../settings/messages'
  * Network error banner (RNF-07 — never an indistinguishable silence):
  * rendered at the top of the chat area while ANY active room sits in the
  * `error` state (tracker heuristic exhausted, §10.3). Non-blocking: it
- * offers the exact §10.3 text, an 'Abrir ajustes' shortcut to Ajustes → Red
- * (RF-07) and a dismiss control. A dismissal only hides the CURRENT set of
+ * offers the exact §10.3 text, an 'Open settings' shortcut to Settings →
+ * Network (RF-07) and a dismiss control. A dismissal only hides the CURRENT set of
  * erroring rooms — a different room erroring (or the same room again after
  * recovering) brings the banner back.
  *
@@ -69,7 +69,7 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
       {contextNoticeVisible && (
         <div
           role="status"
-          aria-label="Estado de la red"
+          aria-label="Network status"
           className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
         >
           <StatusDot status="error" />
@@ -77,8 +77,8 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
           <button
             type="button"
             onClick={() => setContextNoticeDismissed(true)}
-            aria-label="Descartar el aviso"
-            title="Descartar el aviso"
+            aria-label="Dismiss the notice"
+            title="Dismiss the notice"
             className="shrink-0 rounded px-1 text-muted hover:text-text"
           >
             ✕
@@ -88,7 +88,7 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
       {visibleIds.length > 0 && (
         <div
           role="status"
-          aria-label="Estado de la red"
+          aria-label="Network status"
           className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
         >
           <StatusDot status="error" />
@@ -98,13 +98,13 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
             onClick={() => setSettingsOpen(true)}
             className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
           >
-            Abrir ajustes
+            Open settings
           </button>
           {props.onOpenManualDm !== undefined && (
             <button
               type="button"
               onClick={props.onOpenManualDm}
-              title="Iniciar una conversación directa sin trackers"
+              title="Start a direct conversation without trackers"
               className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
             >
               {MANUAL_DM_BANNER_SHORTCUT}
@@ -113,8 +113,8 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
           <button
             type="button"
             onClick={dismiss}
-            aria-label="Descartar el aviso"
-            title="Descartar el aviso"
+            aria-label="Dismiss the notice"
+            title="Dismiss the notice"
             className="shrink-0 rounded px-1 text-muted hover:text-text"
           >
             ✕

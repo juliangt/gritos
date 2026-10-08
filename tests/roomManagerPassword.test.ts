@@ -2,15 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as manager from '../src/lib/p2p/roomManager'
 import { useAppStore } from '../src/stores/useAppStore'
 import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
-import {
-  base64ToBytes,
-  bytesToBase64,
-} from '../src/lib/crypto/dm'
-import {
-  decryptRoomMessage,
-  deriveRoomKey,
-  encryptRoomMessage,
-} from '../src/lib/crypto/roomKey'
+import { base64ToBytes, bytesToBase64 } from '../src/lib/crypto/dm'
+import { decryptRoomMessage, deriveRoomKey, encryptRoomMessage } from '../src/lib/crypto/roomKey'
 import { createEnvelope, type Envelope } from '../src/lib/p2p/protocol'
 import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../src/lib/rooms'
 import { formatFingerprint } from '../src/lib/crypto/identity'
@@ -143,9 +136,9 @@ describe('encrypted chat flow (§6.4 step 4, §9.3)', () => {
     expect(wire.body).not.toBe('hola en secreto')
     // Only the holder of the room key can open it back to the plaintext.
     const key = await deriveRoomKey(PASSWORD, ROOM)
-    await expect(
-      decryptRoomMessage(key, { iv: wire.iv ?? '', payload: wire.body }),
-    ).resolves.toBe('hola en secreto')
+    await expect(decryptRoomMessage(key, { iv: wire.iv ?? '', payload: wire.body })).resolves.toBe(
+      'hola en secreto',
+    )
 
     const own = storedRoom(roomId).messages.find((message) => message.id === envelope?.id)
     expect(own).toMatchObject({ text: 'hola en secreto', encrypted: false, authorId: 'self' })
@@ -249,7 +242,7 @@ describe('undecryptable receives (RF-05 placeholder, §7.3)', () => {
     expect(room.action('receipt').sends).toHaveLength(0)
   })
 
-  it('a tampered payload stores the placeholder "🔒 mensaje cifrado", never the ciphertext', async () => {
+  it('a tampered payload stores the placeholder "🔒 encrypted message", never the ciphertext', async () => {
     const { roomId, room } = await joinB()
     room.peerJoin('peer-a')
     const sealed = await encryptRoomMessage(await deriveRoomKey(PASSWORD, ROOM), 'original-privado')
@@ -351,7 +344,7 @@ describe('receive size caps (issue #21)', () => {
 // ---------------------------------------------------------------------------
 // Issue #31 — password-room names are session-only: a password join never
 // enters the recents list and purges any entry recorded earlier with that
-// name, while the room itself stays active in the store (sidebar "Activas").
+// name, while the room itself stays active in the store (sidebar "Active").
 // Raw `gritos:rooms` storage assertions live in localStorageInvariant.test.ts
 // (this file runs in the node environment, where localStorage is absent and
 // the persistence layer no-ops).
@@ -382,7 +375,7 @@ describe('key lifecycle (RF-05: memory only)', () => {
     const first = await joinB()
     first.room.peerJoin('peer-a')
 
-    // Network settings change, then the RF-07 "Reconectar todo" path.
+    // Network settings change, then the RF-07 "Reconnect all" path.
     const { useSettingsStore } = await import('../src/stores/useSettingsStore')
     useSettingsStore.getState().setSettings({ trackers: ['wss://nuevo.example'] })
     await manager.reconnectAll()
@@ -406,9 +399,9 @@ describe('key lifecycle (RF-05: memory only)', () => {
     const wire = rejoined.lastSend('chat').data as Envelope
     expect(wire.enc).toBe(true)
     const key = await deriveRoomKey(PASSWORD, ROOM)
-    await expect(
-      decryptRoomMessage(key, { iv: wire.iv ?? '', payload: wire.body }),
-    ).resolves.toBe('tras reconectar')
+    await expect(decryptRoomMessage(key, { iv: wire.iv ?? '', payload: wire.body })).resolves.toBe(
+      'tras reconectar',
+    )
   })
 
   it('leaveRoom discards the key; rejoining re-derives it from the password', async () => {
@@ -426,9 +419,9 @@ describe('key lifecycle (RF-05: memory only)', () => {
     const wire = room.lastSend('chat').data as Envelope
     expect(wire.enc).toBe(true)
     const key = await deriveRoomKey(PASSWORD, ROOM)
-    await expect(
-      decryptRoomMessage(key, { iv: wire.iv ?? '', payload: wire.body }),
-    ).resolves.toBe('tras volver a entrar')
+    await expect(decryptRoomMessage(key, { iv: wire.iv ?? '', payload: wire.body })).resolves.toBe(
+      'tras volver a entrar',
+    )
   })
 
   it('never exposes the password or the key through the dumped store state', async () => {

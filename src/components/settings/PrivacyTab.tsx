@@ -34,20 +34,20 @@ import {
  * dialog, and the panic button behind a double confirmation.
  */
 
-const PERMISSION_GRANTED_TEXT = 'Permiso concedido.'
-const PERMISSION_DEFAULT_TEXT = 'Permiso no solicitado.'
-const PERMISSION_DENIED_TEXT = 'Permiso denegado. Actívalo desde la configuración del navegador.'
-const PERMISSION_UNSUPPORTED_TEXT = 'Tu navegador no soporta notificaciones.'
+const PERMISSION_GRANTED_TEXT = 'Permission granted.'
+const PERMISSION_DEFAULT_TEXT = 'Permission not requested.'
+const PERMISSION_DENIED_TEXT = 'Permission denied. Enable it from the browser settings.'
+const PERMISSION_UNSUPPORTED_TEXT = 'Your browser does not support notifications.'
 
-const REGENERATE_DIALOG_TITLE = 'Regenerar identidad'
+const REGENERATE_DIALOG_TITLE = 'Regenerate identity'
 const REGENERATE_DIALOG_BODY =
-  'Se generará un nuevo par de claves: tu fingerprint cambiará y los canales DM con tus pares dejarán de coincidir. ¿Continuar?'
+  'A new key pair will be generated: your fingerprint will change and the DM channels with your peers will stop matching. Continue?'
 
-const PANIC_BUTTON_LABEL = 'Borrar todo y salir'
+const PANIC_BUTTON_LABEL = 'Wipe everything and leave'
 const PANIC_DIALOG_TITLE = PANIC_BUTTON_LABEL
-const PANIC_DIALOG_BODY = 'Se borrarán apodo, claves, ajustes y todo rastro local. ¿Continuar?'
+const PANIC_DIALOG_BODY = 'Nickname, keys, settings and every local trace will be wiped. Continue?'
 const PANIC_FINAL_DIALOG_BODY =
-  'Esta acción es definitiva: se cerrarán todas las conexiones y la aplicación se recargará para empezar de cero.'
+  'This action is definitive: every connection will be closed and the app will reload to start from scratch.'
 
 /**
  * Issue #95 — canonical fingerprint shortened to its first two 8×4 display
@@ -103,7 +103,7 @@ export function PrivacyTab() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Toggle
-          label="Notificaciones de escritorio"
+          label="Desktop notifications"
           checked={settings.notifications}
           disabled={permission !== 'granted'}
           hint={permissionText(permission)}
@@ -115,12 +115,12 @@ export function PrivacyTab() {
           disabled={permission !== 'default'}
           className="self-start rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
         >
-          Permitir notificaciones
+          Allow notifications
         </button>
       </div>
 
       <Toggle
-        label="Recordar salas recientes"
+        label="Remember recent rooms"
         checked={settings.rememberRooms}
         onChange={(rememberRooms) => setSettings({ rememberRooms })}
       />
@@ -190,19 +190,20 @@ export function PrivacyTab() {
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted">
-          {TURN_CREDENTIAL_STORAGE_HINT} Se configuran en la pestaña Red; desactiva allí «Recordar
-          credenciales TURN en este navegador» para que solo vivan en la memoria de la sesión.
+          {TURN_CREDENTIAL_STORAGE_HINT} They are configured in the Network tab; turn off «Remember
+          TURN credentials in this browser» there so they only live in the session’s memory.
         </p>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted">
-          Tu clave privada se guarda cifrada en este navegador: la clave que la descifra vive en
-          IndexedDB y nada viaja por la red. Aun así, si algo compromete por completo este origen
-          (una extensión maliciosa, malware en tu equipo) podría usar esa clave para suplantarte.
+          Your private key is stored encrypted in this browser: the key that decrypts it lives in
+          IndexedDB and nothing travels over the network. Even so, if something fully compromises
+          this origin (a malicious extension, malware on your computer) it could use that key to
+          impersonate you.
         </p>
         <p className="text-xs text-muted">
-          Genera un nuevo par de claves ECDH: tu fingerprint cambiará para todos tus pares.
+          Generate a new ECDH key pair: your fingerprint will change for all your peers.
         </p>
         <button
           type="button"
@@ -210,13 +211,13 @@ export function PrivacyTab() {
           disabled={regenerating}
           className="self-start rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
         >
-          Regenerar identidad
+          Regenerate identity
         </button>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted">
-          Último recurso: borra apodo, claves, ajustes y todo rastro local en este navegador.
+          Last resort: wipes the nickname, keys, settings and every local trace in this browser.
         </p>
         <button
           type="button"
@@ -231,7 +232,7 @@ export function PrivacyTab() {
         open={regenerateDialogOpen}
         title={REGENERATE_DIALOG_TITLE}
         body={REGENERATE_DIALOG_BODY}
-        confirmLabel="Regenerar"
+        confirmLabel="Regenerate"
         danger
         onConfirm={() => void confirmRegenerate()}
         onCancel={() => setRegenerateDialogOpen(false)}
@@ -241,7 +242,7 @@ export function PrivacyTab() {
         open={panicDialogOpen}
         title={PANIC_DIALOG_TITLE}
         body={PANIC_DIALOG_BODY}
-        confirmLabel="Continuar"
+        confirmLabel="Continue"
         danger
         onConfirm={() => {
           setPanicDialogOpen(false)

@@ -13,7 +13,7 @@ import { useSettingsStore } from '../src/stores/useSettingsStore'
  * RF-03 regression (validation audit): once the 500-message FIFO cap is
  * reached the feed length no longer grows, so the arrival detection must
  * key on the first/last ids. Otherwise auto-scroll and the
- * '↓ N mensajes nuevos' counter die in exactly the long-room scenario the
+ * '↓ N new messages' counter die in exactly the long-room scenario the
  * cap was designed for.
  */
 
@@ -36,7 +36,7 @@ function cappedAppend(messages: Message[], tag: number): Message[] {
   const tail: Message = {
     ...messages[messages.length - 1]!,
     id: `new-${tag}`,
-    text: `mensaje nuevo ${tag}`,
+    text: `new message ${tag}`,
   }
   const next = [...messages, tail]
   return next.length > MESSAGE_CAP ? next.slice(next.length - MESSAGE_CAP) : next
@@ -84,11 +84,11 @@ describe('MessageFeed smart scroll past the FIFO cap (RF-03)', () => {
 
     const one = cappedAppend(base, 1)
     rerender(<MessageFeed {...props} messages={one} />)
-    expect(screen.getByRole('button', { name: '↓ 1 mensaje nuevo' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '↓ 1 new message' })).toBeInTheDocument()
 
     // A second capped append accumulates.
     rerender(<MessageFeed {...props} messages={cappedAppend(one, 2)} />)
-    expect(screen.getByRole('button', { name: '↓ 2 mensajes nuevos' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '↓ 2 new messages' })).toBeInTheDocument()
   })
 })
 
@@ -173,7 +173,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
     return [{ id: 'peer-1', nickname: 'luna-cauta', fingerprint, latencyMs: 42, degraded: false }]
   }
 
-  it('offers Silenciar a @nick and mutes by the author fingerprint', () => {
+  it('offers Mute @nick and mutes by the author fingerprint', () => {
     render(
       <MessageFeed
         messages={makeMessages(1)}
@@ -185,7 +185,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
       />,
     )
     // The affordance is reachable by its accessible name (RNF-05).
-    fireEvent.click(screen.getByRole('button', { name: 'Silenciar a @luna-cauta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mute @luna-cauta' }))
 
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([CANONICAL_FP])
     // No active room (the feed is rendered standalone): the local system
@@ -205,9 +205,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         ariaLabel="feed"
       />,
     )
-    expect(
-      screen.queryByRole('button', { name: 'Silenciar a @luna-cauta' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mute @luna-cauta' })).not.toBeInTheDocument()
 
     // The author is visible but has not announced keys yet: nothing to key
     // the mute on, so no affordance.
@@ -221,9 +219,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         ariaLabel="feed"
       />,
     )
-    expect(
-      screen.queryByRole('button', { name: 'Silenciar a @luna-cauta' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mute @luna-cauta' })).not.toBeInTheDocument()
   })
 })
 
@@ -295,8 +291,8 @@ describe('MessageItem reactions through the real manager toggle (issue #98)', ()
     seedRoom(makeMessages(1))
     const { rerender } = render(<MessageFeed {...FEED_PROPS} messages={storedMessages()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reaccionar' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Reaccionar con 🎉' }))
+    fireEvent.click(screen.getByRole('button', { name: 'React' }))
+    fireEvent.click(screen.getByRole('button', { name: 'React with 🎉' }))
 
     expect(storedMessages()[0]!.reactions?.['🎉']).toEqual([selfId])
     rerender(<MessageFeed {...FEED_PROPS} messages={storedMessages()} />)
@@ -307,7 +303,7 @@ describe('MessageItem reactions through the real manager toggle (issue #98)', ()
 // ---------------------------------------------------------------------------
 // Issue #102 phase 3 — the recovered separator, the dimmed recovered rows
 // and the inline history-request card. The separator mirrors the #96
-// latched lines; the card is one explicit tap ([Pedir] asks, [No]
+// latched lines; the card is one explicit tap ([Ask] asks, [No]
 // declines) and disappears on either choice.
 // ---------------------------------------------------------------------------
 
@@ -395,10 +391,10 @@ describe('MessageFeed history-request card (issue #102 phase 3)', () => {
         expiredCount={0}
         recoveredCount={0}
         ariaLabel="feed"
-        emptyStateText="Comparte el nombre de la sala para que otros se unan."
+        emptyStateText="Share the room name so others can join."
       />,
     )
-    expect(screen.queryByRole('button', { name: 'Pedir' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ask' })).not.toBeInTheDocument()
 
     rerender(
       <MessageFeed
@@ -408,18 +404,18 @@ describe('MessageFeed history-request card (issue #102 phase 3)', () => {
         expiredCount={0}
         recoveredCount={0}
         ariaLabel="feed"
-        emptyStateText="Comparte el nombre de la sala para que otros se unan."
+        emptyStateText="Share the room name so others can join."
         historyAsk={{ onAsk: () => {}, onDismiss: () => {} }}
       />,
     )
     // The card lives inside the log, next to the empty-state invitation.
-    expect(screen.getByRole('region', { name: 'Pedir mensajes recientes' })).toBeInTheDocument()
-    expect(screen.getByText('¿Pedir los últimos mensajes a la sala?')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Pedir' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Request recent messages' })).toBeInTheDocument()
+    expect(screen.getByText('Ask the room for the latest messages?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'No' })).toBeInTheDocument()
   })
 
-  it('routes [Pedir] to onAsk and [No] to onDismiss', () => {
+  it('routes [Ask] to onAsk and [No] to onDismiss', () => {
     const onAsk = vi.fn()
     const onDismiss = vi.fn()
     render(
@@ -434,7 +430,7 @@ describe('MessageFeed history-request card (issue #102 phase 3)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pedir' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
     expect(onAsk).toHaveBeenCalledTimes(1)
     expect(onDismiss).not.toHaveBeenCalled()
 

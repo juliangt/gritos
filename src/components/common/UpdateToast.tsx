@@ -8,9 +8,9 @@ import {
 
 /**
  * Update toast (issue #104, phase 4): mounted once at App level, it shows
- * «Nueva versión disponible — [Recargar]» while a service worker waits
+ * «New version available — [Reload]» while a service worker waits
  * behind this page (a deployed new version), per the registerSw module's
- * waiting-worker detection. Recargar calls location.reload(), which
+ * waiting-worker detection. Reload calls location.reload(), which
  * dismisses the old client so the waiting worker activates and the
  * activate-time cache cleanup runs; dismissing is session-only component
  * state — nothing persists, so the toast naturally reappears on the next
@@ -33,7 +33,7 @@ export function UpdateToast() {
   return (
     <div
       role="status"
-      aria-label="Nueva versión de la app"
+      aria-label="New app version"
       className="fixed bottom-4 right-4 z-50 flex items-center gap-3 border border-border bg-surface px-3 py-2 text-xs shadow-lg"
     >
       <p className="min-w-0 flex-1 text-muted">{UPDATE_AVAILABLE_TEXT}</p>

@@ -67,7 +67,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const textarea = () => screen.getByLabelText('Escribe un mensaje') as HTMLTextAreaElement
+const textarea = () => screen.getByLabelText('Write a message') as HTMLTextAreaElement
 
 describe('ChatInput (RF-03)', () => {
   it('sends on Enter and clears the field', () => {
@@ -89,10 +89,10 @@ describe('ChatInput (RF-03)', () => {
     expect(sendChat).not.toHaveBeenCalled()
   })
 
-  it('also sends via the Enviar button', () => {
+  it('also sends via the Send button', () => {
     render(<ChatInput room={makeRoom()} />)
     fireEvent.change(textarea(), { target: { value: 'por botón' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(sendChat).toHaveBeenCalledWith('room-1', 'por botón')
   })
 
@@ -102,9 +102,9 @@ describe('ChatInput (RF-03)', () => {
     fireEvent.change(textarea(), { target: { value: long } })
     expect(screen.getByText('4001/4000')).toBeInTheDocument()
     fireEvent.keyDown(textarea(), { key: 'Enter' })
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(sendChat).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
   })
 
   it('shows the counter from 3800 chars onward only', () => {
@@ -164,13 +164,13 @@ describe('ChatInput (RF-03)', () => {
 
   it('shows the queue hint while the room is searching/error (§10.3)', () => {
     const { rerender } = render(<ChatInput room={makeRoom({ status: 'searching' })} />)
-    expect(screen.getByText('En cola hasta conectar…')).toBeInTheDocument()
+    expect(screen.getByText('Queued until connected…')).toBeInTheDocument()
 
     rerender(<ChatInput room={makeRoom({ status: 'error' })} />)
-    expect(screen.getByText('En cola hasta conectar…')).toBeInTheDocument()
+    expect(screen.getByText('Queued until connected…')).toBeInTheDocument()
 
     rerender(<ChatInput room={makeRoom({ status: 'connected' })} />)
-    expect(screen.queryByText('En cola hasta conectar…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Queued until connected…')).not.toBeInTheDocument()
   })
 
   it('sends while disconnected too (the manager queues it)', () => {
@@ -203,7 +203,7 @@ describe('ChatInput DM composer (RF-04, issue #93)', () => {
     render(<ChatInput dm={{ peerId: 'peer-9', available: true, legacyPeer: true }} />)
 
     expect(textarea()).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
     expect(screen.getByText(DM_LEGACY_PEER_TEXT)).toBeInTheDocument()
     // The peer IS connected: the disconnected text must not appear too.
     expect(screen.queryByText(DM_DISCONNECTED_TEXT)).not.toBeInTheDocument()
@@ -216,7 +216,7 @@ describe('ChatInput DM composer (RF-04, issue #93)', () => {
 
 // ---------------------------------------------------------------------------
 // Issue #96 — per-message TTL selector: a memory-only combobox offered in
-// both room and DM modes. 'Sin caducidad' (the default) omits the ttl
+// both room and DM modes. 'No expiry' (the default) omits the ttl
 // argument entirely; the picks map to whole seconds (30/300/3600) on the
 // sendChat/sendDm seam. The selection survives consecutive sends until
 // changed and resets on remount (never persisted).
@@ -229,7 +229,7 @@ function pickTtl(value: string): void {
 }
 
 describe('ChatInput TTL selector (issue #96)', () => {
-  it('renders with an accessible name and the Sin caducidad default in room mode', () => {
+  it('renders with an accessible name and the No expiry default in room mode', () => {
     render(<ChatInput room={makeRoom()} />)
     expect(ttlSelect()).toHaveValue('')
     expect(within(ttlSelect()).getByRole('option', { name: SIN_EXPIRY_LABEL })).toHaveValue('')
@@ -263,7 +263,7 @@ describe('ChatInput TTL selector (issue #96)', () => {
     expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola dm', 30)
   })
 
-  it('Sin caducidad keeps the two-argument call (no ttl reaches the envelope)', () => {
+  it('No expiry keeps the two-argument call (no ttl reaches the envelope)', () => {
     const room = render(<ChatInput room={makeRoom()} />)
     fireEvent.change(textarea(), { target: { value: 'sin ttl' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
@@ -289,7 +289,7 @@ describe('ChatInput TTL selector (issue #96)', () => {
     expect(sendChat).toHaveBeenNthCalledWith(2, 'room-1', 'dos', 300)
   })
 
-  it('resets to Sin caducidad on remount (memory-only state)', () => {
+  it('resets to No expiry on remount (memory-only state)', () => {
     const first = render(<ChatInput room={makeRoom()} />)
     pickTtl('30')
     fireEvent.change(textarea(), { target: { value: 'primera sesión' } })

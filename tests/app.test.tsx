@@ -37,25 +37,25 @@ describe('App routing (M2: onboarding | chat shell)', () => {
   it('shows the onboarding screen on a first visit (RF-01)', () => {
     render(<App />)
     expect(screen.getByRole('heading', { level: 1, name: 'gritos' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Tu apodo')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'sorpréndeme' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Entrar →' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Your nickname')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'surprise me' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enter →' })).toBeInTheDocument()
     // The spec one-liner, exactly as in §10.2.
     expect(
       screen.getByText(
-        'Sin servidor, sin cuentas: tus mensajes viajan directos entre navegadores y desaparecen al recargar.',
+        'No server, no accounts: your messages travel directly between browsers and disappear on reload.',
       ),
     ).toBeInTheDocument()
     // No chat shell yet.
-    expect(screen.queryByRole('button', { name: 'Ajustes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
   })
 
   it('skips onboarding when the store already holds an identity', async () => {
     useAppStore.getState().setIdentity(IDENTITY)
     render(<App />)
 
-    expect(screen.queryByLabelText('Tu apodo')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Your nickname')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
 
     // RF-01/RF-07 — auto-join #lobby with autoJoinLobby on (default).
     const lobbyRoomId = await deriveRoomId('lobby')
@@ -75,8 +75,8 @@ describe('App routing (M2: onboarding | chat shell)', () => {
     await waitFor(() => {
       expect(useAppStore.getState().identity?.nickname).toBe('zorro-bravo')
     })
-    expect(screen.queryByLabelText('Tu apodo')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Your nickname')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
     // Drain the auto-join started by this mount BEFORE the next test
     // reinstalls the fake: a pending doJoinRoom continuation would
     // otherwise land in the following test's joinRoomFn (race flake).
@@ -100,26 +100,26 @@ describe('App routing (M2: onboarding | chat shell)', () => {
     useAppStore.getState().setIdentity(IDENTITY)
 
     const { unmount } = render(<App />)
-    expect(screen.queryByRole('form', { name: 'unirse a sala' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'join a room' })).not.toBeInTheDocument()
     unmount()
 
     window.history.pushState({}, '', '/?debug')
     render(<App />)
-    expect(screen.getByRole('form', { name: 'unirse a sala' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Unirse' })).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'join a room' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Join' })).toBeInTheDocument()
   })
 })
 
 // ---------------------------------------------------------------------------
 // Issue #102 phase 3 — the inline history-request card over the real chat
 // shell: it is offered exactly while the active room's feed holds no chat
-// rows (join lines don't count) and not dismissed this join; [Pedir]
+// rows (join lines don't count) and not dismissed this join; [Ask]
 // dispatches one broadcast hist-req {n: 50} through the manager and either
 // button dismisses (per-join, memory-only). Nothing is ever asked
 // automatically.
 // ---------------------------------------------------------------------------
 
-const ASK_TEXT = '¿Pedir los últimos mensajes a la sala?'
+const ASK_TEXT = 'Ask the room for the latest messages?'
 
 describe('Issue #102 phase 3 — history request card (integration)', () => {
   async function renderLobby(): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
@@ -138,14 +138,14 @@ describe('Issue #102 phase 3 — history request card (integration)', () => {
     return { roomId: lobbyRoomId, room }
   }
 
-  it('offers the ask on an empty-feed join; [Pedir] sends hist-req {n: 50} once and dismisses', async () => {
+  it('offers the ask on an empty-feed join; [Ask] sends hist-req {n: 50} once and dismisses', async () => {
     const { roomId, room } = await renderLobby()
     expect(screen.getByText(ASK_TEXT)).toBeInTheDocument()
 
     // The ask only dispatches once the room has a DataChannel (§10.3); a
     // tap while still searching parks it instead of dropping it.
     room.peerJoin('peer-1')
-    fireEvent.click(screen.getByRole('button', { name: 'Pedir' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
 
     await waitFor(() => {
       expect(room.action('hist-req').sends).toHaveLength(1)
@@ -159,11 +159,11 @@ describe('Issue #102 phase 3 — history request card (integration)', () => {
     expect(useAppStore.getState().rooms[roomId]?.historyAskDismissed).toBe(true)
   })
 
-  it('parks a [Pedir] tapped while the room is still searching and flushes it on the first peer', async () => {
+  it('parks a [Ask] tapped while the room is still searching and flushes it on the first peer', async () => {
     const { room } = await renderLobby()
     expect(useAppStore.getState().activeView?.kind).toBe('room')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pedir' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
     expect(room.action('hist-req').sends).toHaveLength(0) // parked, not lost
 
     room.peerJoin('peer-1')
@@ -208,6 +208,6 @@ describe('Issue #102 phase 3 — history request card (integration)', () => {
       })
     })
     expect(screen.queryByText(ASK_TEXT)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Pedir' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ask' })).not.toBeInTheDocument()
   })
 })

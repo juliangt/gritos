@@ -56,11 +56,11 @@ function reactToMessage(roomId: string, messageId: string, emo: string): void {
  * One flat feed bubble (spec §10.4): no per-message boxes; author in a
  * stable hash color, HH:MM from the author's ts, Markdown-subset body with
  * mention highlighting. Own messages align right and carry the dimmed
- * ✓/✓✓ receipt marker. System lines ('— nick se ha unido —', FIFO
+ * ✓/✓✓ receipt marker. System lines ('— nick joined —', FIFO
  * separator) render centered and muted.
  *
  * Issue #95 — another peer's message row carries a discreet inline mute
- * affordance (accessible name 'Silenciar a @nick') whenever the author is a
+ * affordance (accessible name 'Mute @nick') whenever the author is a
  * peer with a known fingerprint: it keys the local mute list on the
  * identity fingerprint, never the spoofable nickname. It imports the
  * manager helper directly (the same seam ChatLayout uses for joinRoom) so
@@ -263,9 +263,7 @@ export const MessageItem = memo(function MessageItem(props: {
       {own && (
         <span
           className="text-xs text-muted"
-          aria-label={
-            props.message.status === 'delivered' ? 'entregado' : 'enviado, pendiente de recepción'
-          }
+          aria-label={props.message.status === 'delivered' ? 'delivered' : 'sent, pending receipt'}
         >
           {props.message.status === 'delivered' ? '✓✓' : '✓'}
         </span>

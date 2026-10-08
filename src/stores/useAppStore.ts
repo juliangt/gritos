@@ -445,12 +445,12 @@ export function connectionStatusText(status: RoomStatus, peerCount: number): str
   switch (status) {
     case 'searching':
       return peerCount > 0
-        ? `Conectando (${peerCount} pares encontrados)…`
-        : 'Buscando pares en la red torrent…'
+        ? `Connecting (${peerCount} peers found)…`
+        : 'Searching for peers on the torrent network…'
     case 'connected':
-      return `Canal P2P establecido · ${peerCount} pares`
+      return `P2P channel established · ${peerCount} peers`
     case 'error':
-      return 'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos'
+      return 'No tracker access — check your connection or configure alternative trackers'
   }
 }
 

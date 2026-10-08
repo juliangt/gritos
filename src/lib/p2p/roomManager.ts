@@ -302,7 +302,7 @@ export class RoomLimitError extends Error {
   readonly maxRooms: number
 
   constructor(maxRooms: number) {
-    super(`Límite de salas activas alcanzado (${maxRooms})`)
+    super(`Active room limit reached (${maxRooms})`)
     this.name = 'RoomLimitError'
     this.maxRooms = maxRooms
   }
@@ -311,7 +311,7 @@ export class RoomLimitError extends Error {
 /** RF-02 — invalid room names reject before any network call. */
 export class RoomNameError extends Error {
   constructor(rawName: string) {
-    super(`Nombre de sala no válido: «${rawName}»`)
+    super(`Invalid room name: "${rawName}"`)
     this.name = 'RoomNameError'
   }
 }
@@ -319,7 +319,7 @@ export class RoomNameError extends Error {
 /** RF-01 — invalid nicknames reject before any state/presence change. */
 export class NicknameError extends Error {
   constructor(rawNickname: string) {
-    super(`Apodo no válido: «${rawNickname}»`)
+    super(`Invalid nickname: "${rawNickname}"`)
     this.name = 'NicknameError'
   }
 }

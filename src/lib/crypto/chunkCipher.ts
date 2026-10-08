@@ -100,7 +100,7 @@ export async function openChunk(key: CryptoKey, sealedChunk: Uint8Array): Promis
   if (sealedChunk.length < CHUNK_SEAL_OVERHEAD_BYTES) {
     throw new ChunkCipherError(
       'malformed',
-      `El chunk sellado mide ${sealedChunk.length} B; el mínimo es ${CHUNK_SEAL_OVERHEAD_BYTES} B (IV + etiqueta)`,
+      `The sealed chunk is ${sealedChunk.length} B; the minimum is ${CHUNK_SEAL_OVERHEAD_BYTES} B (IV + tag)`,
     )
   }
   const iv = sealedChunk.slice(0, CHUNK_IV_BYTES)
@@ -115,7 +115,7 @@ export async function openChunk(key: CryptoKey, sealedChunk: Uint8Array): Promis
   } catch (error) {
     throw new ChunkCipherError(
       'authentication',
-      'El chunk no autentica con esta clave (etiqueta GCM inválida)',
+      'The chunk does not authenticate with this key (invalid GCM tag)',
       { cause: error },
     )
   }

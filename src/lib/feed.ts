@@ -28,21 +28,21 @@ export function expiredSeparatorText(count: number): string {
 export const RECOVERED_SEPARATOR_TEXT = '— mensajes recuperados de pares —'
 
 // ---------------------------------------------------------------------------
-// Empty states (M6, spec §10.4 — discrete, Spanish)
+// Empty states (M6, spec §10.4 — discrete; English UI copy per issue #112)
 // ---------------------------------------------------------------------------
 
 /** Empty room feed: invites sharing the room name (RF-02). */
-export const EMPTY_ROOM_FEED_TEXT = 'Comparte el nombre de la sala para que otros se unan.'
+export const EMPTY_ROOM_FEED_TEXT = 'Share the room name so others can join.'
 
 /** Empty DM feed (RF-04): the conversation exists but has no messages yet. */
-export const EMPTY_DM_FEED_TEXT = 'Todavía no hay mensajes. Escribe el primero.'
+export const EMPTY_DM_FEED_TEXT = 'No messages yet. Write the first one.'
 
-/** Empty *Mensajes directos* section (RF-04): no open DM channels. */
+/** Empty *Direct messages* section (RF-04): no open DM channels. */
 export const EMPTY_DM_LIST_TEXT =
-  'Aún no hay mensajes directos. Abre el menú de un par para iniciar una conversación cifrada.'
+  'No direct messages yet. Open a peer’s menu to start an encrypted conversation.'
 
-/** Empty *Recientes* section (RF-02): nothing remembered yet. */
-export const EMPTY_RECENTS_TEXT = 'Sin salas recientes todavía.'
+/** Empty *Recents* section (RF-02): nothing remembered yet. */
+export const EMPTY_RECENTS_TEXT = 'No recent rooms yet.'
 
 /** RF-03 — auto-scroll only when the user is at most this far from the bottom. */
 export const SMART_SCROLL_THRESHOLD_PX = 150
@@ -132,18 +132,18 @@ export function dmAmbiguousLine(nickname: string): string {
 }
 
 /**
- * Typing indicator line (RF-03): one known nick → 'nick está escribiendo…',
- * several → 'N personas están escribiendo…', none → null (bar hidden).
+ * Typing indicator line (RF-03): one known nick → 'nick is typing…',
+ * several → 'N people are typing…', none → null (bar hidden).
  */
 export function typingStatusText(nicknames: readonly string[]): string | null {
   if (nicknames.length === 0) return null
-  if (nicknames.length === 1) return `${nicknames[0] as string} está escribiendo…`
-  return `${nicknames.length} personas están escribiendo…`
+  if (nicknames.length === 1) return `${nicknames[0] as string} is typing…`
+  return `${nicknames.length} people are typing…`
 }
 
-/** Floating new-messages button label (RF-03: '↓ N mensajes nuevos'). */
+/** Floating new-messages button label (RF-03: '↓ N new messages'). */
 export function newMessagesButtonText(count: number): string {
-  const noun = count === 1 ? 'mensaje nuevo' : 'mensajes nuevos'
+  const noun = count === 1 ? 'new message' : 'new messages'
   return `↓ ${count} ${noun}`
 }
 
@@ -152,7 +152,7 @@ export function newMessagesButtonText(count: number): string {
 // ---------------------------------------------------------------------------
 
 /** RF-04 — header state when the peer shares no active room anymore. */
-export const DM_DISCONNECTED_TEXT = 'El par se ha desconectado'
+export const DM_DISCONNECTED_TEXT = 'The peer has disconnected'
 
 /**
  * Issue #93 (spec §12.1) — composer hint when the connected peer runs a
@@ -160,22 +160,23 @@ export const DM_DISCONNECTED_TEXT = 'El par se ha desconectado'
  * impossible until it updates, and the honest state replaces the silent
  * message loss of the mixed-version degradation.
  */
-export const DM_LEGACY_PEER_TEXT = 'Este par usa una versión anterior sin DM cifrado por sesión'
+export const DM_LEGACY_PEER_TEXT =
+  'This peer runs an older version without per-session encrypted DMs'
 
 /** RF-04 — TOFU verification notice shown under the peer's fingerprint. */
-export const DM_VERIFY_NOTICE = 'Compáralo con tu interlocutor para verificar su identidad'
+export const DM_VERIFY_NOTICE = 'Compare it with your contact to verify their identity'
 
 /**
  * Issue #22 — TOFU divergence warning: the peer's live fingerprint differs
  * from the pinned first-seen one. Advisory only (messages keep flowing).
  */
-export const DM_KEY_CHANGED_WARNING = '⚠ El fingerprint cambió desde tu última verificación'
+export const DM_KEY_CHANGED_WARNING = '⚠ The fingerprint changed since your last verification'
 
 /** Issue #22 — explanation shown with the TOFU divergence warning. */
 export const DM_KEY_CHANGED_HINT =
-  'El par puede haber reinstalado la app o podría tratarse de una suplantación: verifica su identidad por otro canal antes de confiar.'
+  'The peer may have reinstalled the app or could be an impersonation: verify their identity through another channel before trusting them.'
 
 /** Accessible label of the DM message feed. */
 export function dmFeedLabel(peerNick: string): string {
-  return `Mensajes directos con ${peerNick}`
+  return `Direct messages with ${peerNick}`
 }

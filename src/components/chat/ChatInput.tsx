@@ -99,12 +99,12 @@ export interface DmComposerContext {
  * Shift+Enter breaks the line, 4000-character limit with a counter visible
  * from 3800 (sending blocked above the limit). Typing signals are
  * throttled to 1/s while composing and stop on send, blur or 2 s of idle.
- * Rooms queue locally while `searching`/`error` ('En cola hasta
- * conectar…'); a disconnected DM is hard-blocked with the exact RF-04 text
- * and a legacy (v1-build) peer with the issue #93 hint. A memory-only TTL
- * selector (issue #96) rides every send in both modes: it defaults to
- * 'Sin caducidad' and stays on the picked value across consecutive sends
- * until changed — never persisted, so a reload resets it.
+ * Rooms queue locally while `searching`/`error` ('Queued until connected…');
+ * a disconnected DM is hard-blocked with the exact RF-04 text and a legacy
+ * (v1-build) peer with the issue #93 hint. A memory-only TTL selector (issue
+ * #96) rides every send in both modes: it defaults to 'No expiry' and stays
+ * on the picked value across consecutive sends until changed — never
+ * persisted, so a reload resets it.
  *
  * Issue #99 (Phase 3) — slash commands: while the value is a lone '/token'
  * an inline candidate popup (ARIA combobox pattern) lists the verbs from
@@ -368,7 +368,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   return (
     <>
       <form
-        aria-label="Mensaje"
+        aria-label="Message"
         onSubmit={handleSubmit}
         className="relative flex flex-col gap-1 border-t border-border bg-surface px-3 py-2"
       >
@@ -403,8 +403,8 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
         <textarea
           ref={textareaRef}
           rows={1}
-          aria-label="Escribe un mensaje"
-          placeholder="Mensaje (Markdown)…"
+          aria-label="Write a message"
+          placeholder="Message (Markdown)…"
           value={value}
           disabled={blocked}
           // Issue #99 — ARIA combobox pattern for the slash popup: the
@@ -468,7 +468,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
           className="max-h-36 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm focus:border-accent disabled:opacity-50"
         />
         <div className="flex items-center gap-3 text-xs text-muted">
-          <span className="hidden sm:inline">**negrita** · *cursiva* · `código`</span>
+          <span className="hidden sm:inline">**bold** · *italic* · `code`</span>
           {/* Issue #96 — native select (keyboard-operable by construction);
             hard-blocked together with the composer on a disconnected or
             legacy DM peer, still usable while a room is queueing. */}
@@ -499,7 +499,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
               onClick={() => setFileDialogOpen(true)}
               className="rounded-md border border-border px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
             >
-              Adjuntar
+              Attach
             </button>
           )}
           {disconnected && (
@@ -514,7 +514,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
           )}
           {queued && (
             <span className="text-accent" role="status">
-              En cola hasta conectar…
+              Queued until connected…
             </span>
           )}
           {/* Issue #99 — the rejected-submit hint (unknown verb, parse-level
@@ -538,7 +538,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
             disabled={!canSend}
             className="ml-auto rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-text disabled:opacity-40"
           >
-            Enviar
+            Send
           </button>
         </div>
       </form>
