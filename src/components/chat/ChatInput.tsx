@@ -1,21 +1,34 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, useLayoutEffect, type FormEvent } from 'react'
 import {
   CHAR_COUNTER_FROM,
   DM_DISCONNECTED_TEXT,
   DM_LEGACY_PEER_TEXT,
   TYPING_IDLE_STOP_MS,
   TYPING_SIGNAL_THROTTLE_MS,
+  UNKNOWN_COMMAND_HINT,
 } from '../../lib/feed'
 import { MAX_MESSAGE_TTL_S, MAX_PLAINTEXT_LENGTH, MIN_MESSAGE_TTL_S } from '../../lib/p2p/protocol'
 import type { Room } from '../../stores/useAppStore'
 import {
   SIN_EXPIRY_LABEL,
+  SLASH_POPUP_LABEL,
   TTL_1H_LABEL,
   TTL_30S_LABEL,
   TTL_5M_LABEL,
   TTL_SELECT_LABEL,
 } from '../settings/messages'
 import { useRoomManager } from '../../hooks/useRoomManager'
+import {
+  SLASH_COMMANDS,
+  parseSlashCommand,
+  type SlashCommand,
+  type SlashCommandDef,
+} from '../../lib/slashCommands'
+import {
+  createSlashExecutorContext,
+  executeSlashCommand,
+  slashErrorLine,
+} from '../../lib/slashExecutor'
 
 /** Visible textarea height: about 6 text lines (RF-03). */
 const MAX_TEXTAREA_HEIGHT_PX = 144
@@ -30,7 +43,24 @@ const TTL_CHOICES = [
   { seconds: MAX_MESSAGE_TTL_S, label: TTL_1H_LABEL },
 ] as const
 
-/** M3 — composer context for a DM view (RF-04). */
+/** DOM id of the slash-candidate listbox (the textarea's aria-controls target). */
+const SLASH_LISTBOX_ID = 'slash-command-listbox'
+
+/** DOM id prefix of one slash-candidate option (the aria-activedescendant target). */
+const SLASH_OPTION_ID_PREFIX = 'slash-command-option'
+
+/**
+ * Shape of a value while the verb token is being typed: a leading '/' and
+ * no whitespace yet. This is what makes the popup a verb picker: it opens
+ * on '/' (and '/n', '/ay'…), stays open while the verb completes and closes
+ * as soon as arguments begin ('/nick l…'). The escape hatch '\/…' never
+ * matches — the value starts with the backslash, not the slash.
+ */
+const SLASH_TOKEN_PATTERN = /^\/\S*$/
+
+/**
+ * M3 — composer context for a DM view (RF-04).
+ */
 export interface DmComposerContext {
   peerId: string
   /** False once the peer shares no active room: sending is blocked. */
@@ -61,6 +91,26 @@ export interface DmComposerContext {
  * selector (issue #96) rides every send in both modes: it defaults to
  * 'Sin caducidad' and stays on the picked value across consecutive sends
  * until changed — never persisted, so a reload resets it.
+ *
+ * Issue #99 (Phase 3) — slash commands: while the value is a lone '/token'
+ * an inline candidate popup (ARIA combobox pattern) lists the verbs from
+ * SLASH_COMMANDS filtered by the typed prefix; ↑ ↓ move, Enter/Tab pick,
+ * Esc closes (a second Esc clears the inline hint), a mouse click picks
+ * too — the options are never focusable, so focus stays on the textarea
+ * throughout (mousedown's default focus shift is prevented). Picking a
+ * zero-arg command runs it at once and clears the input; picking an
+ * argument command fills '/verb ' with the caret at the end. On submit the
+ * input goes through parseSlashCommand: non-slash text sends as always,
+ * unknown verbs and rejected arguments show a transient inline hint
+ * (role="status" region next to the controls, cleared on edit — the
+ * static-region choice keeps the hint readable while the text to fix stays
+ * in the input) and send nothing, and real commands run through the
+ * executor whose send-chat directives (/me, the '\/' escape hatch) come
+ * back through the SAME mode-aware send path as a normal message, so the
+ * cap, the typing signals and the TTL pick still apply. In a DM view that
+ * path is sendDm/sendManualDm: /me sends a DM there, while room-scoped
+ * commands (/salir, /limpiar) naturally answer with the executor's
+ * NO_ACTIVE_ROOM_TEXT line in the focused feed.
  */
 export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   const [value, setValue] = useState('')
@@ -68,6 +118,19 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   // across consecutive sends (one decision covers a burst of expiring
   // messages) and dies with the tab; it never reaches the settings store.
   const [ttlDraft, setTtlDraft] = useState('')
+  // Issue #99 — caret to place after the next commit (the '/verb ' fill of
+  // a popup pick): applied in a layout effect once the DOM holds the value.
+  // A ref on purpose — no re-render is needed just to remember the caret.
+  const pendingCaretRef = useRef<number | null>(null)
+  // Issue #99 — Esc closes the popup; typing re-opens it. Separated from
+  // the value-shape so closing is explicit user intent, not a side effect.
+  const [slashDismissed, setSlashDismissed] = useState(false)
+  // Issue #99 — transient inline hint for a rejected submit (unknown verb,
+  // parse-level error). Static role="status" region: appears on submit,
+  // cleared on the next edit, a successful send or an Esc with the popup
+  // already closed.
+  const [hint, setHint] = useState<string | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const typingActiveRef = useRef(false)
   const lastTypingSentAtRef = useRef(0)
@@ -88,12 +151,32 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   const canSend = !blocked && value.trim() !== '' && !overLimit
   const showCounter = value.length >= CHAR_COUNTER_FROM
 
+  // Issue #99 — slash-candidate list: the typed verb prefix filters the
+  // command table (fuzzy-prefix match: '/n' → /nick, '/ay' → /ayuda, a
+  // bare '/' offers everything). No candidates (e.g. '/x') → no popup.
+  const slashCandidates = SLASH_TOKEN_PATTERN.test(value)
+    ? SLASH_COMMANDS.filter((def) => def.verb.startsWith(value.slice(1)))
+    : []
+  const slashOpen = !slashDismissed && slashCandidates.length > 0
+  const activeCandidate = slashOpen ? slashCandidates[activeIndex] : undefined
+
   const resizeTextarea = useCallback(() => {
     const element = textareaRef.current
     if (element === null) return
     element.style.height = 'auto'
     element.style.height = `${Math.min(element.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`
   }, [])
+
+  // Issue #99 — apply the caret promised by a popup pick ('/nick ' → end)
+  // right after React commits the new value; then clear the promise. The
+  // effect rides the value commits (the only ones that can follow a fill).
+  useLayoutEffect(() => {
+    const caret = pendingCaretRef.current
+    if (caret === null) return
+    const element = textareaRef.current
+    if (element !== null) element.setSelectionRange(caret, caret)
+    pendingCaretRef.current = null
+  }, [value])
 
   const stopTypingSignal = useCallback(() => {
     if (idleTimerRef.current !== null) {
@@ -130,25 +213,92 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   // Clean up any pending idle timer when leaving the room/unmounting.
   useEffect(() => stopTypingSignal, [stopTypingSignal])
 
-  const submit = () => {
-    if (!canSend) return
-    // Issue #96 — '' is the no-expiry pick: the argument is omitted so the
-    // call (and the envelope the manager builds) stays byte-identical to the
-    // pre-#96 shape; any pick maps to whole seconds on the wire.
+  /**
+   * Issue #99 — the ONE send path of the composer, used by the plain-text
+   * submit and by the executor's send-chat directives alike (/me and the
+   * '\/' escape hatch): the 4000-cap is enforced by the caller (submit's
+   * canSend gate — a directive's text is never longer than the typed
+   * value), the TTL pick rides along, and the mode decides the manager
+   * seam. Room sends forward `isAction` so a /me echoes italic locally
+   * (Message.isAction, wire-clean); the DM seams have no opts parameter,
+   * so a DM-mode /me sends the action prose as a normal (plain) DM.
+   */
+  const sendText = (text: string, isAction?: true) => {
     const ttl = ttlDraft === '' ? undefined : Number(ttlDraft)
     if (room !== undefined) {
-      if (ttl === undefined) sendChat(room.id, value)
-      else sendChat(room.id, value, ttl)
+      if (ttl === undefined && isAction === undefined) sendChat(room.id, text)
+      else if (ttl === undefined) sendChat(room.id, text, undefined, { isAction: true })
+      else if (isAction === undefined) sendChat(room.id, text, ttl)
+      else sendChat(room.id, text, ttl, { isAction: true })
     } else if (dm !== undefined && dm.manual === true) {
       // Issue #97 — manual channels route through the manual manager.
-      if (ttl === undefined) void sendManualDm(dm.peerId, value)
-      else void sendManualDm(dm.peerId, value, ttl)
+      if (ttl === undefined) void sendManualDm(dm.peerId, text)
+      else void sendManualDm(dm.peerId, text, ttl)
     } else if (dm !== undefined) {
-      if (ttl === undefined) void sendDm(dm.peerId, value)
-      else void sendDm(dm.peerId, value, ttl)
+      if (ttl === undefined) void sendDm(dm.peerId, text)
+      else void sendDm(dm.peerId, text, ttl)
     }
+  }
+
+  /** Empties the composer after its content left (sent or executed). */
+  const clearComposer = () => {
     setValue('')
+    setHint(null)
     stopTypingSignal()
+    requestAnimationFrame(resizeTextarea)
+  }
+
+  /** Runs the executor with the real seams; sends what comes back. */
+  const runSlash = async (parsed: SlashCommand) => {
+    const directive = await executeSlashCommand(parsed, createSlashExecutorContext())
+    if (directive.type === 'send-chat') sendText(directive.text, directive.isAction)
+  }
+
+  const submit = () => {
+    if (!canSend) return
+    const parsed = parseSlashCommand(value)
+    if (parsed === null) {
+      // Plain chat: the pre-#99 path, byte-identical sends.
+      sendText(value)
+      clearComposer()
+      return
+    }
+    if (parsed.kind === 'unknown') {
+      // NEVER sent; the hint sits next to the input, the text stays for
+      // fixing (the executor's own unknown branch is the headless path).
+      setHint(UNKNOWN_COMMAND_HINT)
+      return
+    }
+    if (parsed.kind === 'error') {
+      // Known verb, rejected arguments: the executor's wording, inline.
+      setHint(slashErrorLine(parsed))
+      return
+    }
+    // A real command or the escape hatch: the content leaves the composer
+    // either way, so clear first (a second Enter cannot double-run an
+    // async command) and execute through the executor's seams.
+    clearComposer()
+    void runSlash(parsed)
+  }
+
+  /**
+   * Issue #99 — a popup pick. Zero-arg commands execute immediately (the
+   * input clears); argument commands fill '/verb ' with the caret at the
+   * end and let the user type the argument (the space closes the popup).
+   */
+  const selectCandidate = (def: SlashCommandDef) => {
+    if (def.arity === 'none') {
+      clearComposer()
+      // The parser turns the bare verb into the canonical zero-arg command
+      // (it cannot fail for a table row with no argument to reject).
+      const parsed = parseSlashCommand(`/${def.verb}`)
+      if (parsed?.kind === 'command') void runSlash(parsed)
+      return
+    }
+    const filled = `/${def.verb} `
+    setValue(filled)
+    setHint(null)
+    pendingCaretRef.current = filled.length
     requestAnimationFrame(resizeTextarea)
   }
 
@@ -163,8 +313,36 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
     <form
       aria-label="Mensaje"
       onSubmit={handleSubmit}
-      className="flex flex-col gap-1 border-t border-border bg-surface px-3 py-2"
+      className="relative flex flex-col gap-1 border-t border-border bg-surface px-3 py-2"
     >
+      {slashOpen && (
+        <ul
+          id={SLASH_LISTBOX_ID}
+          role="listbox"
+          aria-label={SLASH_POPUP_LABEL}
+          className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-md overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-lg"
+        >
+          {slashCandidates.map((def, index) => (
+            <li
+              key={def.verb}
+              id={`${SLASH_OPTION_ID_PREFIX}-${def.verb}`}
+              role="option"
+              aria-selected={index === activeIndex}
+              // Hover only syncs the highlight; picking happens on click.
+              onMouseEnter={() => setActiveIndex(index)}
+              // The popup must never steal the focus from the textarea.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectCandidate(def)}
+              className={`flex cursor-pointer flex-col gap-0.5 px-3 py-1.5 ${
+                index === activeIndex ? 'bg-bg' : ''
+              }`}
+            >
+              <code className="font-mono text-sm text-text">{def.usage}</code>
+              <span className="text-xs text-muted">{def.help}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <textarea
         ref={textareaRef}
         rows={1}
@@ -172,8 +350,23 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
         placeholder="Mensaje (Markdown)…"
         value={value}
         disabled={blocked}
+        // Issue #99 — ARIA combobox pattern for the slash popup: the
+        // textarea keeps the focus and announces the active candidate
+        // through aria-activedescendant (the options are never focusable).
+        role="combobox"
+        aria-expanded={slashOpen}
+        aria-controls={slashOpen ? SLASH_LISTBOX_ID : undefined}
+        aria-activedescendant={
+          activeCandidate === undefined
+            ? undefined
+            : `${SLASH_OPTION_ID_PREFIX}-${activeCandidate.verb}`
+        }
+        aria-autocomplete="list"
         onChange={(event) => {
           setValue(event.target.value)
+          setSlashDismissed(false)
+          setActiveIndex(0)
+          setHint(null)
           resizeTextarea()
           if (event.target.value !== '') signalTyping()
         }}
@@ -181,7 +374,38 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault()
-            submit()
+            // Popup open: Enter picks the active candidate, never sends.
+            if (activeCandidate !== undefined) selectCandidate(activeCandidate)
+            else submit()
+            return
+          }
+          if (activeCandidate !== undefined) {
+            switch (event.key) {
+              case 'ArrowDown':
+                event.preventDefault()
+                setActiveIndex((index) => (index + 1) % slashCandidates.length)
+                return
+              case 'ArrowUp':
+                event.preventDefault()
+                setActiveIndex(
+                  (index) => (index - 1 + slashCandidates.length) % slashCandidates.length,
+                )
+                return
+              case 'Tab':
+                // Shift+Tab keeps its normal focus-move meaning.
+                if (!event.shiftKey) {
+                  event.preventDefault()
+                  selectCandidate(activeCandidate)
+                }
+                return
+              case 'Escape':
+                event.preventDefault()
+                setSlashDismissed(true)
+                return
+            }
+          } else if (event.key === 'Escape') {
+            // Popup already closed: a second Esc clears a stale hint.
+            setHint(null)
           }
         }}
         className="max-h-36 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm focus:border-accent disabled:opacity-50"
@@ -218,6 +442,14 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
         {queued && (
           <span className="text-accent" role="status">
             En cola hasta conectar…
+          </span>
+        )}
+        {/* Issue #99 — the rejected-submit hint (unknown verb, parse-level
+            error): same static role="status" region pattern as the DM
+            states above; transient by content, cleared on edit/send/Esc. */}
+        {hint !== null && (
+          <span className="text-accent" role="status">
+            {hint}
           </span>
         )}
         {showCounter && (

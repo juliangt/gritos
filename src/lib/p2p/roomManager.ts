@@ -840,8 +840,21 @@ function safeSend<T>(
  * key). Deliberately pass-through, like `v`: the receiving parser is the
  * single gate, so an out-of-bounds ttl would get the message dropped by
  * every peer — senders pass UI-produced values only.
+ *
+ * Issue #99 — `opts.isAction` marks the LOCAL echo of a /me message so
+ * MessageItem renders it as the italic «*nick acción*» line. It never
+ * touches the envelope (the wire form is byte-identical with or without
+ * it): peers rebuild received messages through parseEnvelope, which drops
+ * unknown fields, so their copy renders as plain text — an accepted
+ * asymmetry of the no-protocol-change rendering convention (see
+ * Message.isAction).
  */
-export function sendChat(roomId: string, text: string, ttl?: number): Envelope | null {
+export function sendChat(
+  roomId: string,
+  text: string,
+  ttl?: number,
+  opts?: { isAction?: boolean },
+): Envelope | null {
   const connection = connections.get(roomId)
   const identity = sessionIdentity
   if (connection === undefined || identity === null) return null
@@ -891,6 +904,7 @@ export function sendChat(roomId: string, text: string, ttl?: number): Envelope |
     ts: envelope.ts,
     encrypted: false,
     status: 'sent',
+    ...(opts?.isAction === true ? { isAction: true } : {}),
     ...(expiresAt !== undefined ? { expiresAt } : {}),
   })
   return envelope

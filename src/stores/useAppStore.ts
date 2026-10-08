@@ -108,6 +108,15 @@ export interface Message {
    * messages alike.
    */
   reactions?: Partial<Record<ReactEmoji, string[]>>
+  /**
+   * Issue #99 — local rendering convention for a message sent through /me:
+   * MessageItem renders the row as the italic «*nick acción*» line. LOCAL
+   * ONLY by design (no protocol change): the wire envelope carries no marker
+   * and parseEnvelope rebuilds received messages without it, so a peer's
+   * copy of the same message renders as plain text. Set exclusively by
+   * sendChat's local echo when the composer forwards a /me directive.
+   */
+  isAction?: boolean
 }
 
 export type RoomStatus = 'searching' | 'connected' | 'error'
@@ -394,6 +403,16 @@ export interface AppActions {
   updatePeer: (roomId: string, peerId: string, patch: Partial<Peer>) => void
   removePeer: (roomId: string, peerId: string) => void
   appendMessage: (roomId: string, message: Message) => void
+  /**
+   * Issue #99 — wipes one room's local feed (the /limpiar command, behind
+   * its confirmation): messages: [] and unread: 0, while the room keeps its
+   * CONNECTION and its identity in the store — this is a view clear, never a
+   * leave. The latched separator facts (`fifoTrimmed`, `expiredCount`) stay
+   * as-is: they record what ALREADY happened to the session's history, so
+   * the «mensajes anteriores descartados» / expired separators keep
+   * rendering above the emptied feed. Unknown roomId no-ops.
+   */
+  clearRoomFeed: (roomId: string) => void
   markMessagesDelivered: (roomId: string, ids: string[]) => void
   /**
    * Issue #96 — removes every message whose `expiresAt` is due at `now` from
@@ -566,6 +585,16 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
         return { ...message, status: 'delivered' as const }
       })
       return changed ? { rooms: { ...state.rooms, [roomId]: { ...room, messages } } } : state
+    }),
+
+  clearRoomFeed: (roomId) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (room === undefined) return state
+      if (room.messages.length === 0 && room.unread === 0) return state
+      return {
+        rooms: { ...state.rooms, [roomId]: { ...room, messages: [], unread: 0 } },
+      }
     }),
 
   // Issue #96 — one guarded pass over every room and DM feed per tick. The
