@@ -56,9 +56,9 @@ Requires Node.js ≥ 22 and npm ≥ 11. Browsers must support Web Crypto, WebRTC
 
 ## Configuration
 
-| Variable               | Default in `.env.example`                        | What it does                                                                 |
-| ---------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `VITE_TRYSTERO_APP_ID` | `bebf21e4-20ea-4626-9e88-f450626b6b8e/gritos-dev` | Trystero **appId** — the peer-discovery namespace (issue #90, spec §9.4).    |
+| Variable               | Default in `.env.example`                         | What it does                                                              |
+| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `VITE_TRYSTERO_APP_ID` | `bebf21e4-20ea-4626-9e88-f450626b6b8e/gritos-dev` | Trystero **appId** — the peer-discovery namespace (issue #90, spec §9.4). |
 
 The appId is the namespace Trystero uses to introduce peers: **only builds sharing the same appId can discover each other.** Copies of the app built with different appIds are fully isolated swarms. Set it in a `.env` file (`.env*` is git-ignored; `.env.example` is the committed template) or in your host's build environment:
 
