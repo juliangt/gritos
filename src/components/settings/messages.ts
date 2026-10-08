@@ -81,3 +81,20 @@ export const EMPTY_MUTED_PEERS_TEXT = 'No has silenciado a ningún par.'
 export function unmutePeerAction(identifier: string): string {
   return `Dejar de silenciar a ${identifier}`
 }
+
+// ---------------------------------------------------------------------------
+// Issue #96 — composer TTL selector (ChatInput, room and DM modes). Only the
+// wording lives here: the selection itself is memory-only component state and
+// is never persisted.
+// ---------------------------------------------------------------------------
+
+/** Accessible name of the TTL selector. */
+export const TTL_SELECT_LABEL = 'Caducidad del mensaje'
+
+/** Default option: the message lives for the session (no ttl on the wire). */
+export const SIN_EXPIRY_LABEL = 'Sin caducidad'
+
+/** Per-message expiry choices offered by the selector. */
+export const TTL_30S_LABEL = '30 segundos'
+export const TTL_5M_LABEL = '5 minutos'
+export const TTL_1H_LABEL = '1 hora'

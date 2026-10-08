@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ChatLayout } from '../src/components/chat/ChatLayout'
 import * as manager from '../src/lib/p2p/roomManager'
+import { TTL_SELECT_LABEL } from '../src/components/settings/messages'
 import {
   INITIAL_APP_STATE,
   useAppStore,
@@ -179,6 +180,19 @@ describe('DM view (RF-04)', () => {
     expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola dm')
     expect(sendDmTyping).toHaveBeenCalledWith('peer-9', false)
     expect(textarea).toHaveValue('')
+  })
+
+  // Issue #96 — the TTL selector lives in the shared composer, so the DM
+  // view offers it too and threads the pick into sendDm.
+  it('sends the picked ttl with the DM through the manager bridge', () => {
+    render(<ChatLayout />)
+    fireEvent.change(screen.getByRole('combobox', { name: TTL_SELECT_LABEL }), {
+      target: { value: '30' },
+    })
+    const textarea = screen.getByLabelText('Escribe un mensaje')
+    fireEvent.change(textarea, { target: { value: 'hola fugaz' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola fugaz', 30)
   })
 
   it('blocks the composer with the exact text once the peer disconnects', () => {

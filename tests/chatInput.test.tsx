@@ -2,13 +2,20 @@
 import './dom-setup'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { ChatInput } from '../src/components/chat/ChatInput'
 import {
   DM_DISCONNECTED_TEXT,
   DM_LEGACY_PEER_TEXT,
   TYPING_SIGNAL_THROTTLE_MS,
 } from '../src/lib/feed'
+import {
+  SIN_EXPIRY_LABEL,
+  TTL_1H_LABEL,
+  TTL_30S_LABEL,
+  TTL_5M_LABEL,
+  TTL_SELECT_LABEL,
+} from '../src/components/settings/messages'
 import type { Room } from '../src/stores/useAppStore'
 
 const { sendChat, sendTyping, sendDm, sendDmTyping } = vi.hoisted(() => ({
@@ -196,5 +203,110 @@ describe('ChatInput DM composer (RF-04, issue #93)', () => {
     // Even a submit attempt (Enter) never reaches the manager.
     fireEvent.keyDown(textarea(), { key: 'Enter' })
     expect(sendDm).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #96 — per-message TTL selector: a memory-only combobox offered in
+// both room and DM modes. 'Sin caducidad' (the default) omits the ttl
+// argument entirely; the picks map to whole seconds (30/300/3600) on the
+// sendChat/sendDm seam. The selection survives consecutive sends until
+// changed and resets on remount (never persisted).
+// ---------------------------------------------------------------------------
+
+const ttlSelect = () => screen.getByRole('combobox', { name: TTL_SELECT_LABEL })
+
+function pickTtl(value: string): void {
+  fireEvent.change(ttlSelect(), { target: { value } })
+}
+
+describe('ChatInput TTL selector (issue #96)', () => {
+  it('renders with an accessible name and the Sin caducidad default in room mode', () => {
+    render(<ChatInput room={makeRoom()} />)
+    expect(ttlSelect()).toHaveValue('')
+    expect(within(ttlSelect()).getByRole('option', { name: SIN_EXPIRY_LABEL })).toHaveValue('')
+    expect(within(ttlSelect()).getByRole('option', { name: TTL_30S_LABEL })).toHaveValue('30')
+    expect(within(ttlSelect()).getByRole('option', { name: TTL_5M_LABEL })).toHaveValue('300')
+    expect(within(ttlSelect()).getByRole('option', { name: TTL_1H_LABEL })).toHaveValue('3600')
+  })
+
+  it('renders with an accessible name in DM mode too', () => {
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
+    expect(ttlSelect()).toHaveValue('')
+  })
+
+  it.each([
+    [TTL_30S_LABEL, '30', 30],
+    [TTL_5M_LABEL, '300', 300],
+    [TTL_1H_LABEL, '3600', 3600],
+  ])('picking %s sends ttl %i through sendChat', (_label, raw, ttl) => {
+    render(<ChatInput room={makeRoom()} />)
+    pickTtl(raw)
+    fireEvent.change(textarea(), { target: { value: 'expírame' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'expírame', ttl)
+  })
+
+  it('sends a DM with the picked ttl through sendDm', () => {
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
+    pickTtl('30')
+    fireEvent.change(textarea(), { target: { value: 'hola dm' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola dm', 30)
+  })
+
+  it('Sin caducidad keeps the two-argument call (no ttl reaches the envelope)', () => {
+    const room = render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: 'sin ttl' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendChat).toHaveBeenCalledTimes(1)
+    expect(sendChat.mock.calls[0]).toHaveLength(2)
+    room.unmount()
+
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
+    fireEvent.change(textarea(), { target: { value: 'dm sin ttl' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendDm).toHaveBeenCalledTimes(1)
+    expect(sendDm.mock.calls[0]).toHaveLength(2)
+  })
+
+  it('keeps the selection across consecutive sends until changed', () => {
+    render(<ChatInput room={makeRoom()} />)
+    pickTtl('300')
+    fireEvent.change(textarea(), { target: { value: 'uno' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    fireEvent.change(textarea(), { target: { value: 'dos' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendChat).toHaveBeenNthCalledWith(1, 'room-1', 'uno', 300)
+    expect(sendChat).toHaveBeenNthCalledWith(2, 'room-1', 'dos', 300)
+  })
+
+  it('resets to Sin caducidad on remount (memory-only state)', () => {
+    const first = render(<ChatInput room={makeRoom()} />)
+    pickTtl('30')
+    fireEvent.change(textarea(), { target: { value: 'primera sesión' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'primera sesión', 30)
+    first.unmount()
+
+    sendChat.mockClear() // Judge only the second mount's calls.
+    render(<ChatInput room={makeRoom()} />)
+    expect(ttlSelect()).toHaveValue('')
+    fireEvent.change(textarea(), { target: { value: 'segunda sesión' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendChat.mock.calls[0]).toHaveLength(2)
+  })
+
+  it('is enabled and operable in both modes, hard-blocked with a blocked DM', () => {
+    // Native select: jsdom cannot drive the option popup, so change events
+    // stand in for the arrow-key selection a keyboard user makes.
+    const roomView = render(<ChatInput room={makeRoom()} />)
+    expect(ttlSelect()).toBeEnabled()
+    pickTtl('3600')
+    expect(ttlSelect()).toHaveValue('3600')
+    roomView.unmount()
+
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true, legacyPeer: true }} />)
+    expect(ttlSelect()).toBeDisabled()
   })
 })

@@ -6,12 +6,29 @@ import {
   TYPING_IDLE_STOP_MS,
   TYPING_SIGNAL_THROTTLE_MS,
 } from '../../lib/feed'
-import { MAX_PLAINTEXT_LENGTH } from '../../lib/p2p/protocol'
+import { MAX_MESSAGE_TTL_S, MAX_PLAINTEXT_LENGTH, MIN_MESSAGE_TTL_S } from '../../lib/p2p/protocol'
 import type { Room } from '../../stores/useAppStore'
+import {
+  SIN_EXPIRY_LABEL,
+  TTL_1H_LABEL,
+  TTL_30S_LABEL,
+  TTL_5M_LABEL,
+  TTL_SELECT_LABEL,
+} from '../settings/messages'
 import { useRoomManager } from '../../hooks/useRoomManager'
 
 /** Visible textarea height: about 6 text lines (RF-03). */
 const MAX_TEXTAREA_HEIGHT_PX = 144
+
+/**
+ * Issue #96 — per-message expiry choices (seconds). The edges track the
+ * protocol bounds; the middle choice is the only free one.
+ */
+const TTL_CHOICES = [
+  { seconds: MIN_MESSAGE_TTL_S, label: TTL_30S_LABEL },
+  { seconds: 300, label: TTL_5M_LABEL },
+  { seconds: MAX_MESSAGE_TTL_S, label: TTL_1H_LABEL },
+] as const
 
 /** M3 — composer context for a DM view (RF-04). */
 export interface DmComposerContext {
@@ -34,10 +51,17 @@ export interface DmComposerContext {
  * throttled to 1/s while composing and stop on send, blur or 2 s of idle.
  * Rooms queue locally while `searching`/`error` ('En cola hasta
  * conectar…'); a disconnected DM is hard-blocked with the exact RF-04 text
- * and a legacy (v1-build) peer with the issue #93 hint.
+ * and a legacy (v1-build) peer with the issue #93 hint. A memory-only TTL
+ * selector (issue #96) rides every send in both modes: it defaults to
+ * 'Sin caducidad' and stays on the picked value across consecutive sends
+ * until changed — never persisted, so a reload resets it.
  */
 export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   const [value, setValue] = useState('')
+  // Issue #96 — the TTL pick is component state on purpose: it persists
+  // across consecutive sends (one decision covers a burst of expiring
+  // messages) and dies with the tab; it never reaches the settings store.
+  const [ttlDraft, setTtlDraft] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const typingActiveRef = useRef(false)
   const lastTypingSentAtRef = useRef(0)
@@ -99,8 +123,17 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
 
   const submit = () => {
     if (!canSend) return
-    if (room !== undefined) sendChat(room.id, value)
-    else if (dm !== undefined) void sendDm(dm.peerId, value)
+    // Issue #96 — '' is the no-expiry pick: the argument is omitted so the
+    // call (and the envelope the manager builds) stays byte-identical to the
+    // pre-#96 shape; any pick maps to whole seconds on the wire.
+    const ttl = ttlDraft === '' ? undefined : Number(ttlDraft)
+    if (room !== undefined) {
+      if (ttl === undefined) sendChat(room.id, value)
+      else sendChat(room.id, value, ttl)
+    } else if (dm !== undefined) {
+      if (ttl === undefined) void sendDm(dm.peerId, value)
+      else void sendDm(dm.peerId, value, ttl)
+    }
     setValue('')
     stopTypingSignal()
     requestAnimationFrame(resizeTextarea)
@@ -142,6 +175,23 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
       />
       <div className="flex items-center gap-3 text-xs text-muted">
         <span className="hidden sm:inline">**negrita** · *cursiva* · `código`</span>
+        {/* Issue #96 — native select (keyboard-operable by construction);
+            hard-blocked together with the composer on a disconnected or
+            legacy DM peer, still usable while a room is queueing. */}
+        <select
+          aria-label={TTL_SELECT_LABEL}
+          value={ttlDraft}
+          disabled={blocked}
+          onChange={(event) => setTtlDraft(event.target.value)}
+          className="rounded-md border border-border bg-surface px-1 py-1 text-xs focus:border-accent disabled:opacity-50"
+        >
+          <option value="">{SIN_EXPIRY_LABEL}</option>
+          {TTL_CHOICES.map((choice) => (
+            <option key={choice.seconds} value={choice.seconds}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
         {disconnected && (
           <span className="text-accent" role="status">
             {DM_DISCONNECTED_TEXT}
