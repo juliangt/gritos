@@ -90,6 +90,11 @@ describe('spec §8.2 — only the documented gritos:* keys', () => {
       rememberRooms: false,
     })
     useUiStore.getState().setSidebarCollapsed(true)
+    // Issue #95 — the mute list rides inside `gritos:settings`: muting a
+    // peer must not create a sixth `gritos:*` key.
+    useSettingsStore
+      .getState()
+      .muteFingerprint('A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678', 'molesto')
 
     expect(gritosKeys().sort()).toEqual(
       [
@@ -100,6 +105,12 @@ describe('spec §8.2 — only the documented gritos:* keys', () => {
         TOFU_STORAGE_KEY,
       ].sort(),
     )
+    // The mute list persists in canonical form inside the settings record.
+    const settings = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string) as Record<
+      string,
+      unknown
+    >
+    expect(settings.mutedFingerprints).toEqual(['A31F09BC77D24E5A51C0FFEE12345678'])
 
     // Key contents stay within the documented shapes — the room password
     // surface is empty for public rooms and no message text is persisted.

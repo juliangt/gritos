@@ -9,22 +9,13 @@ import {
   IDENTITY_STORAGE_KEY,
   persistIdentity,
 } from '../src/lib/crypto/identity'
-import {
-  resetKeyVaultForTests,
-  wipeKeyVault,
-  wrapPrivateKey,
-} from '../src/lib/crypto/keyVault'
+import { resetKeyVaultForTests, wipeKeyVault, wrapPrivateKey } from '../src/lib/crypto/keyVault'
 import { installFakeIndexedDB } from './fakeIndexedDB'
 import { ROOMS_STORAGE_KEY } from '../src/lib/recentRooms'
 import { pinTofuFingerprint, TOFU_STORAGE_KEY } from '../src/lib/tofu'
 import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
 import { UI_STORAGE_KEY, useUiStore } from '../src/stores/useUiStore'
-import {
-  INITIAL_APP_STATE,
-  useAppStore,
-  type Identity,
-  type Room,
-} from '../src/stores/useAppStore'
+import { INITIAL_APP_STATE, useAppStore, type Identity, type Room } from '../src/stores/useAppStore'
 import { installFakeTrystero } from './fakeTrystero'
 
 /**
@@ -143,6 +134,25 @@ describe('panicWipe (RF-08)', () => {
 
     expect(reload).not.toHaveBeenCalled()
     expect(Object.keys(localStorage)).toEqual(['other-app:data'])
+  })
+
+  it('the wipe clears the persisted mute list riding in gritos:settings (issue #95)', async () => {
+    await seedActiveSession()
+    const store = useSettingsStore.getState()
+    expect(store.muteFingerprint('A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678', 'molesto')).toBe(true)
+    expect(store.muteFingerprint('BBBB CCCC DDDD EEEE FFFF 0000 1111 2222', 'troll')).toBe(true)
+    // No sixth key: the mute list rides inside the settings record.
+    expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string)).toMatchObject({
+      mutedFingerprints: ['A31F09BC77D24E5A51C0FFEE12345678', 'BBBBCCCCDDDDEEEEFFFF000011112222'],
+    })
+
+    const reload = vi.fn()
+    vi.stubGlobal('location', { reload })
+    panicWipe({ reload: false })
+
+    // Back to the documented defaults, in memory and on disk.
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
+    expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toBeNull()
   })
 
   it('never touches keys outside the gritos: namespace', () => {
