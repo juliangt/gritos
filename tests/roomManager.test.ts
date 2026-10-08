@@ -4,22 +4,30 @@ import { useAppStore } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
 import { formatFingerprint } from '../src/lib/crypto/identity'
+import { deriveRoomKey, decryptRoomMessage } from '../src/lib/crypto/roomKey'
 import {
   MAX_CLOCK_SKEW_MS,
   MAX_ENVELOPE_AGE_MS,
+  MAX_HISTORY_BATCH,
+  MAX_HISTORY_BATCH_BYTES,
+  MAX_HISTORY_REQUEST,
   MAX_REACT_BATCH,
   parseEnvelope,
   type Envelope,
 } from '../src/lib/p2p/protocol'
 import { NICKNAME_MAX_LENGTH } from '../src/lib/nickname'
 import {
+  HISTORY_RATE_CAP,
+  HISTORY_RATE_WINDOW_MS,
+  HISTORY_REQ_RATE_CAP,
+  HISTORY_REQ_RATE_WINDOW_MS,
   PENDING_CHATS_CAP,
   REACT_RATE_CAP,
   REACT_RATE_WINDOW_MS,
   SYSTEM_LINE_RATE_CAP,
   SYSTEM_LINE_RATE_WINDOW_MS,
 } from '../src/lib/p2p/roomManager'
-import { installFakeTrystero } from './fakeTrystero'
+import { installFakeTrystero, makeFakeRemotePeer } from './fakeTrystero'
 
 let fake: ReturnType<typeof installFakeTrystero>
 
@@ -120,13 +128,15 @@ describe('joinRoom (RF-02, spec §6.3)', () => {
     })
   })
 
-  it('registers exactly the 10 protocol actions (§7.1, incl. ephkeys #93 and react #98)', async () => {
+  it('registers exactly the 12 protocol actions (§7.1, incl. ephkeys #93, react #98, hist #102)', async () => {
     const { room } = await join('lobby')
     expect([...room.actions.keys()].sort()).toEqual(
       [
         'chat',
         'dm',
         'ephkeys',
+        'hist',
+        'hist-req',
         'keys',
         'ping',
         'pong',
@@ -1182,5 +1192,390 @@ describe('issue #98 — sendReact (batched like receipts, directed vs broadcast)
     const ids = [...Array.from({ length: MAX_REACT_BATCH }, (_, i) => `m-${i}`), '']
     expect(manager.sendReact(roomId, ids, '👍', true)).toBe(false)
     expect(room.action('react').sends).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #102 — history gossip, phase 1 (protocol). The replay path bypasses
+// ONLY the freshness AGE window (recovered messages are older than 5 minutes
+// by definition); every parseEnvelope shape check — including the ±90 s
+// future-skew bound — stays. Delivery is seam-only: no store append, no
+// unread, no mention, no receipt, no typing (✓✓ means LIVE delivery). The
+// consent layer is phase 2: phase 1 never answers a hist-req.
+// ---------------------------------------------------------------------------
+
+function collectHistDeliveries(): {
+  requests: { roomId: string; peerId: string; n: number }[]
+  recovered: { roomId: string; envelopes: Envelope[] }[]
+} {
+  const requests: { roomId: string; peerId: string; n: number }[] = []
+  const recovered: { roomId: string; envelopes: Envelope[] }[] = []
+  manager.onHistRequest((roomId, peerId, n) => {
+    requests.push({ roomId, peerId, n })
+  })
+  manager.onRecovered((roomId, envelopes) => {
+    recovered.push({ roomId, envelopes })
+  })
+  return { requests, recovered }
+}
+
+/** UTF-8 byte length of an encoded `hist` payload — the sender-side measure. */
+function histPayloadBytes(data: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(data)).byteLength
+}
+
+describe('issue #102 — hist-req receive path (validation + rate cap + seam)', () => {
+  it('delivers a valid request through the onHistRequest seam', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { requests } = collectHistDeliveries()
+
+    room.receive('hist-req', { n: 50 }, 'peer-1')
+    expect(requests).toEqual([{ roomId, peerId: 'peer-1', n: 50 }])
+  })
+
+  it('drops invalid n silently without consuming the rate budget', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { requests } = collectHistDeliveries()
+
+    room.receive('hist-req', { n: 0 }, 'peer-1')
+    room.receive('hist-req', { n: -1 }, 'peer-1')
+    room.receive('hist-req', { n: MAX_HISTORY_REQUEST + 1 }, 'peer-1')
+    room.receive('hist-req', { n: 2.5 }, 'peer-1')
+    room.receive('hist-req', { n: '5' }, 'peer-1')
+    room.receive('hist-req', {}, 'peer-1')
+    room.receive('hist-req', '50', 'peer-1')
+    expect(requests).toHaveLength(0)
+
+    // The violations burned no budget: the first valid ask still goes through.
+    room.receive('hist-req', { n: 10 }, 'peer-1')
+    expect(requests).toEqual([{ roomId: requests[0]?.roomId, peerId: 'peer-1', n: 10 }])
+  })
+
+  it('caps at HISTORY_REQ_RATE_CAP per rolling minute per peer', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.peerJoin('peer-2')
+    const { requests } = collectHistDeliveries()
+
+    room.receive('hist-req', { n: 5 }, 'peer-1')
+    expect(requests).toHaveLength(1)
+    // Second ask within the window: dropped.
+    room.receive('hist-req', { n: 6 }, 'peer-1')
+    expect(requests).toHaveLength(1)
+    // peer-2 has its own fresh budget.
+    room.receive('hist-req', { n: 7 }, 'peer-2')
+    expect(requests).toHaveLength(2)
+    expect(requests[1]?.peerId).toBe('peer-2')
+
+    // Once the window rolls off, peer-1 may ask again.
+    await vi.advanceTimersByTimeAsync(HISTORY_REQ_RATE_WINDOW_MS + 1)
+    room.receive('hist-req', { n: 8 }, 'peer-1')
+    expect(requests).toHaveLength(3)
+    expect(HISTORY_REQ_RATE_CAP).toBe(1)
+  })
+
+  it('drops a muted peer request before validation and rate cap', async () => {
+    const { room, roomId } = await join('lobby')
+    const muted = await makeFakeRemotePeer('peer-muted')
+    expect(useSettingsStore.getState().muteFingerprint(muted.fingerprint, 'molesto')).toBe(true)
+    // Join with `keys` only (no presence announce): then the store peer
+    // fingerprint is written by the SAME async tail that arms peerKeyFps,
+    // so waiting on it gates exactly on the mute gate being armed (issue
+    // #95 fail-open until then).
+    room.peerJoin(muted.id)
+    room.receive('keys', muted.rawPublicKey, muted.id)
+    await vi.waitFor(() => {
+      expect(storedRoom(roomId).peers.find((peer) => peer.id === muted.id)?.fingerprint).toBe(
+        muted.fingerprint,
+      )
+    })
+    const { requests } = collectHistDeliveries()
+
+    room.receive('hist-req', { n: 10 }, muted.id)
+    expect(requests).toHaveLength(0)
+  })
+
+  it('never answers a request in phase 1 (consent is phase 2)', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    collectHistDeliveries()
+
+    room.receive('hist-req', { n: 25 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(room.action('hist').sends).toHaveLength(0)
+  })
+})
+
+describe('issue #102 — hist receive path (replay: bypass + skew + dedup + silence)', () => {
+  it('delivers a valid batch through onRecovered, normalized', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { recovered } = collectHistDeliveries()
+
+    const a = chatEnvelope({ id: 'id-a', body: ' viejo' })
+    const b = chatEnvelope({ id: 'id-b' })
+    room.receive('hist', { batch: [{ ...a, unexpected: 'x' }, b] }, 'peer-1')
+    expect(recovered).toEqual([{ roomId, envelopes: [a, b] }])
+  })
+
+  it('drops invalid batches whole, without consuming the rate budget', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { recovered } = collectHistDeliveries()
+
+    const good = chatEnvelope()
+    room.receive('hist', { batch: [] }, 'peer-1') // empty
+    room.receive(
+      'hist',
+      { batch: Array.from({ length: MAX_HISTORY_BATCH + 1 }, () => chatEnvelope()) },
+      'peer-1',
+    ) // over the count cap
+    room.receive('hist', { batch: [good, { ...good, id: '' }] }, 'peer-1') // malformed inside
+    room.receive(
+      'hist',
+      {
+        batch: [
+          good,
+          { ...good, kind: 'dm', to: 'peer-2' }, // DMs are never gossiped
+        ],
+      },
+      'peer-1',
+    )
+    room.receive('hist', { batch: good }, 'peer-1') // not a batch array
+    room.receive('hist', 'hola', 'peer-1') // not even an object
+    expect(recovered).toHaveLength(0)
+
+    // The violations burned no budget: HISTORY_RATE_CAP valid batches after
+    // them all still go through.
+    for (let i = 0; i < HISTORY_RATE_CAP; i++) {
+      room.receive('hist', { batch: [chatEnvelope({ id: `id-${i}` })] }, 'peer-1')
+    }
+    expect(recovered).toHaveLength(HISTORY_RATE_CAP)
+  })
+
+  it('bypasses the AGE window but keeps the future-skew check', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { recovered } = collectHistDeliveries()
+
+    const ancient = chatEnvelope({
+      id: 'id-ancient',
+      ts: Date.now() - MAX_ENVELOPE_AGE_MS - 3_600_000,
+    })
+    const skewed = chatEnvelope({ id: 'id-skew', ts: Date.now() + MAX_CLOCK_SKEW_MS + 1 })
+    room.receive('hist', { batch: [ancient, skewed] }, 'peer-1')
+
+    // The hour-old envelope rides the replay path (the live path drops it);
+    // the future-skewed one still dies: shape checks stay, only age is
+    // bypassed — and a rejected envelope consumes no dedup id.
+    expect(recovered).toEqual([{ roomId: recovered[0]?.roomId, envelopes: [ancient] }])
+    expect(storedRoom(recovered[0]?.roomId ?? '').messages).toHaveLength(0)
+
+    // Contrast pin: the SAME ancient envelope through the LIVE path is
+    // dropped by the freshness window.
+    room.receive('chat', ancient, 'peer-1')
+    expect(storedRoom(recovered[0]?.roomId ?? '').messages).toHaveLength(0)
+  })
+
+  it('has zero side effects: no append, no unread, no mention, no receipt, no typing', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { recovered } = collectHistDeliveries()
+    const mention = vi.fn()
+    manager.onMentionReceived(mention)
+    const ownNick = manager.getSessionIdentity()?.identity.nickname as string
+
+    room.receive('hist', { batch: [chatEnvelope({ body: `hola @${ownNick}` })] }, 'peer-1')
+    expect(recovered).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(storedRoom(roomId).messages).toHaveLength(0)
+    expect(storedRoom(roomId).unread).toBe(0)
+    expect(storedRoom(roomId).typing).toEqual({})
+    expect(mention).not.toHaveBeenCalled()
+    expect(room.action('receipt').sends).toHaveLength(0)
+  })
+
+  it('dedups a replayed batch and a later LIVE resend of the same id', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { recovered } = collectHistDeliveries()
+
+    const shared = chatEnvelope({ ts: Date.now() })
+    room.receive('hist', { batch: [shared] }, 'peer-1')
+    expect(recovered).toHaveLength(1)
+    // Replay of the whole batch: every id already seen — no listener call.
+    room.receive('hist', { batch: [shared] }, 'peer-1')
+    expect(recovered).toHaveLength(1)
+
+    // The issue's pin: a later LIVE resend of the same id dedups (it would
+    // have appended had the batch not marked it seen).
+    room.receive('chat', shared, 'peer-1')
+    expect(storedRoom(roomId).messages).toHaveLength(0)
+  })
+
+  it('dedups the other way: a live-seen id is dropped from a later batch', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const { recovered } = collectHistDeliveries()
+
+    const live = chatEnvelope({ ts: Date.now() })
+    room.receive('chat', live, 'peer-1')
+    expect(storedRoom(roomId).messages).toHaveLength(1)
+
+    room.receive('hist', { batch: [live] }, 'peer-1')
+    expect(recovered).toHaveLength(0) // fully deduped: no listener call
+    expect(storedRoom(roomId).messages).toHaveLength(1)
+  })
+
+  it('caps at HISTORY_RATE_CAP batches per rolling minute per peer', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.peerJoin('peer-2')
+    const { recovered } = collectHistDeliveries()
+
+    for (let i = 0; i < HISTORY_RATE_CAP; i++) {
+      room.receive('hist', { batch: [chatEnvelope({ id: `id-${i}`, ts: Date.now() })] }, 'peer-1')
+    }
+    expect(recovered).toHaveLength(HISTORY_RATE_CAP)
+    // 7th batch within the window: dropped by the rate cap (fresh ids, so
+    // only the cap can drop it).
+    room.receive('hist', { batch: [chatEnvelope({ id: 'id-over', ts: Date.now() })] }, 'peer-1')
+    expect(recovered).toHaveLength(HISTORY_RATE_CAP)
+    // peer-2 has its own budget.
+    room.receive('hist', { batch: [chatEnvelope({ id: 'id-other', ts: Date.now() })] }, 'peer-2')
+    expect(recovered).toHaveLength(HISTORY_RATE_CAP + 1)
+    expect(recovered[recovered.length - 1]?.roomId).toBe(recovered[0]?.roomId)
+
+    await vi.advanceTimersByTimeAsync(HISTORY_RATE_WINDOW_MS + 1)
+    room.receive('hist', { batch: [chatEnvelope({ id: 'id-after', ts: Date.now() })] }, 'peer-1')
+    expect(recovered).toHaveLength(HISTORY_RATE_CAP + 2)
+  })
+
+  it('drops a muted sharer batch before validation and rate cap', async () => {
+    const { room, roomId } = await join('lobby')
+    const muted = await makeFakeRemotePeer('peer-muted')
+    expect(useSettingsStore.getState().muteFingerprint(muted.fingerprint, 'molesto')).toBe(true)
+    // Keys-only join: the same arming trick as the hist-req mute test.
+    room.peerJoin(muted.id)
+    room.receive('keys', muted.rawPublicKey, muted.id)
+    await vi.waitFor(() => {
+      expect(storedRoom(roomId).peers.find((peer) => peer.id === muted.id)?.fingerprint).toBe(
+        muted.fingerprint,
+      )
+    })
+    const { recovered } = collectHistDeliveries()
+
+    room.receive('hist', { batch: [chatEnvelope({ from: muted.id, ts: Date.now() })] }, muted.id)
+    expect(recovered).toHaveLength(0)
+  })
+})
+
+describe('issue #102 — sendHistory (sanitize, chat-only, chunking, sealing)', () => {
+  it('refuses unknown or not-connected rooms without sending', async () => {
+    expect(await manager.sendHistory('nope', [])).toBe(0)
+    const { room, roomId } = await join('lobby') // searching
+    expect(await manager.sendHistory(roomId, [chatEnvelope()])).toBe(0)
+    expect(room.action('hist').sends).toHaveLength(0)
+  })
+
+  it('filters to chat-only and re-validates each envelope', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const good = chatEnvelope({ id: 'id-good' })
+
+    expect(
+      await manager.sendHistory(roomId, [
+        good,
+        { ...good, id: 'id-dm', kind: 'dm', to: 'peer-2' }, // never gossiped
+        { ...good, id: 'id-v3', v: 3 }, // malformed for a chat
+        { ...good, id: 'id-fat', body: 'a'.repeat(4001) }, // over the body cap
+      ]),
+    ).toBe(1)
+    const send = room.lastSend('hist')
+    expect(send.data).toEqual({ batch: [good] })
+    expect(send.options).toBeUndefined() // broadcast, room scope
+  })
+
+  it('returns 0 and sends nothing when nothing survives sanitization', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const dm = { ...chatEnvelope(), kind: 'dm' as const, to: 'peer-2' }
+
+    expect(await manager.sendHistory(roomId, [])).toBe(0)
+    expect(await manager.sendHistory(roomId, [dm])).toBe(0)
+    expect(room.action('hist').sends).toHaveLength(0)
+  })
+
+  it('truncates the input to the first 50 and chunks by count', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const fiftyFive = Array.from({ length: MAX_HISTORY_REQUEST + 5 }, (_, i) =>
+      chatEnvelope({ id: `id-${i}`, body: `m-${i}` }),
+    )
+
+    expect(await manager.sendHistory(roomId, fiftyFive)).toBe(3)
+    const sends = room.action('hist').sends
+    expect(sends.map((send) => (send.data as { batch: Envelope[] }).batch.length)).toEqual([
+      20, 20, 10,
+    ])
+    // Truncation keeps the FIRST 50, in input order.
+    const bodies = sends
+      .flatMap((send) => (send.data as { batch: Envelope[] }).batch)
+      .map((envelope) => envelope.body)
+    expect(bodies).toEqual(Array.from({ length: MAX_HISTORY_REQUEST }, (_, i) => `m-${i}`))
+  })
+
+  it('chunks fat envelopes by measured encoded size under the margin', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    // 13 × 4000-char bodies ≈ 54 KB encoded: a single count-batch would be
+    // over the 48 KiB margin, so size must split before the count cap.
+    const fat = Array.from({ length: 13 }, (_, i) =>
+      chatEnvelope({ id: `id-${i}`, body: 'a'.repeat(4000) }),
+    )
+
+    expect(await manager.sendHistory(roomId, fat)).toBeGreaterThanOrEqual(2)
+    const sends = room.action('hist').sends
+    const delivered = sends.flatMap((send) => (send.data as { batch: Envelope[] }).batch)
+    expect(delivered).toEqual(fat) // order preserved across batches
+    for (const send of sends) {
+      const batch = (send.data as { batch: Envelope[] }).batch
+      expect(batch.length).toBeLessThanOrEqual(MAX_HISTORY_BATCH)
+      expect(histPayloadBytes(send.data)).toBeLessThanOrEqual(MAX_HISTORY_BATCH_BYTES)
+    }
+  })
+
+  it('re-seals plaintext bodies with the room key in a password room', async () => {
+    const { room, roomId } = await join('privada', 'clave-secreta')
+    room.peerJoin('peer-1')
+    const secret = chatEnvelope({ id: 'id-sec', body: 'mensaje secreto' })
+    const alreadySealed = chatEnvelope({
+      id: 'id-wire',
+      enc: true,
+      iv: 'AAAA',
+      body: 'a'.repeat(100),
+    })
+
+    expect(await manager.sendHistory(roomId, [secret, alreadySealed])).toBe(1)
+    const batch = (room.lastSend('hist').data as { batch: Envelope[] }).batch
+    expect(batch).toHaveLength(2)
+
+    // The plaintext body was sealed; the already-wire-form passed through
+    // untouched (no double seal).
+    const sealed = batch[0] as Envelope
+    expect(sealed.id).toBe('id-sec')
+    expect(sealed.enc).toBe(true)
+    expect(sealed.iv).not.toBeNull()
+    expect(sealed.body).not.toBe('mensaje secreto')
+    expect(batch[1]).toEqual(alreadySealed)
+
+    // The joining peer's room key (same password) opens it: recovered
+    // ciphertext decrypts for free.
+    const key = await deriveRoomKey('clave-secreta', 'privada')
+    const text = await decryptRoomMessage(key, { iv: sealed.iv ?? '', payload: sealed.body })
+    expect(text).toBe('mensaje secreto')
   })
 })

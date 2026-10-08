@@ -6,6 +6,9 @@ import {
   MAX_CLOCK_SKEW_MS,
   MAX_ENCRYPTED_BODY_CHARS,
   MAX_ENVELOPE_AGE_MS,
+  MAX_HISTORY_BATCH,
+  MAX_HISTORY_BATCH_BYTES,
+  MAX_HISTORY_REQUEST,
   MAX_MESSAGE_TTL_S,
   MAX_PAYLOAD_BYTES,
   MAX_PLAINTEXT_LENGTH,
@@ -15,12 +18,16 @@ import {
   PROTOCOL_VERSION,
   REACT_EMOJIS,
   SEEN_IDS_CAP,
+  chunkHistBatches,
   createEnvelope,
   filterDmForSelf,
   isOversized,
   isWithinFreshnessWindow,
+  isWithinFutureSkew,
   markSeen,
   parseEnvelope,
+  parseHistBatch,
+  parseHistReq,
   parseReact,
   reactSeenKey,
   shouldProcess,
@@ -639,5 +646,182 @@ describe('reactSeenKey (issue #98: content-keyed replay dedup)', () => {
 
   it('never collides with the envelope-id namespace of the shared seen set', () => {
     expect(reactSeenKey(parseReact(reactPayload())!)).toMatch(/^react:/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #102 — history gossip (phase 1): request validation, batch
+// validation, the replay-path skew bound and the sender-side chunking math.
+// ---------------------------------------------------------------------------
+
+describe('history gossip bounds (issue #102, §7.1)', () => {
+  it('pins the constants: 50 per request/share, 20 per batch, 48 KiB margin', () => {
+    expect(MAX_HISTORY_REQUEST).toBe(50)
+    expect(MAX_HISTORY_BATCH).toBe(20)
+    expect(MAX_HISTORY_BATCH_BYTES).toBe(48 * 1024)
+    // The margin is real: an at-margin batch can never trip the 64 KB
+    // transport discard after chunk reassembly.
+    expect(MAX_HISTORY_BATCH_BYTES).toBeLessThan(MAX_PAYLOAD_BYTES)
+    // The count cap alone cannot guarantee the fit: 20 envelopes of the
+    // honest maximum (4000-char body + envelope overhead) exceed 64 KB —
+    // hence the measured-size rule.
+    const fat = validChat({ body: 'a'.repeat(MAX_PLAINTEXT_LENGTH) })
+    expect(
+      JSON.stringify({ batch: Array.from({ length: MAX_HISTORY_BATCH }, () => fat) }).length,
+    ).toBeGreaterThan(MAX_PAYLOAD_BYTES)
+  })
+})
+
+describe('parseHistReq (issue #102, §7.1)', () => {
+  it('accepts integer n within [1, 50]', () => {
+    expect(parseHistReq({ n: 1 })).toEqual({ n: 1 })
+    expect(parseHistReq({ n: 25 })).toEqual({ n: 25 })
+    expect(parseHistReq({ n: MAX_HISTORY_REQUEST })).toEqual({ n: MAX_HISTORY_REQUEST })
+  })
+
+  it('drops out-of-bounds, fractional and malformed n silently', () => {
+    expect(parseHistReq({ n: 0 })).toBeNull()
+    expect(parseHistReq({ n: -1 })).toBeNull()
+    expect(parseHistReq({ n: MAX_HISTORY_REQUEST + 1 })).toBeNull()
+    expect(parseHistReq({ n: 2.5 })).toBeNull()
+    expect(parseHistReq({ n: Number.NaN })).toBeNull()
+    expect(parseHistReq({ n: Number.POSITIVE_INFINITY })).toBeNull()
+    expect(parseHistReq({ n: '5' })).toBeNull()
+    expect(parseHistReq({ n: null })).toBeNull()
+    expect(parseHistReq({})).toBeNull()
+    expect(parseHistReq({ n: 5, unexpected: 'ignored-but-valid-n' })).toEqual({ n: 5 })
+  })
+
+  it('drops non-object payloads', () => {
+    expect(parseHistReq(null)).toBeNull()
+    expect(parseHistReq('50')).toBeNull()
+    expect(parseHistReq(50)).toBeNull()
+    expect(parseHistReq([50])).toBeNull()
+    expect(parseHistReq(undefined)).toBeNull()
+  })
+})
+
+describe('parseHistBatch (issue #102, §7.1: shape checks kept, chat-only)', () => {
+  it('accepts and normalizes a valid batch (unknown fields dropped)', () => {
+    const parsed = parseHistBatch({
+      batch: [{ ...validChat(), unexpected: 'ignored per §7.3' }, validChat({ id: 'id-2' })],
+    })
+    expect(parsed).toEqual([validChat(), validChat({ id: 'id-2' })])
+  })
+
+  it('accepts a single-envelope batch at both count edges', () => {
+    expect(parseHistBatch({ batch: [validChat()] })).toEqual([validChat()])
+    const twenty = Array.from({ length: MAX_HISTORY_BATCH }, (_, i) => validChat({ id: `id-${i}` }))
+    expect(parseHistBatch({ batch: twenty })).toEqual(twenty)
+  })
+
+  it('drops empty and over-cap batches whole', () => {
+    expect(parseHistBatch({ batch: [] })).toBeNull()
+    expect(
+      parseHistBatch({
+        batch: Array.from({ length: MAX_HISTORY_BATCH + 1 }, (_, i) =>
+          validChat({ id: `id-${i}` }),
+        ),
+      }),
+    ).toBeNull()
+    expect(parseHistBatch({ batch: 'chat' })).toBeNull()
+    expect(parseHistBatch({})).toBeNull()
+  })
+
+  it('drops the WHOLE batch when one envelope fails parseEnvelope', () => {
+    const good = validChat({ id: 'id-good' })
+    expect(parseHistBatch({ batch: [good, validChat({ id: '' })] })).toBeNull()
+    expect(parseHistBatch({ batch: [good, { ...good, v: 3 }] })).toBeNull()
+    expect(parseHistBatch({ batch: [good, { ...good, ts: Number.NaN }] })).toBeNull()
+    expect(parseHistBatch({ batch: [good, null] })).toBeNull()
+  })
+
+  it('drops the WHOLE batch on a non-chat envelope — DMs are never gossiped', () => {
+    const good = validChat({ id: 'id-good' })
+    const dmV2 = {
+      ...validChat(),
+      id: 'id-dm',
+      v: DM_PROTOCOL_VERSION,
+      kind: 'dm' as const,
+      to: 'peer-b',
+    }
+    // A structurally valid dm is still a protocol violation in a batch.
+    expect(parseHistBatch({ batch: [good, dmV2] })).toBeNull()
+    // A v2 chat is dropped by parseEnvelope's per-kind gate anyway.
+    expect(parseHistBatch({ batch: [good, { ...good, v: DM_PROTOCOL_VERSION }] })).toBeNull()
+  })
+
+  it('drops non-object payloads', () => {
+    expect(parseHistBatch(null)).toBeNull()
+    expect(parseHistBatch('batch')).toBeNull()
+    expect(parseHistBatch([validChat()])).toBeNull()
+    expect(parseHistBatch(undefined)).toBeNull()
+  })
+})
+
+describe('isWithinFutureSkew (issue #102: the freshness bound the replay path keeps)', () => {
+  const NOW = 1_800_000_000_000
+
+  it('admits up to MAX_CLOCK_SKEW_MS into the future, rejects beyond', () => {
+    expect(isWithinFutureSkew(NOW, NOW)).toBe(true)
+    expect(isWithinFutureSkew(NOW + MAX_CLOCK_SKEW_MS, NOW)).toBe(true)
+    expect(isWithinFutureSkew(NOW + MAX_CLOCK_SKEW_MS + 1, NOW)).toBe(false)
+  })
+
+  it('has NO age bound — day-old timestamps pass, unlike the live window', () => {
+    expect(isWithinFutureSkew(NOW - MAX_ENVELOPE_AGE_MS - 1, NOW)).toBe(true)
+    expect(isWithinFutureSkew(NOW - 24 * 60 * 60 * 1000, NOW)).toBe(true)
+    // The contrast that justifies the separate helper: the live path drops
+    // the same stamps.
+    expect(isWithinFreshnessWindow(NOW - MAX_ENVELOPE_AGE_MS - 1, NOW)).toBe(false)
+  })
+})
+
+describe('chunkHistBatches (issue #102: sender-side size-margin chunking)', () => {
+  function encodedBytes(batch: Envelope[]): number {
+    return new TextEncoder().encode(JSON.stringify({ batch })).byteLength
+  }
+
+  it('splits 50 small envelopes by count: 20 / 20 / 10, in order', () => {
+    const fifty = Array.from({ length: MAX_HISTORY_REQUEST }, (_, i) =>
+      validChat({ id: `id-${i}` }),
+    )
+    const batches = chunkHistBatches(fifty)
+    expect(batches.map((batch) => batch.length)).toEqual([20, 20, 10])
+    expect(batches.flat()).toEqual(fifty)
+    for (const batch of batches) {
+      expect(encodedBytes(batch)).toBeLessThanOrEqual(MAX_HISTORY_BATCH_BYTES)
+    }
+  })
+
+  it('chunks by encoded size before the count cap when bodies are fat', () => {
+    // 13 envelopes of the 4000-char maximum: ~53 KB total, so a single
+    // count-batch of 13 would be over the margin — size must split first.
+    const fat = Array.from({ length: 13 }, (_, i) =>
+      validChat({ id: `id-${i}`, body: 'a'.repeat(MAX_PLAINTEXT_LENGTH) }),
+    )
+    const batches = chunkHistBatches(fat)
+    expect(batches.length).toBeGreaterThan(1)
+    expect(batches.flat()).toEqual(fat)
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(MAX_HISTORY_BATCH)
+      expect(encodedBytes(batch)).toBeLessThanOrEqual(MAX_HISTORY_BATCH_BYTES)
+      // Honest max bodies can never exceed the margin one envelope at a
+      // time, so every batch is non-empty.
+      expect(batch.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('drops an envelope whose own encoding exceeds the margin (defense)', () => {
+    // Unreachable for parseEnvelope-valid input (body caps), pinned as
+    // defense against future cap drift.
+    const fat = validChat({ id: 'id-fat', body: 'a'.repeat(50_000) })
+    const small = validChat({ id: 'id-small' })
+    const batches = chunkHistBatches([fat, small])
+    expect(batches).toEqual([[small]])
+  })
+
+  it('returns no batches for empty input', () => {
+    expect(chunkHistBatches([])).toEqual([])
   })
 })
