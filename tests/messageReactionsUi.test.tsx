@@ -64,6 +64,7 @@ function renderFeed(messages: Message[], peers: Peer[] = PEERS) {
       peers={peers}
       fifoTrimmed={false}
       expiredCount={0}
+      recoveredCount={0}
       ariaLabel="feed"
     />,
   )

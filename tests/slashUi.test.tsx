@@ -65,6 +65,8 @@ function room(overrides: Partial<Room> = {}): Room {
     unread: 0,
     fifoTrimmed: false,
     expiredCount: 0,
+    recoveredCount: 0,
+    historyAskDismissed: false,
     ...overrides,
   }
 }

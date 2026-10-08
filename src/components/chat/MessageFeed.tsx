@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageItem } from './MessageItem'
 import { NewMessagesButton } from './NewMessagesButton'
-import { FIFO_SEPARATOR_TEXT, expiredSeparatorText, shouldAutoScroll } from '../../lib/feed'
+import {
+  FIFO_SEPARATOR_TEXT,
+  RECOVERED_SEPARATOR_TEXT,
+  expiredSeparatorText,
+  shouldAutoScroll,
+} from '../../lib/feed'
+import {
+  HISTORY_ASK_CONFIRM,
+  HISTORY_ASK_DISMISS,
+  HISTORY_ASK_LABEL,
+  HISTORY_ASK_TEXT,
+} from '../settings/messages'
 import type { Message, Peer } from '../../stores/useAppStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { useMentionCandidates } from '../../hooks/useMentionCandidates'
@@ -11,9 +22,13 @@ import { useMentionCandidates } from '../../hooks/useMentionCandidates'
  * bubbles with smart scrolling — auto-scroll only while the user is ≤150 px
  * from the bottom; otherwise a floating '↓ N mensajes nuevos' button
  * accumulates arrivals and jumps to the bottom on click. The FIFO separator
- * renders once the 500-message cap has trimmed the history, and the TTL
- * separator once the expiry sweep has removed messages (issue #96). An empty
- * feed shows a discrete invitation (M6 empty states). `role="log"` + the
+ * renders once the 500-message cap has trimmed the history, the TTL
+ * separator once the expiry sweep has removed messages (issue #96) and the
+ * recovered separator once opt-in history gossip has appended rows (issue
+ * #102). An empty feed shows a discrete invitation (M6 empty states) and —
+ * rooms only, via the optional `historyAsk` prop — the one-tap card that
+ * offers to ask the sala for its recent messages (issue #102 phase 3:
+ * nothing automatic, dismissed by either button). `role="log"` + the
  * polite live region announce arrivals to assistive tech without stealing
  * focus (RNF-05).
  */
@@ -23,9 +38,18 @@ export function MessageFeed(props: {
   fifoTrimmed: boolean
   /** TTL messages removed by the expiry sweep (issue #96); 0 hides the line. */
   expiredCount: number
+  /** Chat rows accepted through history gossip (issue #102); 0 hides the line. */
+  recoveredCount: number
   ariaLabel: string
   /** Shown when the feed has no messages (M6 empty state). */
   emptyStateText?: string
+  /**
+   * Issue #102 phase 3 — when defined, the inline history-request card
+   * renders (rooms only; DM feeds never pass it). Visibility itself is the
+   * caller's policy (empty feed + not yet dismissed this join); both
+   * buttons hand the decision back and the caller dismisses the card.
+   */
+  historyAsk?: { onAsk: () => void; onDismiss: () => void }
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
@@ -105,10 +129,37 @@ export function MessageFeed(props: {
             {expiredSeparatorText(props.expiredCount)}
           </p>
         )}
+        {props.recoveredCount > 0 && (
+          <p className="my-1 text-center text-xs text-muted">{RECOVERED_SEPARATOR_TEXT}</p>
+        )}
         {props.messages.length === 0 && props.emptyStateText !== undefined && (
           <p role="status" className="my-8 text-center text-sm text-muted">
             {props.emptyStateText}
           </p>
+        )}
+        {props.historyAsk !== undefined && (
+          <section
+            aria-label={HISTORY_ASK_LABEL}
+            className="mx-auto my-2 w-full max-w-sm rounded-md border border-border bg-surface px-3 py-2 text-center"
+          >
+            <p className="text-sm">{HISTORY_ASK_TEXT}</p>
+            <div className="mt-2 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={props.historyAsk.onAsk}
+                className="rounded bg-accent px-3 py-1.5 text-xs font-semibold text-accent-text hover:opacity-90"
+              >
+                {HISTORY_ASK_CONFIRM}
+              </button>
+              <button
+                type="button"
+                onClick={props.historyAsk.onDismiss}
+                className="rounded border border-border px-3 py-1.5 text-xs hover:border-accent"
+              >
+                {HISTORY_ASK_DISMISS}
+              </button>
+            </div>
+          </section>
         )}
         {props.messages.map((message) => (
           <MessageItem

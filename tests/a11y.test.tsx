@@ -49,6 +49,8 @@ function seedSidebar() {
     unread: 0,
     fifoTrimmed: false,
     expiredCount: 0,
+    recoveredCount: 0,
+    historyAskDismissed: false,
   })
   store.setRecentRooms([])
 }
@@ -61,6 +63,7 @@ describe('Accessibility (RNF-05)', () => {
         peers={[]}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="Mensajes"
       />,
     )

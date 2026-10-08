@@ -58,6 +58,7 @@ describe('M6 empty states (Spanish, discrete)', () => {
         peers={[]}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="Mensajes"
       />,
     )
@@ -70,6 +71,7 @@ describe('M6 empty states (Spanish, discrete)', () => {
         peers={[]}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="Mensajes"
         emptyStateText={EMPTY_ROOM_FEED_TEXT}
       />,
@@ -82,6 +84,7 @@ describe('M6 empty states (Spanish, discrete)', () => {
         peers={[]}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="Mensajes"
         emptyStateText={EMPTY_ROOM_FEED_TEXT}
       />,

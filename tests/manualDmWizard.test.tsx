@@ -217,6 +217,8 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
       unread: 0,
       fifoTrimmed: false,
       expiredCount: 0,
+      recoveredCount: 0,
+      historyAskDismissed: false,
     })
     render(<NetworkErrorBanner onOpenManualDm={onOpenManualDm} />)
     fireEvent.click(screen.getByRole('button', { name: MANUAL_DM_BANNER_SHORTCUT }))
@@ -240,6 +242,8 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
       unread: 0,
       fifoTrimmed: false,
       expiredCount: 0,
+      recoveredCount: 0,
+      historyAskDismissed: false,
     })
     render(<ChatLayout />)
 

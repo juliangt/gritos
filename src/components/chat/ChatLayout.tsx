@@ -20,7 +20,7 @@ import { useExpirySweep } from '../../hooks/useExpirySweep'
 import { useNotifications } from '../../hooks/useNotifications'
 import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
 import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
-import { joinRoom } from '../../lib/p2p/roomManager'
+import { joinRoom, requestHistory } from '../../lib/p2p/roomManager'
 import {
   CLEAR_FEED_DIALOG_BODY,
   CLEAR_FEED_DIALOG_CONFIRM,
@@ -188,6 +188,30 @@ export function ChatLayout() {
     />
   )
 
+  // Issue #102 phase 3 — the history-request card policy for the ACTIVE
+  // room: offered only while the feed holds no chat rows yet (system join/
+  // leave lines don't count) and not already dismissed this join. Either
+  // button dismisses (memory-only, per join); [Pedir] routes through the
+  // manager's requestHistory, whose per-room ask budget rate-limits repeat
+  // joins — the card never asks automatically and disappears on tap.
+  const offerHistoryAsk =
+    activeRoom !== null &&
+    !activeRoom.historyAskDismissed &&
+    !activeRoom.messages.some((message) => message.kind !== 'system')
+  const historyAsk = offerHistoryAsk
+    ? {
+        onAsk: () => {
+          if (activeRoom === null) return
+          requestHistory(activeRoom.id)
+          useAppStore.getState().dismissHistoryAsk(activeRoom.id)
+        },
+        onDismiss: () => {
+          if (activeRoom === null) return
+          useAppStore.getState().dismissHistoryAsk(activeRoom.id)
+        },
+      }
+    : undefined
+
   const desktopAsideVisible = !isMobile && !sidebarCollapsed
 
   return (
@@ -279,6 +303,7 @@ export function ChatLayout() {
               peers={dmPeers}
               fifoTrimmed={false}
               expiredCount={activeDm.expiredCount}
+              recoveredCount={0}
               ariaLabel={dmFeedLabel(activeDm.peerNick)}
               emptyStateText={EMPTY_DM_FEED_TEXT}
             />
@@ -309,8 +334,10 @@ export function ChatLayout() {
               peers={activeRoom.peers}
               fifoTrimmed={activeRoom.fifoTrimmed}
               expiredCount={activeRoom.expiredCount}
+              recoveredCount={activeRoom.recoveredCount}
               ariaLabel={`Mensajes de #${activeRoom.name}`}
               emptyStateText={EMPTY_ROOM_FEED_TEXT}
+              historyAsk={historyAsk}
             />
             <TypingBar typing={activeRoom.typing} peers={activeRoom.peers} />
             <ChatInput room={activeRoom} />
