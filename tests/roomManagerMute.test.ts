@@ -53,8 +53,11 @@ function waitForReceiptDebounce(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, manager.RECEIPT_DEBOUNCE_MS + 100))
 }
 
-async function join(name = 'lobby'): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
-  const connection = await manager.joinRoom(name)
+async function join(
+  name = 'lobby',
+  password?: string,
+): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
+  const connection = await manager.joinRoom(name, password)
   return { roomId: connection.roomId, room: fake.rooms[fake.rooms.length - 1] as FakeTrysteroRoom }
 }
 
