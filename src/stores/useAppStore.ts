@@ -51,6 +51,18 @@ export interface Settings {
    * Default: false — the default is silence.
    */
   shareHistory: boolean
+  /**
+   * Issue #105 (spec §12.5) — opt-in global DM signaling channel: when true
+   * the app joins the well-known signal swarm (presence = nick + fingerprint
+   * only) and can be knocked BY FINGERPRINT; an accepted knock opens an E2EE
+   * DM backed by that swarm. Joining is a visible privacy decision (it
+   * exposes IP, fingerprint and nickname to every opt-in peer), so the
+   * default is OFF — join/leave rides this flag and leaving tears down every
+   * piece of signal-swarm state. Rides inside `gritos:settings` (spec §8.2:
+   * no sixth localStorage key) and is wiped by the panic button like the
+   * rest of the record.
+   */
+  globalDm: boolean
 }
 
 export interface Identity {
@@ -226,6 +238,14 @@ export interface DmChannel {
    * it; the room-DM shapes and behavior are untouched.
    */
   manual?: boolean
+  /**
+   * Issue #105 (spec §12.5) — additive marker, true ONLY on signal-swarm
+   * channels (keyed by the canonical identity fingerprint in `dms`): DmList
+   * shows the «(global)» marker for them, the sibling of the «(sin sala)»
+   * manual marker. Room-backed channels never set it (their keys are
+   * Trystero peerIds, a disjoint namespace from 32-hex fingerprints).
+   */
+  global?: boolean
 }
 
 export type ActiveView = { kind: 'room'; id: string } | { kind: 'dm'; peerId: string }
@@ -564,6 +584,15 @@ export interface AppActions {
   /** ts = null clears the peer's typing entry. */
   setManualDmTyping: (key: string, ts: number | null) => void
   setManualDmKeyChanged: (key: string, keyChanged: boolean) => void
+  /**
+   * Issue #105 (spec §12.5) — creates the signal-backed DM channel for
+   * `key` (the canonical identity fingerprint) when missing, marked
+   * `global: true`; an existing channel only gets its fingerprint refreshed
+   * under the same TOFU discipline as `ensureDmChannel`. The other channel
+   * mutations reuse the `dms` actions above: the store stays unaware of the
+   * backing swarm.
+   */
+  ensureGlobalDmChannel: (key: string, peerNick: string, peerFingerprint: string | null) => void
 }
 
 export const useAppStore = create<AppState & AppActions>()((set) => ({
@@ -1040,5 +1069,47 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       const channel = state.manualDms[key]
       if (channel === undefined || channel.keyChanged === keyChanged) return state
       return { manualDms: { ...state.manualDms, [key]: { ...channel, keyChanged } } }
+    }),
+
+  // ---------------------------------------------------------------------------
+  // Issue #105 (spec §12.5) — signal-backed channels live in the SAME `dms`
+  // slice as room DMs (keyed by the canonical identity fingerprint, a
+  // namespace disjoint from Trystero peerIds); only the CREATOR differs: it
+  // stamps the additive `global: true` marker, the «(global)» sibling of the
+  // manual «(sin sala)» marker. Every other mutation rides the `dms` actions.
+  // ---------------------------------------------------------------------------
+
+  ensureGlobalDmChannel: (key, peerNick, peerFingerprint) =>
+    set((state) => {
+      const existing = state.dms[key]
+      if (existing === undefined) {
+        return {
+          dms: {
+            ...state.dms,
+            [key]: {
+              peerId: key,
+              peerNick,
+              peerFingerprint,
+              messages: [],
+              unread: 0,
+              expiredCount: 0,
+              available: false,
+              typing: {},
+              keyChanged: false,
+              legacyPeer: false,
+              global: true,
+            },
+          },
+        }
+      }
+      // Same TOFU discipline as `ensureDmChannel`: a flagged channel keeps
+      // its pinned fingerprint — a rotated live value never overwrites it.
+      if (existing.keyChanged) return state
+      if (peerFingerprint !== null && existing.peerFingerprint !== peerFingerprint) {
+        return {
+          dms: { ...state.dms, [key]: { ...existing, peerFingerprint } },
+        }
+      }
+      return state
     }),
 }))

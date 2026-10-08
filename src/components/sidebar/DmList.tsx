@@ -1,7 +1,12 @@
 import { Badge } from '../common/Badge'
 import { EMPTY_DM_LIST_TEXT } from '../../lib/feed'
+import { useSettingsStore } from '../../stores/useSettingsStore'
 import type { DmChannel } from '../../stores/useAppStore'
 import {
+  CONTACT_ENTRY,
+  CONTACT_ENTRY_TITLE,
+  GLOBAL_DM_MARKER,
+  GLOBAL_DM_MARKER_TITLE,
   MANUAL_DM_INVITE_ENTRY,
   MANUAL_DM_INVITE_ENTRY_TITLE,
   MANUAL_DM_NO_SALA_MARKER,
@@ -17,31 +22,52 @@ import {
  * to DMs is discoverable. Issue #97 (§12.2): the header carries the
  * «+ invitación» entry to the manual-connection wizard, and trackerless
  * manual channels (room-backed rooms untouched) list with the «(sin sala)»
- * marker.
+ * marker. Issue #105 (§12.5): signal-swarm channels list with the sibling
+ * «(global)» marker, and the header carries the «+ contacto» entry to the
+ * contact flow — visible ONLY while the global-DM opt-in (`Settings.globalDm`)
+ * is on, with the enabling toggle reachable from the entry's hint in
+ * Ajustes → Privacidad.
  */
 export function DmList(props: {
   channels: DmChannel[]
   activePeerId: string | null
   onOpenDm: (peerId: string) => void
   onOpenInvite?: () => void
+  onOpenContact?: () => void
 }) {
+  // The contact entry follows the opt-in directly from the settings store:
+  // toggling the switch hides/reveals it with no further wiring.
+  const globalDm = useSettingsStore((state) => state.settings.globalDm)
   return (
     <section aria-label="Mensajes directos" className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
           Mensajes directos
         </h2>
-        {props.onOpenInvite !== undefined && (
-          <button
-            type="button"
-            onClick={props.onOpenInvite}
-            aria-label={MANUAL_DM_INVITE_ENTRY}
-            title={MANUAL_DM_INVITE_ENTRY_TITLE}
-            className="shrink-0 rounded px-1 py-0.5 text-xs font-medium text-muted hover:border-accent hover:text-text"
-          >
-            {MANUAL_DM_INVITE_ENTRY}
-          </button>
-        )}
+        <span className="flex shrink-0 items-center gap-1">
+          {globalDm && props.onOpenContact !== undefined && (
+            <button
+              type="button"
+              onClick={props.onOpenContact}
+              aria-label={CONTACT_ENTRY}
+              title={CONTACT_ENTRY_TITLE}
+              className="rounded px-1 py-0.5 text-xs font-medium text-muted hover:border-accent hover:text-text"
+            >
+              {CONTACT_ENTRY}
+            </button>
+          )}
+          {props.onOpenInvite !== undefined && (
+            <button
+              type="button"
+              onClick={props.onOpenInvite}
+              aria-label={MANUAL_DM_INVITE_ENTRY}
+              title={MANUAL_DM_INVITE_ENTRY_TITLE}
+              className="rounded px-1 py-0.5 text-xs font-medium text-muted hover:border-accent hover:text-text"
+            >
+              {MANUAL_DM_INVITE_ENTRY}
+            </button>
+          )}
+        </span>
       </div>
       {props.channels.length === 0 ? (
         <p className="text-xs text-muted">{EMPTY_DM_LIST_TEXT}</p>
@@ -66,6 +92,11 @@ export function DmList(props: {
                 {channel.manual === true && (
                   <span className="shrink-0 text-[10px] text-muted" title={MANUAL_DM_NO_SALA_TITLE}>
                     {MANUAL_DM_NO_SALA_MARKER}
+                  </span>
+                )}
+                {channel.global === true && (
+                  <span className="shrink-0 text-[10px] text-muted" title={GLOBAL_DM_MARKER_TITLE}>
+                    {GLOBAL_DM_MARKER}
                   </span>
                 )}
                 {!channel.available && (

@@ -15,7 +15,11 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * (RF-04). Visibility/collapse is owned by the layout (desktop persistence
  * under `gritos:ui`; mobile drawer), this component renders the content.
  */
-export function Sidebar(props: { onRoomOpened?: () => void; onOpenManualDm?: () => void }) {
+export function Sidebar(props: {
+  onRoomOpened?: () => void
+  onOpenManualDm?: () => void
+  onOpenContact?: () => void
+}) {
   const rooms = useAppStore((state) => state.rooms)
   const dms = useAppStore((state) => state.dms)
   const manualDms = useAppStore((state) => state.manualDms)
@@ -118,6 +122,7 @@ export function Sidebar(props: { onRoomOpened?: () => void; onOpenManualDm?: () 
         activePeerId={activeDmPeerId}
         onOpenDm={openDm}
         onOpenInvite={props.onOpenManualDm}
+        onOpenContact={props.onOpenContact}
       />
     </div>
   )

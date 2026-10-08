@@ -9,6 +9,8 @@ import { NetworkErrorBanner } from './NetworkErrorBanner'
 import { JoinRoomPopover } from '../sidebar/JoinRoomPopover'
 import { DmHeader } from '../dm/DmHeader'
 import { ManualDmWizard } from '../dm/ManualDmWizard'
+import { ContactFlow } from '../dm/ContactFlow'
+import { KnockConsentCards } from '../dm/KnockConsentCards'
 import { SlashHelpModal } from './SlashHelpModal'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { useAppStore } from '../../stores/useAppStore'
@@ -21,7 +23,7 @@ import { useExpirySweep } from '../../hooks/useExpirySweep'
 import { useFileTransfers } from '../../hooks/useFileTransfers'
 import { useNotifications } from '../../hooks/useNotifications'
 import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
-import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
+import { clearRoomHash, parseContactHash, parseRoomHash } from '../../lib/shareLinks'
 import { joinRoom, requestHistory } from '../../lib/p2p/roomManager'
 import {
   CLEAR_FEED_DIALOG_BODY,
@@ -72,6 +74,26 @@ export function ChatLayout() {
   // points (sidebar «+ invitación», tracker-error banner shortcut) flip it
   // and the modal renders once, over everything.
   const [manualWizardOpen, setManualWizardOpen] = useState(false)
+  // Issue #105 — the contact flow is layout-level state like the wizard:
+  // the sidebar «+ contacto» entry opens it, and a `#contacto=<fp>` deep
+  // link opens it prefilled with the linked fingerprint. The linked fp is
+  // read ONCE in this lazy initializer (the OnboardingScreen linked-room
+  // precedent) — an invalid fp routes nothing, ignored at log level. The
+  // flow works with the channel off too: the knock attempt surfaces the
+  // honest typed 'signal-off' line pointing at the Privacidad toggle.
+  const [contactFlow, setContactFlow] = useState<{ open: boolean; prefill: string | null }>(() => {
+    const fp = parseContactHash(window.location.hash)
+    return fp === null ? { open: false, prefill: null } : { open: true, prefill: fp }
+  })
+  // The linked hash is consumed up front (a reload must never re-trigger
+  // the flow); this is an external-URL update, never React state.
+  useEffect(() => {
+    if (contactFlow.open) clearRoomHash()
+  }, [contactFlow.open])
+  // The opt-in drives the contact surface's visibility; the flow itself is
+  // closed when the channel turns off mid-flow (its knock could never
+  // resolve with the swarm gone).
+  const globalDm = useSettingsStore((state) => state.settings.globalDm)
   // Issue #41 — name of the room this session entered through a '#sala'
   // deep link, kept only to offer the password join form when that room
   // cannot find peers (linked password rooms are indistinguishable from
@@ -125,6 +147,19 @@ export function ChatLayout() {
         // remains available.
       })
   }, [])
+
+  // Issue #105 — toggle off MID-FLOW: the «+ contacto» entry hides (the
+  // DmList reads the setting), the consent cards clear (their component
+  // remounts through the key below) and an open contact dialog closes —
+  // with the swarm gone its knock could never resolve. Only a true→false
+  // TRANSITION closes the dialog: a deep link may open the flow while the
+  // setting is still off, and that must not be undone on mount.
+  const prevGlobalDmRef = useRef(globalDm)
+  useEffect(() => {
+    const wasOn = prevGlobalDmRef.current
+    prevGlobalDmRef.current = globalDm
+    if (wasOn && !globalDm) setContactFlow({ open: false, prefill: null })
+  }, [globalDm])
 
   // Ctrl/Cmd+B toggles the sidebar (§10.1): collapse on desktop, drawer on
   // mobile.
@@ -191,6 +226,7 @@ export function ChatLayout() {
     <Sidebar
       onRoomOpened={() => setDrawerOpen(false)}
       onOpenManualDm={() => setManualWizardOpen(true)}
+      onOpenContact={() => setContactFlow({ open: true, prefill: null })}
     />
   )
 
@@ -254,6 +290,13 @@ export function ChatLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <NetworkErrorBanner onOpenManualDm={() => setManualWizardOpen(true)} />
+        {/* Issue #105 — inbound-knock consent cards: a non-blocking strip
+            answerable wherever the user is; nothing renders while the
+            global-DM opt-in is off (or no knocks are pending). The key
+            remounts the strip on toggle flips: the manager drops every
+            inbound knock on teardown, so stale cards must not resurface
+            when the channel comes back. */}
+        <KnockConsentCards key={globalDm ? 'global-dm-on' : 'global-dm-off'} />
         {/* Issue #41 — a room entered through a share link that exhausted
             the not-found heuristic may simply need its password (RF-05:
             indistinguishable from a nonexistent room): offer the regular
@@ -333,6 +376,9 @@ export function ChatLayout() {
                 // Issue #97 — trackerless manual channels route the composer
                 // through the manualDmManager, not the room DM paths.
                 manual: activeDm.manual === true,
+                // Issue #105 — signal-backed channels route the composer
+                // through the signal channel manager, not the room paths.
+                global: activeDm.global === true,
                 // Issue #103 phase 4 — the file dialog's fixed recipient line.
                 peerNick: activeDm.peerNick,
               }}
@@ -381,6 +427,15 @@ export function ChatLayout() {
       {/* Issue #97 — one wizard instance for both entry points; Esc and the
           backdrop cancel the pending flow (engine dispose, no traces). */}
       <ManualDmWizard open={manualWizardOpen} onClose={() => setManualWizardOpen(false)} />
+
+      {/* Issue #105 — one contact-flow instance for both entry points
+          (sidebar «+ contacto», `#contacto=` deep link prefill); the
+          toggle-off effect above closes it with the channel. */}
+      <ContactFlow
+        open={contactFlow.open}
+        initialFp={contactFlow.prefill}
+        onClose={() => setContactFlow({ open: false, prefill: null })}
+      />
 
       {/* Issue #99 — /ayuda overlay: the command table renders straight from
           SLASH_COMMANDS; Esc/backdrop close through the Modal base. */}

@@ -5,6 +5,13 @@ import App from './App.tsx'
 import { ErrorBoundary } from './components/common/ErrorBoundary.tsx'
 import { registerServiceWorker } from './lib/pwa/registerSw.ts'
 
+// Issue #105 (spec §12.5) — the signal-channel manager's module-load wiring
+// (the Settings.globalDm subscription that joins/leaves the swarm) must be
+// installed at boot, exactly like the room manager's seam→store wiring
+// living on its module load. With the default (off) this is inert; the
+// toggle works without any component importing the module.
+import './lib/p2p/signalChannel.ts'
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>

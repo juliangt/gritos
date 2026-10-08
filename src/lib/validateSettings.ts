@@ -17,7 +17,9 @@
  * entries must match the canonical fingerprint form and a list over the cap
  * is rejected wholesale instead of silently truncated. Issue #102: the
  * history-gossip consent flag joins the boolean pass — type-checked like
- * `notifications`/`rememberRooms`, defaulting to silence.
+ * `notifications`/`rememberRooms`, defaulting to silence. Issue #105: the
+ * global-DM opt-in flag joins the same boolean pass, defaulting to off
+ * (joining the signal swarm is a visible privacy decision, spec §12.5).
  */
 
 import { canonicalFingerprint } from './crypto/dm'
@@ -176,5 +178,6 @@ export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
     mutedFingerprints: normalizeMutedFingerprints(record.mutedFingerprints),
     shareHistory:
       typeof record.shareHistory === 'boolean' ? record.shareHistory : fallback.shareHistory,
+    globalDm: typeof record.globalDm === 'boolean' ? record.globalDm : fallback.globalDm,
   }
 }

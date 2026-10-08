@@ -81,6 +81,12 @@ export interface DmComposerContext {
    */
   manual?: boolean
   /**
+   * Issue #105 (spec §12.5): true for signal-swarm channels (`global: true`,
+   * keyed by the canonical fingerprint) — sends and typing route through the
+   * signal channel manager instead of the room paths.
+   */
+  global?: boolean
+  /**
    * Issue #103 phase 4 — the peer's display nickname for the pre-send file
    * dialog's fixed recipient line (absent → the raw peerId shows).
    */
@@ -149,8 +155,16 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   const typingActiveRef = useRef(false)
   const lastTypingSentAtRef = useRef(0)
   const idleTimerRef = useRef<number | null>(null)
-  const { sendChat, sendTyping, sendDm, sendDmTyping, sendManualDm, sendManualDmTyping } =
-    useRoomManager()
+  const {
+    sendChat,
+    sendTyping,
+    sendDm,
+    sendDmTyping,
+    sendManualDm,
+    sendManualDmTyping,
+    sendGlobalDm,
+    sendGlobalDmTyping,
+  } = useRoomManager()
 
   const room = props.room
   const dm = props.dm
@@ -201,15 +215,17 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
       typingActiveRef.current = false
       if (room !== undefined) sendTyping(room.id, false)
       else if (dm !== undefined && dm.manual === true) sendManualDmTyping(dm.peerId, false)
+      else if (dm !== undefined && dm.global === true) sendGlobalDmTyping(dm.peerId, false)
       else if (dm !== undefined) sendDmTyping(dm.peerId, false)
     }
-  }, [dm, room, sendDmTyping, sendManualDmTyping, sendTyping])
+  }, [dm, room, sendDmTyping, sendGlobalDmTyping, sendManualDmTyping, sendTyping])
 
   const signalTyping = useCallback(() => {
     const now = Date.now()
     const signal = (on: boolean) => {
       if (room !== undefined) sendTyping(room.id, on)
       else if (dm !== undefined && dm.manual === true) sendManualDmTyping(dm.peerId, on)
+      else if (dm !== undefined && dm.global === true) sendGlobalDmTyping(dm.peerId, on)
       else if (dm !== undefined) sendDmTyping(dm.peerId, on)
     }
     if (!typingActiveRef.current) {
@@ -222,7 +238,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
     }
     if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current)
     idleTimerRef.current = window.setTimeout(stopTypingSignal, TYPING_IDLE_STOP_MS)
-  }, [dm, room, sendDmTyping, sendManualDmTyping, sendTyping, stopTypingSignal])
+  }, [dm, room, sendDmTyping, sendGlobalDmTyping, sendManualDmTyping, sendTyping, stopTypingSignal])
 
   // Clean up any pending idle timer when leaving the room/unmounting.
   useEffect(() => stopTypingSignal, [stopTypingSignal])
@@ -248,6 +264,10 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
       // Issue #97 — manual channels route through the manual manager.
       if (ttl === undefined) void sendManualDm(dm.peerId, text)
       else void sendManualDm(dm.peerId, text, ttl)
+    } else if (dm !== undefined && dm.global === true) {
+      // Issue #105 — signal-backed channels route through the signal manager.
+      if (ttl === undefined) void sendGlobalDm(dm.peerId, text)
+      else void sendGlobalDm(dm.peerId, text, ttl)
     } else if (dm !== undefined) {
       if (ttl === undefined) void sendDm(dm.peerId, text)
       else void sendDm(dm.peerId, text, ttl)

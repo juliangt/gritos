@@ -184,6 +184,13 @@ export const MANUAL_DM_NO_SALA_MARKER = '(sin sala)'
 /** Tooltip explaining the DmList marker. */
 export const MANUAL_DM_NO_SALA_TITLE = 'Conversación manual creada mediante invitación, sin sala'
 
+/** DmList marker on signal-swarm channels (issue #105, spec §12.5: «(global)»). */
+export const GLOBAL_DM_MARKER = '(global)'
+
+/** Tooltip explaining the global-DM DmList marker. */
+export const GLOBAL_DM_MARKER_TITLE =
+  'Conversación directa abierta por huella a través del canal global (opt-in)'
+
 /** Wizard dialog accessible name. */
 export const MANUAL_DM_WIZARD_LABEL = 'Conexión manual sin trackers'
 
@@ -485,3 +492,130 @@ export const UPDATE_RELOAD_BUTTON = 'Recargar'
 
 /** Accessible name and tooltip of the dismiss control (session-only). */
 export const UPDATE_TOAST_DISMISS_LABEL = 'Descartar el aviso'
+
+// ---------------------------------------------------------------------------
+// Issue #105 phase 3 (spec §12.5) — the global-DM contact flow: the
+// Privacidad opt-in toggle, the DmList «+ contacto» entry, the «Mi contacto»
+// share screen (fingerprint + QR via the #100 machinery) and the «Contacto
+// por huella» knock flow, plus the inbound consent card. All Spanish wording
+// lives here so components and tests share the exact texts.
+// ---------------------------------------------------------------------------
+
+/** Privacidad tab — the global-DM opt-in toggle (Ajustes → Privacidad). */
+export const GLOBAL_DM_TOGGLE_LABEL = 'Canal global de DM'
+
+/**
+ * Privacidad tab — the honest §9.5 disclosure under the toggle: what joining
+ * exposes, what the off-by-default mitigation means, and that leaving is
+ * instant. Also the hint that explains where the «+ contacto» entries come
+ * from while the setting is off.
+ */
+export const GLOBAL_DM_TOGGLE_HINT =
+  'Opt-in: al activarlo entras en un enjambre público y bien conocido donde cada par con el ajuste activo puede ver tu IP, tu huella y tu apodo, y golpearte por huella para abrir un DM contigo. Desactivado por defecto; al apagarlo sales del enjambre al instante y se cierran sus canales. Los «+ contacto» de la barra lateral solo aparecen con el canal activo.'
+
+/** Sidebar DM section entry (visible text and accessible name), sibling of «+ invitación». */
+export const CONTACT_ENTRY = '+ contacto'
+
+/** Tooltip of the sidebar entry button. */
+export const CONTACT_ENTRY_TITLE =
+  'Compartir tu huella («Mi contacto») o golpear a otro par por huella («Contacto por huella»)'
+
+/** Contact dialog accessible name (the Modal label). */
+export const CONTACT_DIALOG_LABEL = 'Contacto por huella'
+
+/** Pick-screen intro line (the manual-wizard intro precedent). */
+export const CONTACT_INTRO_TEXT =
+  'El canal global conecta dos huellas sin sala compartida: ambos lados deben tenerlo activado en Ajustes → Privacidad. No lleva mensajes: solo golpes, y la conversación empieza cuando el otro lado acepta.'
+
+/** Pick-screen button: share YOUR fingerprint (copy + QR deep link). */
+export const CONTACT_SHARE_BUTTON = 'Mi contacto'
+
+/** Pick-screen button: knock someone by pasted fingerprint. */
+export const CONTACT_KNOCK_ENTRY_BUTTON = 'Contacto por huella'
+
+// Share screen («Mi contacto»).
+
+/** Accessible name of the readonly field holding the own fingerprint. */
+export const CONTACT_FP_LABEL = 'Tu huella de identidad: cópiala y envíasela a tu contacto'
+
+/** Copy button next to the fingerprint (clipboard with manual fallback). */
+export const CONTACT_COPY_BUTTON = 'Copiar'
+
+/** Transient feedback after a successful copy (aria-live). */
+export const CONTACT_COPIED_FEEDBACK = 'Copiado'
+
+/** Canvas role="img" label: describes what the QR encodes. */
+export const CONTACT_QR_CANVAS_LABEL = 'Código QR con tu enlace de contacto'
+
+/** Button that downloads the contact QR as a PNG file (the #100 wording). */
+export const CONTACT_DOWNLOAD_BUTTON = 'Descargar PNG'
+
+/** Same-deployment disclosure (the #100 note reused for the contact QR). */
+export const CONTACT_QR_SAME_INSTALL_NOTE = QR_SAME_INSTALL_NOTE
+
+// Knock screen («Contacto por huella»).
+
+/** Intro line: what a knock is and what it needs (presence on the swarm). */
+export const CONTACT_KNOCK_INTRO_TEXT =
+  'Pega la huella de tu contacto: si está presente en el canal global recibirá tu golpe y decidirá si acepta. Mientras espera, puedes añadir una nota opcional.'
+
+/** Accessible name of the paste textarea for the peer's fingerprint. */
+export const CONTACT_KNOCK_PASTE_LABEL = 'Pega aquí la huella de tu contacto'
+
+/** Accessible name of the optional note textarea (capped at 140 chars). */
+export const CONTACT_KNOCK_NOTE_LABEL = 'Nota opcional para tu golpe'
+
+/** Character counter of the note field (aria-live). */
+export function contactNoteCounter(length: number): string {
+  return `${length}/140`
+}
+
+/** Button that validates the pasted fingerprint and knocks. */
+export const CONTACT_KNOCK_SEND_BUTTON = 'Enviar golpe'
+
+/** Progress: the knock is out, waiting for the peer's consent (live region). */
+export const CONTACT_KNOCK_WAITING_TEXT = 'Golpe enviado: esperando respuesta…'
+
+/** Inline terminal state when the peer answered knock-ack(false). */
+export const CONTACT_KNOCK_REJECTED_TEXT = 'Rechazado: el par no ha aceptado tu contacto.'
+
+/** Inline error for a paste that is not a fingerprint (the local form check). */
+export const CONTACT_FP_INVALID_TEXT =
+  'Eso no es una huella válida: deben ser 8 grupos de 4 caracteres hexadecimales.'
+
+/** Inline errors for a typed KnockError rejection, keyed by its reason. */
+export const KNOCK_ERROR_TEXT: Record<'signal-off' | 'peer-not-present' | 'invalid-knock', string> =
+  {
+    'signal-off': 'El canal global está desactivado: actívalo en Ajustes → Privacidad.',
+    'peer-not-present': 'Esa huella no está presente en el canal global ahora mismo.',
+    'invalid-knock': 'El golpe no es válido: revisa la huella y la nota.',
+  }
+
+/** Back control to the pick screen (both screens keep the dialog open). */
+export const CONTACT_BACK_BUTTON = 'Volver'
+
+/** Cancel control closing the dialog at every state (the wizard precedent). */
+export const CONTACT_CANCEL_BUTTON = 'Cancelar'
+
+// Inbound consent card (the «door» rendered wherever the user is).
+
+/** The card's question line (the exact §12.5 shape, with the sender's nick). */
+export function knockConsentText(nick: string): string {
+  return `@${nick} quiere abrir un DM contigo`
+}
+
+/** Accessible name of one consent card region. */
+export function knockCardLabel(nick: string): string {
+  return `Solicitud de contacto de @${nick}`
+}
+
+/** Accessible name of the consent-cards strip (one region, N cards). */
+export const KNOCK_CARDS_REGION_LABEL = 'Solicitudes de contacto'
+
+/** Prefix of the optional note line rendered on the card. */
+export const KNOCK_NOTE_PREFIX = 'Nota: '
+
+/** Consent card actions. «Silenciar» rejects AND mutes (issue #95). */
+export const KNOCK_ACCEPT_BUTTON = 'Aceptar'
+export const KNOCK_REJECT_BUTTON = 'Rechazar'
+export const KNOCK_MUTE_BUTTON = 'Silenciar'

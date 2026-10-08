@@ -11,6 +11,8 @@ import { ConfirmDialog } from '../common/ConfirmDialog'
 import { Toggle } from './Toggle'
 import {
   EMPTY_MUTED_PEERS_TEXT,
+  GLOBAL_DM_TOGGLE_HINT,
+  GLOBAL_DM_TOGGLE_LABEL,
   MUTED_PEERS_HEADING,
   MUTED_PEERS_HINT,
   P2P_IP_EXPOSURE_NOTE,
@@ -24,11 +26,12 @@ import {
 /**
  * Privacidad tab (RF-07/RF-08): the notifications toggle with its
  * permission request flow, remember-recents, the opt-in history-gossip
- * consent (issue #102), the local mute list with per-row unmute (issue
- * #95), the P2P exposure disclosure (issue #35), an at-rest storage note
- * for the wrapped identity key (issue #24) and for the TURN credentials
- * (issue #30), identity regeneration behind a confirming dialog, and the
- * panic button behind a double confirmation.
+ * consent (issue #102), the opt-in global-DM channel with its honest
+ * §9.5 exposure disclosure (issue #105), the local mute list with per-row
+ * unmute (issue #95), the P2P exposure disclosure (issue #35), an at-rest
+ * storage note for the wrapped identity key (issue #24) and for the TURN
+ * credentials (issue #30), identity regeneration behind a confirming
+ * dialog, and the panic button behind a double confirmation.
  */
 
 const PERMISSION_GRANTED_TEXT = 'Permiso concedido.'
@@ -130,6 +133,18 @@ export function PrivacyTab() {
         checked={settings.shareHistory}
         hint={SHARE_HISTORY_HINT}
         onChange={(shareHistory) => setSettings({ shareHistory })}
+      />
+
+      {/* Issue #105 (spec §12.5) — the global-DM opt-in: flipping the setting
+          is ALL this does; the signal-channel manager's module-level
+          subscription performs the actual swarm join/leave (and its teardown
+          of the signal-backed channels), so the UI stays declarative. The
+          hint is the honest §9.5 exposure disclosure. */}
+      <Toggle
+        label={GLOBAL_DM_TOGGLE_LABEL}
+        checked={settings.globalDm}
+        hint={GLOBAL_DM_TOGGLE_HINT}
+        onChange={(globalDm) => setSettings({ globalDm })}
       />
 
       {/* Issue #95 — the local mute list: fingerprints persisted in

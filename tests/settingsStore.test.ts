@@ -35,6 +35,9 @@ describe('settings store defaults (spec §8.1)', () => {
       // Issue #102 — history gossip is strictly opt-in: the default is
       // silence.
       shareHistory: false,
+      // Issue #105 (spec §12.5) — the global DM signaling channel is
+      // strictly opt-in: the default is off, the swarm never joins silently.
+      globalDm: false,
     })
   })
 
