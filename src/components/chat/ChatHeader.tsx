@@ -4,6 +4,8 @@ import { roomStatusText } from '../../lib/rooms'
 import { buildRoomLink } from '../../lib/shareLinks'
 import { StatusDot } from '../common/StatusDot'
 import { SettingsModal } from '../settings/SettingsModal'
+import { QrSharePopover } from './QrSharePopover'
+import { QR_BUTTON_LABEL } from '../settings/messages'
 
 /** Issue #41 — how long the 'Enlace copiado' feedback stays visible. */
 const COPIED_FEEDBACK_MS = 2_000
@@ -13,11 +15,13 @@ const COPIED_FEEDBACK_MS = 2_000
  * exact connection status text (RF-05: a password room that exhausts the
  * heuristic without peers shows the single not-found message), peer count,
  * the sidebar toggle, the share affordance (issue #41: navigator.share with
- * a clipboard fallback; the link carries only the room name) and the
+ * a clipboard fallback; the link carries only the room name) with the QR
+ * invite popover next to it (issue #100: same link, scannable) and the
  * settings entry (RF-07 modal).
  */
 export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
   // Issue #41 — share the current room: the Web Share sheet when available,
@@ -70,9 +74,7 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
             )}
           </h1>
           <StatusDot status={props.room.status} />
-          <span className="min-w-0 truncate text-xs text-muted">
-            {roomStatusText(props.room)}
-          </span>
+          <span className="min-w-0 truncate text-xs text-muted">{roomStatusText(props.room)}</span>
           <span className="ml-auto shrink-0 text-xs text-muted">
             {props.room.peers.length} {props.room.peers.length === 1 ? 'par' : 'pares'}
           </span>
@@ -84,6 +86,15 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
             className="rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
           >
             ⤴
+          </button>
+          <button
+            type="button"
+            onClick={() => setQrOpen(true)}
+            aria-label={QR_BUTTON_LABEL}
+            title={QR_BUTTON_LABEL}
+            className="rounded px-1.5 py-1 text-xs font-semibold leading-none hover:bg-bg"
+          >
+            QR
           </button>
         </>
       )}
@@ -105,6 +116,10 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
       </button>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {props.room !== null && (
+        <QrSharePopover room={props.room} open={qrOpen} onClose={() => setQrOpen(false)} />
+      )}
     </header>
   )
 }

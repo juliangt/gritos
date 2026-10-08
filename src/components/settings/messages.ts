@@ -276,3 +276,27 @@ export const CLEAR_FEED_DIALOG_CONFIRM = 'Borrar'
  * SLASH_COMMANDS (usage + help), like the /ayuda overlay.
  */
 export const SLASH_POPUP_LABEL = 'Sugerencias de comandos'
+
+// ---------------------------------------------------------------------------
+// Issue #100 — QR invite (ChatHeader 'QR' button → popover over the share
+// affordance). The QR encodes exactly buildRoomLink's output (room name
+// only, never the password — RF-05); all wording lives here so the
+// components and tests share the exact texts.
+// ---------------------------------------------------------------------------
+
+/** Header entry button: accessible name and tooltip (visible text is 'QR'). */
+export const QR_BUTTON_LABEL = 'Código QR de la sala'
+
+/** Popover dialog accessible name (Modal label). */
+export const QR_DIALOG_LABEL = 'Código QR de la sala'
+
+/** Canvas role="img" label: describes what the QR encodes. */
+export function qrCanvasLabel(roomName: string): string {
+  return `Código QR con el enlace de la sala ${roomName}`
+}
+
+/** Button that downloads the QR as a PNG file. */
+export const QR_DOWNLOAD_BUTTON = 'Descargar PNG'
+
+/** Same-deployment disclosure (issue #100 Risks): a QR from another install joins nothing. */
+export const QR_SAME_INSTALL_NOTE = 'El QR enlaza a esta misma instalación.'
