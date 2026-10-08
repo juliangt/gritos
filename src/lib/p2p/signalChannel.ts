@@ -136,6 +136,38 @@ export function onKnock(listener: SignalKnockListener): () => void {
   }
 }
 
+/** How an OUTGOING knock ended (phase 3's waiting state resolves on this). */
+export interface KnockResolution {
+  /** The TARGET fingerprint the knock was addressed to (the channel key). */
+  readonly fp: string
+  readonly accepted: boolean
+}
+
+const knockResolutionListeners = new Set<(resolution: KnockResolution) => void>()
+
+/**
+ * Subscribes to outgoing-knock resolutions (the phase-3 dialog's
+ * «esperando respuesta» → landed/rejected transition); returns the
+ * unsubscribe function. Fired exactly once per acked knock, AFTER the
+ * accept path has opened the channel (the listener can navigate straight
+ * into the DM view). A knock dropped without an ack (the peer leaving)
+ * never resolves — the dialog stays cancellable. DISPOSABLE listener
+ * state: cleared by `resetSignalChannelForTests`.
+ */
+export function onKnockResolved(listener: (resolution: KnockResolution) => void): () => void {
+  knockResolutionListeners.add(listener)
+  return () => {
+    knockResolutionListeners.delete(listener)
+  }
+}
+
+/** Notifies every resolution listener (the handleKnockAck tail). */
+function resolveKnock(fp: string, accepted: boolean): void {
+  for (const listener of knockResolutionListeners) {
+    listener({ fp, accepted })
+  }
+}
+
 interface PresenceEntry {
   readonly nick: string
   readonly peerId: string
@@ -426,9 +458,17 @@ function handleKnockAck(swarm: SignalSwarm, data: unknown, peerId: string): void
   }
   if (targetFp === null) return
   swarm.pendingKnocks.delete(targetFp)
-  if (!payload.accept) return // rejected: no channel, the knock is forgotten
+  if (!payload.accept) {
+    // Rejected: no channel, the knock is forgotten — the UI learns through
+    // the resolution seam (phase 3's inline «rechazado» state).
+    resolveKnock(targetFp, false)
+    return
+  }
   const entry = swarm.presence.get(targetFp)
   openSignalChannel(swarm, targetFp, entry?.nick ?? 'par')
+  // Fired AFTER the channel exists: the dialog can land in the DM view
+  // directly from this callback.
+  resolveKnock(targetFp, true)
 }
 
 function handleSignalTyping(swarm: SignalSwarm, payload: TypingPayload, peerId: string): void {
@@ -998,4 +1038,5 @@ export function abortSignalChannel(): void {
 export function resetSignalChannelForTests(): void {
   leaveSignalSwarm(true)
   knockListeners.clear()
+  knockResolutionListeners.clear()
 }

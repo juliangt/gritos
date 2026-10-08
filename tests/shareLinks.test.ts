@@ -1,12 +1,25 @@
 // @vitest-environment jsdom
 import './dom-setup'
 import { describe, expect, it } from 'vitest'
-import { ROOM_HASH_PARAM, buildRoomLink, clearRoomHash, parseRoomHash } from '../src/lib/shareLinks'
+import {
+  CONTACT_HASH_PARAM,
+  ROOM_HASH_PARAM,
+  buildContactLink,
+  buildRoomLink,
+  clearRoomHash,
+  parseContactHash,
+  parseRoomHash,
+} from '../src/lib/shareLinks'
 
 /**
  * Issue #41 — room deep links: the hash carries only the (RF-02 normalized)
  * room name; anything else (foreign hash, junk, password-ish params) parses
  * to null. The builder composes origin + path + '#sala=<encoded>'.
+ *
+ * Issue #105 (spec §12.5) — contact deep links: the same discipline with
+ * `#contacto=<fp>`; the value must canonicalize to exactly 32 hex chars
+ * (issue #95 rule — spaced display forms accepted) and only the CANONICAL
+ * form routes.
  */
 
 describe('parseRoomHash', () => {
@@ -103,5 +116,60 @@ describe('clearRoomHash', () => {
     window.history.pushState({}, '', '/')
     clearRoomHash()
     expect(window.location.hash).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #105 phase 3 — `#contacto=<fp>`
+// ---------------------------------------------------------------------------
+
+const DISPLAY_FP = 'A31F 09BC 77D2 4E5A 0F1E 2D3C 4B5A 6978'
+const CANONICAL_FP = 'A31F09BC77D24E5A0F1E2D3C4B5A6978'
+
+describe('parseContactHash (issue #105, spec §12.5)', () => {
+  it('parses a canonical fingerprint, canonicalizing display forms', () => {
+    expect(parseContactHash(`#contacto=${CANONICAL_FP}`)).toBe(CANONICAL_FP)
+    expect(parseContactHash(`#contacto=${encodeURIComponent(DISPLAY_FP)}`)).toBe(CANONICAL_FP)
+    // Lowercase hex and raw (unencoded) spaces are tolerated too.
+    expect(parseContactHash('#contacto=a31f09bc77d24e5a0f1e2d3c4b5a6978')).toBe(CANONICAL_FP)
+    expect(parseContactHash(`contacto=${DISPLAY_FP}`)).toBe(CANONICAL_FP)
+  })
+
+  it('returns null for an empty or missing hash', () => {
+    expect(parseContactHash('')).toBeNull()
+    expect(parseContactHash(null)).toBeNull()
+    expect(parseContactHash(undefined)).toBeNull()
+    expect(parseContactHash('#contacto=')).toBeNull()
+  })
+
+  it('returns null for a foreign hash parameter', () => {
+    expect(parseContactHash('#sala=lobby')).toBeNull()
+    expect(parseContactHash('#contactox=abc')).toBeNull()
+  })
+
+  it('returns null for a value that does not canonicalize to 32 hex', () => {
+    expect(parseContactHash('#contacto=nope')).toBeNull()
+    expect(parseContactHash('#contacto=A31F09BC77D24E5A')).toBeNull() // 16 hex
+    expect(parseContactHash('#contacto=zz1F09BC77D24E5A0F1E2D3C4B5A6978')).toBeNull()
+    expect(parseContactHash(`#contacto=${'A'.repeat(33)}`)).toBeNull()
+  })
+
+  it('returns null on malformed percent-encoding instead of throwing', () => {
+    expect(parseContactHash('#contacto=%E0%A4%A')).toBeNull()
+  })
+})
+
+describe('buildContactLink (issue #105, spec §12.5)', () => {
+  it('composes origin + pathname + #contacto=<canonical fp>', () => {
+    expect(buildContactLink(DISPLAY_FP)).toBe(
+      `${window.location.origin}${window.location.pathname}#contacto=${CANONICAL_FP}`,
+    )
+  })
+
+  it('round-trips through the parser and never leaks the spaced form', () => {
+    const link = buildContactLink(DISPLAY_FP)
+    expect(link).not.toContain(' ')
+    expect(parseContactHash(new URL(link).hash)).toBe(CANONICAL_FP)
+    expect(CONTACT_HASH_PARAM).toBe('contacto=')
   })
 })

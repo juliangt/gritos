@@ -107,14 +107,13 @@ export function qrPngFilename(roomName: string): string {
   return `gritos-sala-${roomName}.png`
 }
 
-/**
- * Exports the QR of `link` as a PNG download (`gritos-sala-<name>.png`):
- * paints an offscreen canvas at the export scale, `toBlob`s a PNG and fires
- * an `<a download>` click on an object URL. No-ops silently when the 2D
- * context is missing (jsdom) or the blob comes back null — same degrade-
- * quietly contract as the denied-clipboard share fallback.
- */
-export function downloadQrPng(link: string, roomName: string): void {
+/** Issue #105 phase 3 — the contact QR's PNG filename (no variable part). */
+export function qrContactPngFilename(): string {
+  return 'gritos-contacto.png'
+}
+
+/** Shared exporter: paints `link` offscreen and fires an `<a download>`. */
+function exportQrPng(link: string, filename: string): void {
   const matrix = buildQrMatrix(link)
   const canvas = document.createElement('canvas')
   if (paintQr(canvas, matrix, qrExportModulePx(matrix.moduleCount)) === null) return
@@ -124,10 +123,30 @@ export function downloadQrPng(link: string, roomName: string): void {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = qrPngFilename(roomName)
+    anchor.download = filename
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
     URL.revokeObjectURL(url)
   }, 'image/png')
+}
+
+/**
+ * Exports the QR of `link` as a PNG download (`gritos-sala-<name>.png`):
+ * paints an offscreen canvas at the export scale, `toBlob`s a PNG and fires
+ * an `<a download>` click on an object URL. No-ops silently when the 2D
+ * context is missing (jsdom) or the blob comes back null — same degrade-
+ * quietly contract as the denied-clipboard share fallback.
+ */
+export function downloadQrPng(link: string, roomName: string): void {
+  exportQrPng(link, qrPngFilename(roomName))
+}
+
+/**
+ * Issue #105 phase 3 — exports the contact QR (`#contacto=<fp>` link) as a
+ * PNG download (`gritos-contacto.png`). Same painting, same degrade-quietly
+ * contract as the room export above.
+ */
+export function downloadContactQrPng(link: string): void {
+  exportQrPng(link, qrContactPngFilename())
 }

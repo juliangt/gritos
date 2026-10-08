@@ -25,6 +25,9 @@ import {
   startManualDmAnswer,
   startManualDmInvite,
 } from '../lib/p2p/manualDmManager'
+// Issue #105 (spec §12.5) — the signal-backed channel seams: the module's
+// boot wiring is already installed by main.tsx; these are plain functions.
+import { sendSignalDm, sendSignalDmTyping } from '../lib/p2p/signalChannel'
 import { createSessionIdentity, exportIdentityJwks, persistIdentity } from '../lib/crypto/identity'
 import { useAppStore } from '../stores/useAppStore'
 
@@ -91,6 +94,14 @@ export interface RoomManagerApi {
   cancelManualDm: typeof cancelManualDm
   sendManualDm: typeof sendManualDm
   sendManualDmTyping: typeof sendManualDmTyping
+  /**
+   * Issue #105 (spec §12.5) — the signal-channel surface, one thin wrapper
+   * per manager function like the manual-DM surface above: the composer
+   * sends and signals typing over a «(global)» channel keyed by the peer's
+   * canonical fingerprint. Errors never throw (the manager's own contract).
+   */
+  sendGlobalDm: typeof sendSignalDm
+  sendGlobalDmTyping: typeof sendSignalDmTyping
 }
 
 export interface UseRoomManagerOptions {
@@ -223,5 +234,8 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     cancelManualDm,
     sendManualDm,
     sendManualDmTyping,
+    // Issue #105 — same stability rule for the signal-channel surface.
+    sendGlobalDm: sendSignalDm,
+    sendGlobalDmTyping: sendSignalDmTyping,
   }
 }
