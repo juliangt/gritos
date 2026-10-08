@@ -30,6 +30,11 @@ export const DEFAULT_SETTINGS: Settings = {
   // only an explicit peer request can ever pull history, and only while
   // this consent flag is on.
   shareHistory: false,
+  // Issue #105 (spec §12.5): the global DM signaling channel is strictly
+  // opt-in — joining the well-known swarm exposes IP, fingerprint and
+  // nickname to every opt-in peer, so the default is OFF and leaving wipes
+  // every piece of signal-swarm state.
+  globalDm: false,
 }
 
 export interface SettingsStore {

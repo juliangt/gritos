@@ -184,6 +184,13 @@ export const MANUAL_DM_NO_SALA_MARKER = '(sin sala)'
 /** Tooltip explaining the DmList marker. */
 export const MANUAL_DM_NO_SALA_TITLE = 'Conversación manual creada mediante invitación, sin sala'
 
+/** DmList marker on signal-swarm channels (issue #105, spec §12.5: «(global)»). */
+export const GLOBAL_DM_MARKER = '(global)'
+
+/** Tooltip explaining the global-DM DmList marker. */
+export const GLOBAL_DM_MARKER_TITLE =
+  'Conversación directa abierta por huella a través del canal global (opt-in)'
+
 /** Wizard dialog accessible name. */
 export const MANUAL_DM_WIZARD_LABEL = 'Conexión manual sin trackers'
 

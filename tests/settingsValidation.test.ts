@@ -96,6 +96,19 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
     expect(normalizeSettings({ shareHistory: false }, FALLBACK).shareHistory).toBe(false)
   })
 
+  it('defaults globalDm to off and coerces it by type only (issue #105)', () => {
+    // Absent or hostile → the documented default: false (joining the signal
+    // swarm is a visible privacy decision, never a silent default — §12.5).
+    expect(DEFAULT_SETTINGS.globalDm).toBe(false)
+    expect(normalizeSettings({}, FALLBACK).globalDm).toBe(false)
+    expect(normalizeSettings({ globalDm: 1 }, FALLBACK).globalDm).toBe(false)
+    expect(normalizeSettings({ globalDm: 'yes' }, FALLBACK).globalDm).toBe(false)
+    expect(normalizeSettings({ globalDm: null }, FALLBACK).globalDm).toBe(false)
+    // Only a real boolean survives, in either direction.
+    expect(normalizeSettings({ globalDm: true }, FALLBACK).globalDm).toBe(true)
+    expect(normalizeSettings({ globalDm: false }, FALLBACK).globalDm).toBe(false)
+  })
+
   it('allows only the real theme enum', () => {
     expect(normalizeSettings({ theme: 'purple' }, FALLBACK).theme).toBe('system')
     expect(normalizeSettings({ theme: 42 }, FALLBACK).theme).toBe('system')
@@ -210,6 +223,7 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
       rememberTurnCredentials: true,
       mutedFingerprints: [FP_CANONICAL],
       shareHistory: true,
+      globalDm: true,
     }
     expect(normalizeSettings(valid, FALLBACK)).toEqual(valid)
   })
@@ -389,5 +403,18 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
 
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ shareHistory: 'on' }))
     expect((await rehydrate()).settings.shareHistory).toBe(false)
+  })
+
+  it('loads a persisted globalDm flag and falls back to off when it is junk (issue #105)', async () => {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ globalDm: true }))
+    expect((await rehydrate()).settings.globalDm).toBe(true)
+
+    // A record written before the toggle existed stays off — the swarm is
+    // never joined silently after an upgrade.
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ theme: 'dark' }))
+    expect((await rehydrate()).settings.globalDm).toBe(false)
+
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ globalDm: 'on' }))
+    expect((await rehydrate()).settings.globalDm).toBe(false)
   })
 })

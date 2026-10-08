@@ -7,12 +7,15 @@ import {
 } from '@trystero-p2p/torrent'
 import { resolveTrysteroAppId } from './appId'
 import { deriveRoomId } from '../crypto/hashes'
+import type { DmTransport } from './dmTransport'
+import { deriveDmSessionKey } from './dmTransport'
 import {
   INITIAL_APP_STATE,
   useAppStore,
   type Message,
   type Peer,
   type RoomStatus,
+  type Settings,
 } from '../../stores/useAppStore'
 import { DEFAULT_SETTINGS, getMutedNickname, useSettingsStore } from '../../stores/useSettingsStore'
 import { createEnvelope, DM_PROTOCOL_VERSION, PROTOCOL_VERSION } from './protocol'
@@ -56,7 +59,11 @@ import {
   type PersistedIdentity,
   type SessionIdentity,
 } from '../crypto/identity'
-import { ensureEphemeralSession, setEphemeralSession } from '../crypto/sessionEphemeral'
+import {
+  ensureEphemeralSession,
+  setEphemeralSession,
+  type EphemeralSession,
+} from '../crypto/sessionEphemeral'
 import { isValidNickname, sanitizeRemoteNick } from '../nickname'
 import {
   canonicalFingerprint,
@@ -519,6 +526,43 @@ export function setJoinRoomFactory(factory: TrysteroJoinRoom | null): void {
   joinRoomImpl = factory ?? trysteroJoinRoom
 }
 
+/**
+ * Trystero room handle of an auxiliary swarm — re-exported so the signal
+ * manager (issue #105) never imports trystero itself (plan §3: this module
+ * is the app's single Trystero surface).
+ */
+export type AuxiliarySwarmRoom = TrysteroRoom
+
+/**
+ * §9.4 Trystero config shared by every swarm join: appId always (issue #90,
+ * resolved per join so a missing variable surfaces as a join error, never a
+ * broken import); custom trackers/ICE replace the defaults only when the
+ * user configured them (RF-07).
+ */
+function buildSwarmConfig(settings: Settings): JoinRoomConfig {
+  const config: JoinRoomConfig = { appId: resolveTrysteroAppId() }
+  if (settings.trackers.length > 0) {
+    config.relayConfig = { urls: [...settings.trackers] }
+  }
+  if (settings.iceServers.length > 0) {
+    config.rtcConfig = { iceServers: settings.iceServers.map((server) => ({ ...server })) }
+  }
+  return config
+}
+
+/**
+ * Issue #105 (spec §12.5) — joins an AUXILIARY swarm (the well-known signal
+ * channel) through the SAME injectable factory and the SAME config (appId,
+ * trackers, ICE) the rooms use, so tests drive both swarms with one fake
+ * and the signal swarm inherits the app's network settings. The signal
+ * manager owns everything else about that swarm (actions, presence,
+ * teardown) — this is only the join seam.
+ */
+export function joinAuxiliarySwarm(roomId: string): AuxiliarySwarmRoom {
+  const settings = useSettingsStore.getState().settings
+  return joinRoomImpl(buildSwarmConfig(settings), roomId)
+}
+
 /** The local Trystero peerId (stable per browser session). */
 export function getSelfPeerId(): string {
   return trysteroSelfId
@@ -628,6 +672,30 @@ function fireIdentityRegenerated(): void {
 }
 
 /**
+ * Issue #105 (spec §12.5) — post-regeneration material rebroadcast seam.
+ * Fires AFTER `regenerateSessionIdentity` has produced the new identity AND
+ * the fresh session-ephemeral keypair (the regeneration seam above fires
+ * BEFORE both — the manual path uses that to invalidate, but a re-announce
+ * needs the FINAL material, not material that `setEphemeralSession(null)`
+ * would strand). The signal manager subscribes at module load to re-announce
+ * whoami + keys + ephkeys over its swarm, exactly like the room loop below.
+ * Wiring, not disposable state: never cleared by resetManagerForTests.
+ */
+export type IdentityRebroadcastListener = (
+  session: SessionIdentity,
+  ephemeral: EphemeralSession,
+) => void
+
+const identityRebroadcastListeners = new Set<IdentityRebroadcastListener>()
+
+export function onIdentityMaterialRebroadcast(listener: IdentityRebroadcastListener): () => void {
+  identityRebroadcastListeners.add(listener)
+  return () => {
+    identityRebroadcastListeners.delete(listener)
+  }
+}
+
+/**
  * RF-07 (M5) — regenerates the cryptographic identity: a new ECDH keypair
  * is created and persisted under `gritos:identity` (same nickname), the DM
  * key cache is dropped (old keys no longer match), the store is updated and
@@ -668,6 +736,11 @@ export async function regenerateSessionIdentity(): Promise<SessionIdentity | nul
       safeSend(connection.actions.keys, session.rawPublicKey, { target: peerId })
       safeSend(connection.actions.ephkeys, ephemeral.rawPublicKey, { target: peerId })
     }
+  }
+  // Issue #105 — auxiliary swarms (the signal channel) re-announce the same
+  // FINAL material to their own peers through this seam.
+  for (const listener of identityRebroadcastListeners) {
+    listener(session, ephemeral)
   }
   return session
 }
@@ -1182,17 +1255,8 @@ async function doJoinRoom(normalized: string, password?: string): Promise<RoomCo
 
   await ensureSessionIdentity()
 
-  // Trystero config (§6.3): appId always; custom trackers/ICE replace the
-  // defaults only when the user configured them (RF-07). Issue #90 — the
-  // appId comes from the build environment, resolved per join so a missing
-  // variable surfaces as a join error instead of breaking at import time.
-  const config: JoinRoomConfig = { appId: resolveTrysteroAppId() }
-  if (settings.trackers.length > 0) {
-    config.relayConfig = { urls: [...settings.trackers] }
-  }
-  if (settings.iceServers.length > 0) {
-    config.rtcConfig = { iceServers: settings.iceServers.map((server) => ({ ...server })) }
-  }
+  // Trystero config (§6.3) — shared with the auxiliary-swarm seam below.
+  const config = buildSwarmConfig(settings)
 
   const trysteroRoom = joinRoomImpl(config, roomId)
   // M4 (§9.3) — start the PBKDF2 derivation immediately; consumers await the
@@ -1442,6 +1506,11 @@ function refreshDmAvailability(): void {
     for (const peer of room.peers) connected.add(peer.id)
   }
   for (const [peerId, channel] of Object.entries(state.dms)) {
+    // Issue #105 (spec §12.5) — signal-backed channels are keyed by identity
+    // fingerprint and backed by ANOTHER swarm: their available/legacy state
+    // is owned by the signal manager, this room-swarm recomputation must
+    // never touch them.
+    if (channel.global === true) continue
     const available = connected.has(peerId)
     if (available !== channel.available) state.setDmAvailable(peerId, available)
     const legacyPeer = available && peerEphemeralKeyOf(peerId) === null
@@ -1501,6 +1570,52 @@ export function openDmChannel(peerId: string): boolean {
 }
 
 /**
+ * Issue #105 (spec §12.5) — the ROOM backing of the DmTransport interface:
+ * wraps the existing shared-connection internals (identity/ephemeral key
+ * maps, directed `dm`/`typing`/`receipt` sends) so a room-backed channel and
+ * a signal-backed one expose identical behavior to the store and the UI.
+ * Returns null when no active room holds `peerId`'s identity key. The
+ * closures read the live connection maps, so key material landing after the
+ * transport was built is seen by the next call; `available()` re-checks the
+ * connection is still in the manager's map (a left room's stale transport
+ * reads unavailable).
+ */
+export function roomDmTransport(peerId: string): DmTransport | null {
+  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
+  if (shared === undefined) return null
+  return {
+    kind: 'room',
+    channelKey: peerId,
+    peerId,
+    available: () =>
+      connections.get(shared.roomId) === shared &&
+      useAppStore.getState().dms[peerId]?.available === true,
+    peerIdentityFingerprint: () => {
+      // CANONICAL form: the DmTransport contract (issue #105) normalizes the
+      // keys-derived identity fp — the signal backing's key space is
+      // canonical, and every consumer (v2 derivation, TOFU pin comparison)
+      // canonicalizes internally anyway.
+      const fingerprint = shared.peerKeyFps.get(peerId)
+      return fingerprint === undefined ? null : canonicalFingerprint(fingerprint)
+    },
+    peerEphemeralKey: () => {
+      const rawKey = shared.peerEphKeys.get(peerId)
+      const fingerprint = shared.peerEphFps.get(peerId)
+      return rawKey !== undefined && fingerprint !== undefined
+        ? { rawKey, fingerprint: canonicalFingerprint(fingerprint) }
+        : null
+    },
+    sendDmEnvelope: (envelope) => safeSend(shared.actions.dm, envelope, { target: peerId }),
+    sendTyping: (on) =>
+      safeSend(shared.actions.typing, { on, dm: true } satisfies TypingPayload, {
+        target: peerId,
+      }),
+    sendReceipts: (ids) =>
+      safeSend(shared.actions.receipt, { ids } satisfies ReceiptPayload, { target: peerId }),
+  }
+}
+
+/**
  * RF-04/§9.2 with issue #93 (spec §12.1) — encrypts `text` for `peerId` and
  * sends the `dm` Envelope directed at the peer only (issue #18): the
  * ciphertext never reaches other room members, so they cannot profile who
@@ -1512,52 +1627,35 @@ export function openDmChannel(peerId: string): boolean {
  * derives anything, it stays the TOFU/salt anchor. Envelopes carry
  * `v: DM_PROTOCOL_VERSION`. Issue #96 — an optional `ttl` (whole seconds)
  * rides the envelope unchanged; undefined keeps the wire form byte-identical
- * to pre-TTL builds. Returns the envelope, or null when there is no
- * identity, the peer is unavailable (no shared room), its key is unknown,
- * it never announced an ephemeral key (a v1 build: DM unavailable — the
- * channel's `legacyPeer` state makes this visible instead of losing
- * messages silently), or the text exceeds the 4000-char protocol limit
- * (§7.3).
+ * to pre-TTL builds. Issue #105 — the guards, key resolution and delivery
+ * run through the peer's `DmTransport` (room-backed here), so room and
+ * signal DMs keep identical behavior by construction. Returns the envelope,
+ * or null when there is no identity, the peer is unavailable (no shared
+ * room), its key is unknown, it never announced an ephemeral key (a v1
+ * build: DM unavailable — the channel's `legacyPeer` state makes this
+ * visible instead of losing messages silently), or the text exceeds the
+ * 4000-char protocol limit (§7.3).
  */
 export async function sendDm(peerId: string, text: string, ttl?: number): Promise<Envelope | null> {
   const identity = sessionIdentity
   const state = useAppStore.getState()
   const channel = state.dms[peerId]
   if (identity === null) return null
-  if (channel === undefined || !channel.available) return null
+  if (channel === undefined || channel.global === true) return null
   if (text.length > MAX_PLAINTEXT_LENGTH) return null
 
-  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
-  if (shared === undefined) return null
-
-  const theirFp = shared.peerKeyFps.get(peerId)
-  if (theirFp === undefined) return null
-
-  // Issue #93 (spec §12.1) — the peer must have announced a session-
-  // ephemeral key AND its fingerprint (`ephkeys`); without it this is a v1
-  // build that can never open a v2 dm: refuse here, the UI shows the
-  // legacy state instead of letting the message vanish.
-  const eph = peerEphemeralKeyOf(peerId)
-  if (eph === null) return null
+  const transport = roomDmTransport(peerId)
+  if (transport === null || !transport.available()) return null
 
   try {
-    // The ephemeral keypair is generated lazily on first use — after the
-    // guards, so a refused send never triggers a pointless keygen.
-    const session = await ensureEphemeralSession()
-    const key = await getCachedDmKeyV2(
-      session.keypair.privateKey,
-      eph.rawKey,
-      identity.identity.fingerprint,
-      theirFp,
-      session.fingerprint,
-      eph.fingerprint,
-    )
+    const key = await deriveDmSessionKey(identity.identity.fingerprint, transport)
+    if (key === null) return null
     const sealed = await encryptDm(key, text)
     const envelope = createEnvelope({
       from: trysteroSelfId,
       nick: identity.identity.nickname,
       kind: 'dm',
-      to: peerId,
+      to: transport.peerId,
       enc: true,
       iv: sealed.iv,
       body: sealed.payload,
@@ -1565,9 +1663,9 @@ export async function sendDm(peerId: string, text: string, ttl?: number): Promis
       ...(ttl !== undefined ? { ttl } : {}),
     })
     // Directed send (issue #18): only the recipient gets the ciphertext.
-    safeSend(shared.actions.dm, envelope, { target: peerId })
+    transport.sendDmEnvelope(envelope)
     const nick = channel.peerNick !== '' ? channel.peerNick : peerId
-    syncDmTofuState(peerId, nick, theirFp)
+    syncDmTofuState(peerId, nick, transport.peerIdentityFingerprint())
     // Own echo expires on the receiver clock too (issue #96).
     const expiresAt = expiresAtFor(ttl, Date.now())
     useAppStore.getState().appendDmMessage(peerId, {
@@ -1634,34 +1732,18 @@ export async function resolveTransferKey(ctx: TransferKeyContext): Promise<Crypt
     // silent catch — there the message simply is not delivered).
     return roomKey
   }
-  // DM branch — the sendDm guard sequence, verbatim.
+  // DM branch — the sendDm guard sequence through the room transport (issue
+  // #105: one shared DmTransport path for the guard order and key
+  // resolution). No session-ephemeral announce (a legacy v1 build) or
+  // missing identity key resolves null — a DM channel's `legacyPeer` state
+  // makes that visible.
   const identity = sessionIdentity
   if (identity === null) return null
   const channel = useAppStore.getState().dms[ctx.peerId]
-  if (channel === undefined || !channel.available) return null
-  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(ctx.peerId))
-  if (shared === undefined) return null
-  const theirFp = shared.peerKeyFps.get(ctx.peerId)
-  if (theirFp === undefined) return null
-  // No session-ephemeral announce: a legacy (v1) build that can never open
-  // a v2 key — the DM channel's `legacyPeer` state makes this visible.
-  const eph = peerEphemeralKeyOf(ctx.peerId)
-  if (eph === null) return null
-  try {
-    // The ephemeral keypair is generated lazily on first use — after the
-    // guards, so a refused resolution never triggers a pointless keygen.
-    const session = await ensureEphemeralSession()
-    return await getCachedDmKeyV2(
-      session.keypair.privateKey,
-      eph.rawKey,
-      identity.identity.fingerprint,
-      theirFp,
-      session.fingerprint,
-      eph.fingerprint,
-    )
-  } catch {
-    return null // same failure mode as sendDm's catch: no key, no transfer
-  }
+  if (channel === undefined || channel.global === true) return null
+  const transport = roomDmTransport(ctx.peerId)
+  if (transport === null || !transport.available()) return null
+  return deriveDmSessionKey(identity.identity.fingerprint, transport)
 }
 
 /**
@@ -1687,9 +1769,9 @@ export function sendDmFileTransfer(
 
 /** §7.1 — DM typing signal, directed at the peer and flagged `dm`. */
 export function sendDmTyping(peerId: string, on: boolean): void {
-  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
-  if (shared === undefined) return
-  safeSend(shared.actions.typing, { on, dm: true } satisfies TypingPayload, { target: peerId })
+  // Issue #105 — through the room transport: signal-backed channels route
+  // through signalChannel's own typing path, never this one.
+  roomDmTransport(peerId)?.sendTyping(on)
 }
 
 /**
@@ -2610,9 +2692,11 @@ async function decryptChatEnvelope(
  * `peerId` fits under `cap` within the last `windowMs`. The per-peer queue
  * never grows beyond `cap` entries; queues are kept across peer leaves
  * (clearing them there would let rejoin churn reset the cap) and freed
- * with the connection.
+ * with the connection. Issue #105 — exported: the signal manager's knock
+ * cap (spec §12.5, KNOCK_RATE_CAP 5/min/peer) rides the same helper so the
+ * rolling-window semantics stay identical across swarms.
  */
-function consumeRollingBudget(
+export function consumeRollingBudget(
   times: Map<string, number[]>,
   peerId: string,
   cap: number,

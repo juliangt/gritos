@@ -1,5 +1,6 @@
 import { abortAllRooms, resetSessionIdentity } from './p2p/roomManager'
 import { abortAllManualDms } from './p2p/manualDmManager'
+import { abortSignalChannel } from './p2p/signalChannel'
 import { abortAllFileTransfers } from './p2p/fileTransfer'
 import { clearDmKeyCache } from './crypto/dm'
 import { IDENTITY_STORAGE_KEY } from './crypto/identity'
@@ -74,6 +75,11 @@ export function panicWipe(options: PanicWipeOptions = {}): void {
   // Issue #97 (spec §12.2) — manual engines die in the same stroke: the
   // wizard flow and every live trackerless channel are ephemeral state.
   abortAllManualDms()
+  // Issue #105 (spec §12.5) — the signal swarm leaves in the same stroke:
+  // presence, knock budgets, pending acks and the swarm's maps are all
+  // in-memory state that must not survive the wipe (the settings reset
+  // below would also trip the module subscription; this is deterministic).
+  abortSignalChannel()
   // Issue #103 (spec §12.4) — every blob URL is revoked and the transfer
   // maps are dropped: nothing about a file survives the wipe.
   abortAllFileTransfers()

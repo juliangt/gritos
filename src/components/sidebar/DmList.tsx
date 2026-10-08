@@ -2,6 +2,8 @@ import { Badge } from '../common/Badge'
 import { EMPTY_DM_LIST_TEXT } from '../../lib/feed'
 import type { DmChannel } from '../../stores/useAppStore'
 import {
+  GLOBAL_DM_MARKER,
+  GLOBAL_DM_MARKER_TITLE,
   MANUAL_DM_INVITE_ENTRY,
   MANUAL_DM_INVITE_ENTRY_TITLE,
   MANUAL_DM_NO_SALA_MARKER,
@@ -17,7 +19,8 @@ import {
  * to DMs is discoverable. Issue #97 (§12.2): the header carries the
  * «+ invitación» entry to the manual-connection wizard, and trackerless
  * manual channels (room-backed rooms untouched) list with the «(sin sala)»
- * marker.
+ * marker. Issue #105 (§12.5): signal-swarm channels list with the
+ * sibling «(global)» marker.
  */
 export function DmList(props: {
   channels: DmChannel[]
@@ -66,6 +69,11 @@ export function DmList(props: {
                 {channel.manual === true && (
                   <span className="shrink-0 text-[10px] text-muted" title={MANUAL_DM_NO_SALA_TITLE}>
                     {MANUAL_DM_NO_SALA_MARKER}
+                  </span>
+                )}
+                {channel.global === true && (
+                  <span className="shrink-0 text-[10px] text-muted" title={GLOBAL_DM_MARKER_TITLE}>
+                    {GLOBAL_DM_MARKER}
                   </span>
                 )}
                 {!channel.available && (
