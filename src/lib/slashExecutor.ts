@@ -12,7 +12,7 @@
  * away through the context and resolves to {type: 'none'}. /me therefore
  * returns a directive too — with `isAction: true`, which the composer
  * forwards to sendChat so the LOCAL echo renders as the italic
- * «*nick acción*» row (Message.isAction, memory-only; the wire envelope is
+ * "*nick action*" row (Message.isAction, memory-only; the wire envelope is
  * byte-identical, so peers see plain text — the documented asymmetry of the
  * no-protocol-change rendering convention).
  *
@@ -22,10 +22,10 @@
  * owning libs' wording (NICKNAME_ERROR_TEXT, INVALID_ROOM_NAME_TEXT) plus
  * the row's usage; unknown verbs print UNKNOWN_COMMAND_HINT and never send.
  *
- * /sala AND PASSWORD ROOMS: a room's password-ness is undetectable from the
+ * /room AND PASSWORD ROOMS: a room's password-ness is undetectable from the
  * name alone (password rooms derive a different roomId — RF-05; a linked
  * password room is indistinguishable from a nonexistent one until the
- * heuristic exhausts). So /sala joins directly through the focused-join
+ * heuristic exhausts). So /room joins directly through the focused-join
  * path, surfaces a rejection (the RF-02 cap message, issue #87 wording) as
  * a local line, and on success ARMS the password-recovery offer
  * (useUiStore.recoveryRoom): ChatLayout then shows the prefilled
@@ -93,11 +93,11 @@ export interface SlashExecutorContext {
   activeRooms(): ReadonlyArray<{ id: string; name: string; unread: number }>
   /** The focused room, or null outside a room view. */
   activeRoom(): { id: string; name: string } | null
-  /** Opens the /limpiar confirmation dialog; the dialog performs the wipe. */
+  /** Opens the /clear confirmation dialog; the dialog performs the wipe. */
   requestClearConfirmation(): void
   /** Leaves a room — the same manager path the sidebar menu action uses. */
   leaveRoom(roomId: string): void
-  /** Opens the /ayuda overlay. */
+  /** Opens the /help overlay. */
   openHelp(): void
 }
 
@@ -122,7 +122,7 @@ export function slashErrorLine(result: Extract<SlashCommand, { kind: 'error' }>)
 }
 
 /**
- * Executes one parsed composer input. Await it (only /sala is genuinely
+ * Executes one parsed composer input. Await it (only /room is genuinely
  * async); the returned directive tells the composer what — if anything — to
  * send. Unknown verbs and rejected arguments NEVER produce a directive:
  * they only print a local line.
@@ -160,7 +160,7 @@ export async function executeSlashCommand(
       }
       return { type: 'none' }
     }
-    case 'sala': {
+    case 'room': {
       const { error } = await ctx.joinRoomFocused(result.room)
       if (error !== null) {
         // The manager owns the wording (e.g. the RF-02 cap message of the
@@ -199,10 +199,10 @@ export async function executeSlashCommand(
       // action text as a normal chat envelope and forwards isAction so the
       // LOCAL echo renders italic (see module docblock).
       return { type: 'send-chat', text: result.action, isAction: true }
-    case 'salas':
+    case 'rooms':
       ctx.appendSystemLine(activeRoomsLine(ctx.activeRooms()))
       return { type: 'none' }
-    case 'limpiar': {
+    case 'clear': {
       const room = ctx.activeRoom()
       if (room === null) {
         ctx.appendSystemLine(NO_ACTIVE_ROOM_TEXT)
@@ -213,7 +213,7 @@ export async function executeSlashCommand(
       ctx.requestClearConfirmation()
       return { type: 'none' }
     }
-    case 'salir': {
+    case 'leave': {
       const room = ctx.activeRoom()
       if (room === null) {
         ctx.appendSystemLine(NO_ACTIVE_ROOM_TEXT)
@@ -224,7 +224,7 @@ export async function executeSlashCommand(
       ctx.leaveRoom(room.id)
       return { type: 'none' }
     }
-    case 'ayuda':
+    case 'help':
       ctx.openHelp()
       return { type: 'none' }
   }
@@ -287,7 +287,7 @@ async function joinFocused(name: string): Promise<{ roomId: string | null; error
   } catch (error) {
     return {
       roomId: null,
-      error: error instanceof Error ? error.message : 'Error desconocido',
+      error: error instanceof Error ? error.message : 'Unknown error',
     }
   }
 }

@@ -92,41 +92,43 @@ export function unmuteSystemLine(nickname: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Issue #99 — local feed lines for the slash commands (executor feedback and
-// errors). Like the mute lines above, they are never sent over the wire.
+// Issue #99 (issue #112 phase 1) — local feed lines for the slash commands
+// (executor feedback and errors). English per the issue-#112 rename: these
+// builders are slash-only (nothing else consumes them). Like the mute lines
+// above, they are never sent over the wire.
 // ---------------------------------------------------------------------------
 
-/** Inline hint for an unknown verb — never sent, points at /ayuda. */
-export const UNKNOWN_COMMAND_HINT = 'Comando desconocido — /ayuda'
+/** Inline hint for an unknown verb — never sent, points at /help. */
+export const UNKNOWN_COMMAND_HINT = 'Unknown command — /help'
 
-/** Error line when a room-scoped command (/limpiar, /salir) has no target. */
-export const NO_ACTIVE_ROOM_TEXT = 'No hay ninguna sala activa.'
+/** Error line when a room-scoped command (/clear, /leave) has no target. */
+export const NO_ACTIVE_ROOM_TEXT = 'No active room.'
 
 /** Confirmation line after a successful /nick (the manager re-announced presence). */
 export function nicknameChangedLine(nickname: string): string {
-  return `Apodo cambiado a «${nickname}»`
+  return `Nickname changed to "${nickname}"`
 }
 
 /**
- * /salas output: one line listing the active rooms in join order, each with
+ * /rooms output: one line listing the active rooms in join order, each with
  * its unread badge when it has pending messages.
  */
 export function activeRoomsLine(rooms: ReadonlyArray<{ name: string; unread: number }>): string {
-  if (rooms.length === 0) return 'No hay salas activas.'
+  if (rooms.length === 0) return 'No active rooms.'
   const parts = rooms.map((room) =>
-    room.unread > 0 ? `#${room.name} (${room.unread} sin leer)` : `#${room.name}`,
+    room.unread > 0 ? `#${room.name} (${room.unread} unread)` : `#${room.name}`,
   )
-  return `Salas activas: ${parts.join(', ')}`
+  return `Active rooms: ${parts.join(', ')}`
 }
 
 /** /dm error: no current peer carries that nickname (case-insensitive match). */
 export function dmPeerNotFoundLine(nickname: string): string {
-  return `Nadie se llama «${nickname}» entre tus pares.`
+  return `Nobody among your peers is named "${nickname}".`
 }
 
 /** /dm error: several peers share the nickname; the peer list disambiguates. */
 export function dmAmbiguousLine(nickname: string): string {
-  return `Varios pares se llaman «${nickname}»: abre la conversación desde la lista de pares.`
+  return `Several peers are named "${nickname}": open the conversation from the peer list.`
 }
 
 /**

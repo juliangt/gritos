@@ -7,10 +7,10 @@ import {
   SLASH_COMMANDS,
 } from '../src/lib/slashCommands'
 
-/** /sala view of the parser: the normalized room, or null when rejected. */
+/** /room view of the parser: the normalized room, or null when rejected. */
 function roomOf(rawArg: string): string | null {
-  const result = parseSlashCommand(`/sala ${rawArg}`)
-  if (result === null || result.kind !== 'command' || result.verb !== 'sala') return null
+  const result = parseSlashCommand(`/room ${rawArg}`)
+  if (result === null || result.kind !== 'command' || result.verb !== 'room') return null
   return result.room
 }
 
@@ -18,12 +18,12 @@ describe('parseSlashCommand — non-command input', () => {
   it('returns null for plain chat text, including the empty string', () => {
     expect(parseSlashCommand('hola')).toBeNull()
     expect(parseSlashCommand('')).toBeNull()
-    expect(parseSlashCommand('¿probamos? /ayuda')).toBeNull()
+    expect(parseSlashCommand('¿probamos? /help')).toBeNull()
   })
 
   it('requires the slash to be the first character', () => {
     expect(parseSlashCommand(' /nick')).toBeNull()
-    expect(parseSlashCommand('\t/ayuda')).toBeNull()
+    expect(parseSlashCommand('\t/help')).toBeNull()
   })
 
   it('leaves backslashes that are not the escape untouched', () => {
@@ -65,18 +65,18 @@ describe('parseSlashCommand — unknown verbs (never sent)', () => {
     expect(parseSlashCommand('//hola')).toEqual({ kind: 'unknown', verb: '/hola' })
   })
 
-  it('is lowercase-only: uppercased verbs are unknown (Spanish UI, not localized)', () => {
+  it('is lowercase-only: uppercased verbs are unknown (English UI, not localized)', () => {
     expect(parseSlashCommand('/NICK x')).toEqual({ kind: 'unknown', verb: 'NICK' })
-    expect(parseSlashCommand('/Ayuda')).toEqual({ kind: 'unknown', verb: 'Ayuda' })
+    expect(parseSlashCommand('/Help')).toEqual({ kind: 'unknown', verb: 'Help' })
   })
 })
 
 describe('parseSlashCommand — happy paths for every verb', () => {
   it('parses the zero-argument commands', () => {
-    expect(parseSlashCommand('/ayuda')).toEqual({ kind: 'command', verb: 'ayuda' })
-    expect(parseSlashCommand('/salas')).toEqual({ kind: 'command', verb: 'salas' })
-    expect(parseSlashCommand('/limpiar')).toEqual({ kind: 'command', verb: 'limpiar' })
-    expect(parseSlashCommand('/salir')).toEqual({ kind: 'command', verb: 'salir' })
+    expect(parseSlashCommand('/help')).toEqual({ kind: 'command', verb: 'help' })
+    expect(parseSlashCommand('/rooms')).toEqual({ kind: 'command', verb: 'rooms' })
+    expect(parseSlashCommand('/clear')).toEqual({ kind: 'command', verb: 'clear' })
+    expect(parseSlashCommand('/leave')).toEqual({ kind: 'command', verb: 'leave' })
   })
 
   it('parses the argument commands with their canonical payloads', () => {
@@ -85,9 +85,9 @@ describe('parseSlashCommand — happy paths for every verb', () => {
       verb: 'nick',
       nickname: 'zorro-bravo',
     })
-    expect(parseSlashCommand('/sala Mi Sala')).toEqual({
+    expect(parseSlashCommand('/room Mi Sala')).toEqual({
       kind: 'command',
-      verb: 'sala',
+      verb: 'room',
       room: 'mi-sala',
     })
     expect(parseSlashCommand('/dm luna-cauta')).toEqual({
@@ -117,8 +117,8 @@ describe('parseSlashCommand — whitespace handling', () => {
   })
 
   it('trailing whitespace alone is not an argument for zero-arg commands', () => {
-    expect(parseSlashCommand('/ayuda  ')).toEqual({ kind: 'command', verb: 'ayuda' })
-    expect(parseSlashCommand('/salir\t')).toEqual({ kind: 'command', verb: 'salir' })
+    expect(parseSlashCommand('/help  ')).toEqual({ kind: 'command', verb: 'help' })
+    expect(parseSlashCommand('/leave\t')).toEqual({ kind: 'command', verb: 'leave' })
   })
 })
 
@@ -127,7 +127,7 @@ describe('parseSlashCommand — strict arity', () => {
     const missing: Array<[string, string]> = [
       ['/nick', 'nick'],
       ['/nick   ', 'nick'],
-      ['/sala', 'sala'],
+      ['/room', 'room'],
       ['/dm', 'dm'],
       ['/me', 'me'],
     ]
@@ -143,10 +143,10 @@ describe('parseSlashCommand — strict arity', () => {
 
   it('rejects spurious arguments to zero-arg commands with extra-args', () => {
     const extra: Array<[string, string, string]> = [
-      ['/ayuda hola', 'ayuda', 'hola'],
-      ['/salas --all', 'salas', '--all'],
-      ['/limpiar ya', 'limpiar', 'ya'],
-      ['/salir 1', 'salir', '1'],
+      ['/help hola', 'help', 'hola'],
+      ['/rooms --all', 'rooms', '--all'],
+      ['/clear ya', 'clear', 'ya'],
+      ['/leave 1', 'leave', '1'],
     ]
     for (const [input, verb, arg] of extra) {
       expect(parseSlashCommand(input)).toEqual({
@@ -198,7 +198,7 @@ describe('parseSlashCommand — /nick via the real RF-01 rules', () => {
   })
 })
 
-describe('parseSlashCommand — /sala via the real RF-02 rules', () => {
+describe('parseSlashCommand — /room via the real RF-02 rules', () => {
   it('normalizes: trim + lowercase + whitespace runs → dashes', () => {
     expect(roomOf('Mi Sala')).toBe('mi-sala')
     expect(roomOf('UPPER')).toBe('upper')
@@ -214,9 +214,9 @@ describe('parseSlashCommand — /sala via the real RF-02 rules', () => {
 
   it('rejects non-normalizable names with invalid-room, quoting the raw argument', () => {
     for (const bad of ['mal nombre!', 'ñ', 'sala pigeon🐦']) {
-      expect(parseSlashCommand(`/sala ${bad}`)).toEqual({
+      expect(parseSlashCommand(`/room ${bad}`)).toEqual({
         kind: 'error',
-        verb: 'sala',
+        verb: 'room',
         error: 'invalid-room',
         arg: bad,
       })
@@ -275,13 +275,13 @@ describe('SLASH_COMMANDS table', () => {
   it('holds exactly the v1 set with unique verbs', () => {
     expect(SLASH_COMMANDS.map((def) => def.verb)).toEqual([
       'nick',
-      'sala',
+      'room',
       'dm',
       'me',
-      'salas',
-      'limpiar',
-      'salir',
-      'ayuda',
+      'rooms',
+      'clear',
+      'leave',
+      'help',
     ])
   })
 
@@ -297,20 +297,20 @@ describe('SLASH_COMMANDS table', () => {
     const arity = Object.fromEntries(SLASH_COMMANDS.map((def) => [def.verb, def.arity]))
     expect(arity).toEqual({
       nick: 'value',
-      sala: 'value',
+      room: 'value',
       dm: 'value',
       me: 'rest',
-      salas: 'none',
-      limpiar: 'none',
-      salir: 'none',
-      ayuda: 'none',
+      rooms: 'none',
+      clear: 'none',
+      leave: 'none',
+      help: 'none',
     })
   })
 
   it('exposes lookup and usage text helpers for the executor', () => {
-    expect(getSlashCommandDef('nick')?.usage).toBe('/nick <nombre>')
+    expect(getSlashCommandDef('nick')?.usage).toBe('/nick <name>')
     expect(getSlashCommandDef('nope')).toBeUndefined()
-    expect(slashUsageText('sala')).toBe('Uso: /sala <nombre>')
-    expect(slashUsageText('salir')).toBe('Uso: /salir')
+    expect(slashUsageText('room')).toBe('Usage: /room <name>')
+    expect(slashUsageText('leave')).toBe('Usage: /leave')
   })
 })

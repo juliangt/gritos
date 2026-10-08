@@ -26,7 +26,7 @@ export function Sidebar(props: {
   const recentRooms = useAppStore((state) => state.recentRooms)
   const activeView = useAppStore((state) => state.activeView)
   const rememberRooms = useSettingsStore((state) => state.settings.rememberRooms)
-  // Issue #99 — /sala on a room that may need a password (or any executor
+  // Issue #99 — /room on a room that may need a password (or any executor
   // path) opens this popover prefilled through the ui-store seam; the local
   // toggle keeps working as before. Either source opens the same form, and
   // either close path clears both.

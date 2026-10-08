@@ -3,11 +3,12 @@ import { SLASH_COMMANDS } from '../../lib/slashCommands'
 import { SLASH_HELP_ESCAPE_HINT, SLASH_HELP_LABEL, SLASH_HELP_TITLE } from '../settings/messages'
 
 /**
- * /ayuda overlay (issue #99): a small modal listing the v1 slash commands
- * straight from the parser's SLASH_COMMANDS table — verb, usage and the
- * one-line Spanish help — plus the `\/` escape-hatch explanation the issue
- * requires documented here. Focus trap, Esc and backdrop-close come from the
- * shared Modal base; keyboard-only by construction (RNF-05).
+ * /help overlay (issue #99; English copy per issue #112): a small modal
+ * listing the v1 slash commands straight from the parser's SLASH_COMMANDS
+ * table — verb, usage and the one-line English help — plus the `\/`
+ * escape-hatch explanation the issue requires documented here. Focus trap,
+ * Esc and backdrop-close come from the shared Modal base; keyboard-only by
+ * construction (RNF-05).
  */
 export function SlashHelpModal(props: { open: boolean; onClose: () => void }) {
   return (

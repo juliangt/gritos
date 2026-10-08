@@ -27,7 +27,7 @@ import { installFakeTrystero } from './fakeTrystero'
  * Issue #99 Phase 2 — the slash-command executor: pure dispatch against a
  * fake context (per-command effects), then the REAL context factory against
  * the stores + manager with the fake Trystero transport (end-to-end: /nick
- * re-announce, /sala cap/recovery, /dm focus, /salir, /limpiar, /me echo).
+ * re-announce, /room cap/recovery, /dm focus, /leave, /clear, /me echo).
  */
 
 let fake: ReturnType<typeof installFakeTrystero>
@@ -92,7 +92,7 @@ describe('dispatch against a fake context', () => {
     expect(ctx.setNickname).not.toHaveBeenCalled()
   })
 
-  it('unknown verb: prints the /ayuda hint and never produces a send', async () => {
+  it('unknown verb: prints the /help hint and never produces a send', async () => {
     const ctx = makeCtx()
     expect(await run('/foo bar baz', ctx)).toEqual({ type: 'none' })
     expect(ctx.appendSystemLine).toHaveBeenCalledTimes(1)
@@ -101,12 +101,12 @@ describe('dispatch against a fake context', () => {
 
   it('parse errors: usage and validation wording, never a send', async () => {
     const cases: Array<[string, string]> = [
-      ['/nick', 'Uso: /nick <nombre>'],
-      ['/salir 1', 'Uso: /salir'],
-      ['/me', 'Uso: /me <acción>'],
-      ['/nick x!', `${NICKNAME_ERROR_TEXT} Uso: /nick <nombre>`],
-      ['/sala mal nombre!', `${INVALID_ROOM_NAME_TEXT} Uso: /sala <nombre>`],
-      ['/salas extra', 'Uso: /salas'],
+      ['/nick', 'Usage: /nick <name>'],
+      ['/leave 1', 'Usage: /leave'],
+      ['/me', 'Usage: /me <action>'],
+      ['/nick x!', `${NICKNAME_ERROR_TEXT} Usage: /nick <name>`],
+      ['/room mal nombre!', `${INVALID_ROOM_NAME_TEXT} Usage: /room <name>`],
+      ['/rooms extra', 'Usage: /rooms'],
     ]
     for (const [input, line] of cases) {
       const ctx = makeCtx()
@@ -145,22 +145,22 @@ describe('dispatch against a fake context', () => {
     expect(ctx.appendSystemLine).toHaveBeenCalledWith('Apodo no válido: «luna-cauta»')
   })
 
-  it('/sala: a rejected join prints the manager error verbatim (the #87 cap message)', async () => {
+  it('/room: a rejected join prints the manager error verbatim (the #87 cap message)', async () => {
     const ctx = makeCtx({
       joinRoomFocused: vi.fn(async () => ({
         roomId: null,
         error: 'Límite de salas activas alcanzado (4)',
       })),
     })
-    await run('/sala dev', ctx)
+    await run('/room dev', ctx)
     expect(ctx.joinRoomFocused).toHaveBeenCalledWith('dev')
     expect(ctx.appendSystemLine).toHaveBeenCalledWith('Límite de salas activas alcanzado (4)')
     expect(ctx.armPasswordRecovery).not.toHaveBeenCalled()
   })
 
-  it('/sala: a successful join arms the password-recovery offer (popover flow)', async () => {
+  it('/room: a successful join arms the password-recovery offer (popover flow)', async () => {
     const ctx = makeCtx()
-    await run('/sala mi-sala', ctx)
+    await run('/room mi-sala', ctx)
     expect(ctx.armPasswordRecovery).toHaveBeenCalledWith('mi-sala')
     expect(ctx.appendSystemLine).not.toHaveBeenCalled()
   })
@@ -200,45 +200,45 @@ describe('dispatch against a fake context', () => {
     expect(ctx.appendSystemLine).toHaveBeenCalledWith(dmPeerNotFoundLine('luna-cauta'))
   })
 
-  it('/salas: prints the active-rooms line built from the store read', async () => {
+  it('/rooms: prints the active-rooms line built from the store read', async () => {
     const rooms = [
       { id: 'r1', name: 'lobby', unread: 2 },
       { id: 'r2', name: 'dev', unread: 0 },
     ]
     const ctx = makeCtx({ activeRooms: vi.fn(() => rooms) })
-    await run('/salas', ctx)
+    await run('/rooms', ctx)
     expect(ctx.appendSystemLine).toHaveBeenCalledWith(activeRoomsLine(rooms))
-    expect(ctx.appendSystemLine).toHaveBeenCalledWith('Salas activas: #lobby (2 sin leer), #dev')
+    expect(ctx.appendSystemLine).toHaveBeenCalledWith('Active rooms: #lobby (2 unread), #dev')
   })
 
-  it('/limpiar: opens the confirmation for the active room, errors without one', async () => {
+  it('/clear: opens the confirmation for the active room, errors without one', async () => {
     const idle = makeCtx({ activeRoom: vi.fn(() => null) })
-    await run('/limpiar', idle)
+    await run('/clear', idle)
     expect(idle.requestClearConfirmation).not.toHaveBeenCalled()
     expect(idle.appendSystemLine).toHaveBeenCalledWith(NO_ACTIVE_ROOM_TEXT)
 
     const focused = makeCtx({ activeRoom: vi.fn(() => ({ id: 'r1', name: 'lobby' })) })
-    await run('/limpiar', focused)
+    await run('/clear', focused)
     expect(focused.requestClearConfirmation).toHaveBeenCalledTimes(1)
     expect(focused.leaveRoom).not.toHaveBeenCalled()
     expect(focused.appendSystemLine).not.toHaveBeenCalled()
   })
 
-  it('/salir: leaves the active room through the manager seam, errors without one', async () => {
+  it('/leave: leaves the active room through the manager seam, errors without one', async () => {
     const idle = makeCtx({ activeRoom: vi.fn(() => null) })
-    await run('/salir', idle)
+    await run('/leave', idle)
     expect(idle.leaveRoom).not.toHaveBeenCalled()
     expect(idle.appendSystemLine).toHaveBeenCalledWith(NO_ACTIVE_ROOM_TEXT)
 
     const focused = makeCtx({ activeRoom: vi.fn(() => ({ id: 'r1', name: 'lobby' })) })
-    await run('/salir', focused)
+    await run('/leave', focused)
     expect(focused.leaveRoom).toHaveBeenCalledWith('r1')
     expect(focused.appendSystemLine).not.toHaveBeenCalled()
   })
 
-  it('/ayuda: flips the help-overlay seam', async () => {
+  it('/help: flips the help-overlay seam', async () => {
     const ctx = makeCtx()
-    await run('/ayuda', ctx)
+    await run('/help', ctx)
     expect(ctx.openHelp).toHaveBeenCalledTimes(1)
   })
 })
@@ -273,12 +273,12 @@ describe('createSlashExecutorContext', () => {
     expect(manager.getRoomConnection(dev.roomId)).toBeDefined()
   })
 
-  it('/sala at the cap prints the #87 cap message and joins nothing', async () => {
+  it('/room at the cap prints the #87 cap message and joins nothing', async () => {
     useSettingsStore.getState().setSettings({ maxActiveRooms: 1 })
     const lobby = await manager.joinRoom('lobby')
     useAppStore.getState().setActiveView({ kind: 'room', id: lobby.roomId })
     const ctx = createSlashExecutorContext()
-    await run('/sala dev', ctx)
+    await run('/room dev', ctx)
     await flushMicrotasks()
 
     expect(manager.getActiveRoomCount()).toBe(1)
@@ -288,11 +288,11 @@ describe('createSlashExecutorContext', () => {
     )
   })
 
-  it('/sala focuses the joined room and arms its password-recovery offer', async () => {
+  it('/room focuses the joined room and arms its password-recovery offer', async () => {
     const lobby = await manager.joinRoom('lobby')
     useAppStore.getState().setActiveView({ kind: 'room', id: lobby.roomId })
     const ctx = createSlashExecutorContext()
-    await run('/sala Mi Sala', ctx)
+    await run('/room Mi Sala', ctx)
     await flushMicrotasks()
 
     const joined = Object.values(useAppStore.getState().rooms).find(
@@ -303,7 +303,7 @@ describe('createSlashExecutorContext', () => {
     expect(useUiStore.getState().recoveryRoom).toBe('mi-sala')
   })
 
-  it('/salas lists every active room with unread counts in the focused feed', async () => {
+  it('/rooms lists every active room with unread counts in the focused feed', async () => {
     const lobby = await manager.joinRoom('lobby')
     const dev = await manager.joinRoom('dev')
     useAppStore.getState().setActiveView({ kind: 'room', id: lobby.roomId })
@@ -320,10 +320,10 @@ describe('createSlashExecutorContext', () => {
     })
 
     const ctx = createSlashExecutorContext()
-    await run('/salas', ctx)
+    await run('/rooms', ctx)
     const feed = storedRoom(lobby.roomId).messages
     expect(feed.at(-1)?.kind).toBe('system')
-    expect(feed.at(-1)?.text).toBe('Salas activas: #lobby, #dev (1 sin leer)')
+    expect(feed.at(-1)?.text).toBe('Active rooms: #lobby, #dev (1 unread)')
   })
 
   it('/dm resolves a peer by nickname and focuses the DM view', async () => {
@@ -394,30 +394,30 @@ describe('createSlashExecutorContext', () => {
     expect(theirs[0]?.isAction).toBeUndefined()
   })
 
-  it('/salir leaves the active room through the same path as the sidebar menu', async () => {
+  it('/leave leaves the active room through the same path as the sidebar menu', async () => {
     const lobby = await manager.joinRoom('lobby')
     useAppStore.getState().setActiveView({ kind: 'room', id: lobby.roomId })
     const ctx = createSlashExecutorContext()
-    await run('/salir', ctx)
+    await run('/leave', ctx)
     await flushMicrotasks()
 
     expect(manager.getActiveRoomCount()).toBe(0)
     expect(useAppStore.getState().rooms[lobby.roomId]).toBeUndefined()
   })
 
-  it('/salir without an active room prints the local error line', async () => {
+  it('/leave without an active room prints the local error line', async () => {
     const lobby = await manager.joinRoom('lobby')
     useAppStore.getState().setActiveView({ kind: 'room', id: lobby.roomId })
     const ctx = createSlashExecutorContext()
     // No focused view: the line has nowhere to land, but nothing crashes
     // and nothing is left behind either.
     useAppStore.getState().setActiveView(null)
-    await run('/salir', ctx)
+    await run('/leave', ctx)
     await flushMicrotasks()
     expect(manager.getRoomConnection(lobby.roomId)).toBeDefined()
   })
 
-  it('/limpiar opens the confirmation; the dialog wipe clears only the local view', async () => {
+  it('/clear opens the confirmation; the dialog wipe clears only the local view', async () => {
     const lobby = await manager.joinRoom('lobby')
     useAppStore.getState().setActiveView({ kind: 'room', id: lobby.roomId })
     useAppStore.getState().appendMessage(lobby.roomId, {
@@ -435,7 +435,7 @@ describe('createSlashExecutorContext', () => {
     useAppStore.getState().upsertRoom({ ...storedRoom(lobby.roomId), fifoTrimmed: true })
 
     const ctx = createSlashExecutorContext()
-    await run('/limpiar', ctx)
+    await run('/clear', ctx)
     expect(useUiStore.getState().clearFeedOpen).toBe(true)
 
     // What the ConfirmDialog's confirm button does (ChatLayout wiring).
@@ -464,7 +464,7 @@ describe('slashErrorLine', () => {
     const parsed = parseSlashCommand('/nick x!')
     expect(parsed).toMatchObject({ kind: 'error', error: 'invalid-nick' })
     expect(slashErrorLine(parsed as Extract<NonNullable<typeof parsed>, { kind: 'error' }>)).toBe(
-      `${NICKNAME_ERROR_TEXT} Uso: /nick <nombre>`,
+      `${NICKNAME_ERROR_TEXT} Usage: /nick <name>`,
     )
   })
 })

@@ -21,8 +21,8 @@ import { useUiStore } from '../src/stores/useUiStore'
 import { installFakeTrystero } from './fakeTrystero'
 
 /**
- * Issue #99 Phase 2 — the UI endpoints of the executor seams: the /ayuda
- * overlay, the sidebar popover prefill (/sala password flow), the /limpiar
+ * Issue #99 Phase 2 — the UI endpoints of the executor seams: the /help
+ * overlay, the sidebar popover prefill (/room password flow), the /clear
  * confirmation and the italic /me rendering convention.
  */
 
@@ -86,7 +86,7 @@ function userMessage(overrides: Partial<Message> = {}): Message {
   }
 }
 
-describe('SlashHelpModal (/ayuda overlay)', () => {
+describe('SlashHelpModal (/help overlay)', () => {
   it('lists every command straight from the parser table plus the escape hatch', () => {
     render(<SlashHelpModal open onClose={vi.fn()} />)
 
@@ -119,7 +119,7 @@ describe('SlashHelpModal (/ayuda overlay)', () => {
       useUiStore.getState().openHelp()
     })
     expect(screen.getByRole('dialog', { name: SLASH_HELP_LABEL })).toBeInTheDocument()
-    expect(screen.getByText('/nick <nombre>')).toBeInTheDocument()
+    expect(screen.getByText('/nick <name>')).toBeInTheDocument()
 
     act(() => {
       useUiStore.getState().closeHelp()
@@ -128,7 +128,7 @@ describe('SlashHelpModal (/ayuda overlay)', () => {
   })
 })
 
-describe('Sidebar join-popover prefill (/sala password flow seam)', () => {
+describe('Sidebar join-popover prefill (/room password flow seam)', () => {
   it('opens the popover prefilled when the executor flips the ui-store seam', () => {
     render(<Sidebar />)
     expect(screen.queryByLabelText('Nombre de la sala')).not.toBeInTheDocument()
@@ -200,7 +200,7 @@ describe('/me rendering convention (MessageItem)', () => {
   })
 })
 
-describe('/limpiar confirmation (ChatLayout + ConfirmDialog)', () => {
+describe('/clear confirmation (ChatLayout + ConfirmDialog)', () => {
   function seedRoomWithHistory() {
     const store = useAppStore.getState()
     store.setActiveView({ kind: 'room', id: 'room-lobby' })
@@ -234,12 +234,12 @@ describe('/limpiar confirmation (ChatLayout + ConfirmDialog)', () => {
   })
 })
 
-describe('/sala password recovery (ChatLayout)', () => {
+describe('/room password recovery (ChatLayout)', () => {
   it('offers the prefilled join form once the armed room exhausts the heuristic', () => {
     const store = useAppStore.getState()
     store.setActiveView({ kind: 'room', id: 'room-secreta' })
     store.upsertRoom(room({ id: 'room-secreta', name: 'secreta', status: 'error' }))
-    // What the executor's /sala success armed.
+    // What the executor's /room success armed.
     useUiStore.getState().armPasswordRecovery('secreta')
 
     render(<ChatLayout />)

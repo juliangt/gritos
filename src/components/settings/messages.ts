@@ -284,43 +284,43 @@ export const MANUAL_PEER_ERROR_TEXT: Partial<
 }
 
 // ---------------------------------------------------------------------------
-// Issue #99 — slash commands: the /ayuda overlay and the /limpiar
-// confirmation dialog. The command list itself renders straight from
-// SLASH_COMMANDS (verb + usage + help live in the parser table); only the
-// overlay chrome and the escape-hatch explanation live here. Local feed-line
-// wording (command feedback/errors) is in lib/feed.ts, per the issue-#95
-// precedent.
+// Issue #99 (English copy per issue #112 phase 1) — slash commands: the /help
+// overlay and the /clear confirmation dialog. The command list itself renders
+// straight from SLASH_COMMANDS (verb + usage + help live in the parser
+// table); only the overlay chrome and the escape-hatch explanation live here.
+// Local feed-line wording (command feedback/errors) is in lib/feed.ts, per
+// the issue-#95 precedent.
 // ---------------------------------------------------------------------------
 
-/** /ayuda overlay — dialog accessible name. */
-export const SLASH_HELP_LABEL = 'Comandos de barra'
+/** /help overlay — dialog accessible name. */
+export const SLASH_HELP_LABEL = 'Slash commands'
 
-/** /ayuda overlay — heading. */
-export const SLASH_HELP_TITLE = 'Comandos'
+/** /help overlay — heading. */
+export const SLASH_HELP_TITLE = 'Commands'
 
 /**
- * /ayuda overlay — the escape hatch for literal messages starting with '/',
- * documented here per the issue ("Documented in /ayuda").
+ * /help overlay — the escape hatch for literal messages starting with '/',
+ * documented here per the issue ("Documented in /help").
  */
 export const SLASH_HELP_ESCAPE_HINT =
-  'Para enviar un texto que empiece por «/», antepón una barra invertida: \\/hola envía «/hola».'
+  'To send a text that starts with "/", prefix a backslash: \\/hola sends "/hola".'
 
-/** /limpiar — ConfirmDialog title. */
-export const CLEAR_FEED_DIALOG_TITLE = 'Borrar el historial local'
+/** /clear — ConfirmDialog title. */
+export const CLEAR_FEED_DIALOG_TITLE = 'Clear local history'
 
-/** /limpiar — ConfirmDialog body: what is (and is not) destroyed. */
+/** /clear — ConfirmDialog body: what is (and is not) destroyed. */
 export const CLEAR_FEED_DIALOG_BODY =
-  'Se borrarán los mensajes de esta sala solo en tu navegador. La conexión no se cierra y tus pares conservan su historial. ¿Continuar?'
+  'The messages of this room will be cleared from your browser only. The connection is not closed and your peers keep their history. Continue?'
 
-/** /limpiar — ConfirmDialog confirm button. */
-export const CLEAR_FEED_DIALOG_CONFIRM = 'Borrar'
+/** /clear — ConfirmDialog confirm button. */
+export const CLEAR_FEED_DIALOG_CONFIRM = 'Clear'
 
 /**
  * Slash-candidate popup (issue #99 Phase 3) — accessible name of the
  * composer's inline listbox. The option rows render straight from
- * SLASH_COMMANDS (usage + help), like the /ayuda overlay.
+ * SLASH_COMMANDS (usage + help), like the /help overlay.
  */
-export const SLASH_POPUP_LABEL = 'Sugerencias de comandos'
+export const SLASH_POPUP_LABEL = 'Command suggestions'
 
 // ---------------------------------------------------------------------------
 // Issue #103 phase 4 — P2P file transfer UI: the composer's pre-send dialog

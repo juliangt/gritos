@@ -496,7 +496,7 @@ export interface AppActions {
    */
   dismissHistoryAsk: (roomId: string) => void
   /**
-   * Issue #99 — wipes one room's local feed (the /limpiar command, behind
+   * Issue #99 — wipes one room's local feed (the /clear command, behind
    * its confirmation): messages: [] and unread: 0, while the room keeps its
    * CONNECTION and its identity in the store — this is a view clear, never a
    * leave. The latched separator facts (`fifoTrimmed`, `expiredCount`) stay

@@ -329,7 +329,7 @@ describe('ChatInput TTL selector (issue #96)', () => {
 // sendDm in a DM), unknown verbs and parse errors show the inline hint and
 // send nothing. These tests use real timers: the executor is async (the
 // directive resolves a microtask after Enter), and the useUiStore is reset
-// because real commands flip its seams (/ayuda, /limpiar).
+// because real commands flip its seams (/help, /clear).
 // ---------------------------------------------------------------------------
 
 const slashListbox = () => screen.getByRole('listbox', { name: SLASH_POPUP_LABEL })
@@ -372,16 +372,16 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
     }
   })
 
-  it('filters by verb prefix ("/n" → /nick, "/ay" → /ayuda)', () => {
+  it('filters by verb prefix ("/n" → /nick, "/h" → /help)', () => {
     render(<ChatInput room={makeRoom()} />)
 
     fireEvent.change(textarea(), { target: { value: '/n' } })
     expect(within(slashListbox()).getAllByRole('option')).toHaveLength(1)
     expect(within(slashListbox()).getByRole('option', { name: /\/nick/ })).toBeInTheDocument()
 
-    fireEvent.change(textarea(), { target: { value: '/ay' } })
+    fireEvent.change(textarea(), { target: { value: '/h' } })
     expect(within(slashListbox()).getAllByRole('option')).toHaveLength(1)
-    expect(within(slashListbox()).getByRole('option', { name: /\/ayuda/ })).toBeInTheDocument()
+    expect(within(slashListbox()).getByRole('option', { name: /\/help/ })).toBeInTheDocument()
   })
 
   it('never opens for the escape hatch or once arguments begin', () => {
@@ -410,7 +410,7 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
     expect(textarea()).toHaveAttribute('aria-expanded', 'false')
 
     // Esc is dismissal, not destruction: the next keystroke re-opens.
-    fireEvent.change(textarea(), { target: { value: '/s' } })
+    fireEvent.change(textarea(), { target: { value: '/r' } })
     expect(slashListbox()).toBeInTheDocument()
   })
 
@@ -434,7 +434,7 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
 
   it('Enter on a zero-arg candidate executes it at once and clears the input', async () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: '/ay' } })
+    fireEvent.change(textarea(), { target: { value: '/h' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     expect(textarea()).toHaveValue('')
@@ -470,7 +470,7 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
     render(<ChatInput room={makeRoom()} />)
     textarea().focus()
     fireEvent.change(textarea(), { target: { value: '/' } })
-    fireEvent.click(within(slashListbox()).getByRole('option', { name: /\/ayuda/ }))
+    fireEvent.click(within(slashListbox()).getByRole('option', { name: /\/help/ }))
 
     expect(textarea()).toHaveValue('')
     await flushExecutor()
@@ -517,7 +517,7 @@ describe('ChatInput slash submit (issue #99 Phase 3)', () => {
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      `${NICKNAME_ERROR_TEXT} Uso: /nick <nombre>`,
+      `${NICKNAME_ERROR_TEXT} Usage: /nick <name>`,
     )
     expect(sendChat).not.toHaveBeenCalled()
     expect(textarea()).toHaveValue('/nick x!')
@@ -567,7 +567,7 @@ describe('ChatInput slash submit (issue #99 Phase 3)', () => {
 
   it('a typed zero-arg command executes, clears and never sends', async () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: '/salas' } })
+    fireEvent.change(textarea(), { target: { value: '/rooms' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     await flushExecutor()
@@ -577,7 +577,7 @@ describe('ChatInput slash submit (issue #99 Phase 3)', () => {
 
   it('room-scoped commands in a DM run the executor naturally (no send, no crash)', async () => {
     render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
-    fireEvent.change(textarea(), { target: { value: '/salir' } })
+    fireEvent.change(textarea(), { target: { value: '/leave' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     await flushExecutor()

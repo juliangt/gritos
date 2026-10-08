@@ -55,7 +55,7 @@ const SLASH_OPTION_ID_PREFIX = 'slash-command-option'
 /**
  * Shape of a value while the verb token is being typed: a leading '/' and
  * no whitespace yet. This is what makes the popup a verb picker: it opens
- * on '/' (and '/n', '/ay'…), stays open while the verb completes and closes
+ * on '/' (and '/n', '/h'…), stays open while the verb completes and closes
  * as soon as arguments begin ('/nick l…'). The escape hatch '\/…' never
  * matches — the value starts with the backslash, not the slash.
  */
@@ -123,7 +123,7 @@ export interface DmComposerContext {
  * back through the SAME mode-aware send path as a normal message, so the
  * cap, the typing signals and the TTL pick still apply. In a DM view that
  * path is sendDm/sendManualDm: /me sends a DM there, while room-scoped
- * commands (/salir, /limpiar) naturally answer with the executor's
+ * commands (/leave, /clear) naturally answer with the executor's
  * NO_ACTIVE_ROOM_TEXT line in the focused feed.
  */
 export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
@@ -180,7 +180,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   const showCounter = value.length >= CHAR_COUNTER_FROM
 
   // Issue #99 — slash-candidate list: the typed verb prefix filters the
-  // command table (fuzzy-prefix match: '/n' → /nick, '/ay' → /ayuda, a
+  // command table (fuzzy-prefix match: '/n' → /nick, '/h' → /help, a
   // bare '/' offers everything). No candidates (e.g. '/x') → no popup.
   const slashCandidates = SLASH_TOKEN_PATTERN.test(value)
     ? SLASH_COMMANDS.filter((def) => def.verb.startsWith(value.slice(1)))

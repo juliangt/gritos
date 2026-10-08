@@ -8,17 +8,18 @@ import { SLASH_COMMANDS } from '../src/lib/slashCommands'
  * Release guard for issue #99 (slash commands in the composer) — the docs
  * phase of the issue. Pins the documentation to the shipped behavior:
  *
- *  1. the README's keyboard-features bullet documents the eight Spanish
- *     verbs, the never-send guarantee for unknown verbs, the `\/` escape
- *     hatch, the honest /me rendering asymmetry and /ayuda,
+ *  1. the README's keyboard-features bullet documents the eight English
+ *     verbs (the issue-#112 rename), the never-send guarantee for unknown
+ *     verbs, the `\/` escape hatch, the honest /me rendering asymmetry and
+ *     /help,
  *  2. spec §10.7 documents the client-only command surface: the verb table,
  *     the escape hatch, the unknown-verb guarantee, the ARIA combobox
- *     autocomplete, the /me local-flag asymmetry, the /sala password-popover
- *     arming and the memory-only /limpiar clear,
+ *     autocomplete, the /me local-flag asymmetry, the /room password-popover
+ *     arming and the memory-only /clear clear,
  *  3. the manual QA matrix ships in `docs/qa-checklist.md` (QA-99-1..12),
  *     and
  *  4. the docs stay in lockstep with the SLASH_COMMANDS table — every verb
- *     in the parser table (the source the /ayuda overlay renders from) is
+ *     in the parser table (the source the /help overlay renders from) is
  *     documented with its usage in the spec entry and named in the README
  *     bullet, so adding a command without documenting it fails here.
  *
@@ -34,7 +35,7 @@ describe('slash commands documentation (issue #99)', () => {
     expect(readme).toContain('never sent')
     expect(readme).toContain('`\\/hola`')
     expect(readme).toContain('while peers see plain text')
-    expect(readme).toContain('`/ayuda`')
+    expect(readme).toContain('`/help`')
   })
 
   it('documents every verb in the spec §10.7 entry, in lockstep with the parser table', () => {
@@ -47,7 +48,7 @@ describe('slash commands documentation (issue #99)', () => {
 
   it('pins the unknown-verb guarantee and the backslash escape hatch in the spec', () => {
     expect(spec).toContain('Verbo desconocido jamás se envía')
-    expect(spec).toContain('Comando desconocido — /ayuda')
+    expect(spec).toContain('Unknown command — /help')
     expect(spec).toContain('\\/hola` envía «/hola»')
   })
 
@@ -57,7 +58,7 @@ describe('slash commands documentation (issue #99)', () => {
     expect(spec).toContain('el foco no abandona jamás el textarea')
   })
 
-  it('pins the /me asymmetry, /sala popover arming and memory-only /limpiar in the spec', () => {
+  it('pins the /me asymmetry, /room popover arming and memory-only /clear in the spec', () => {
     expect(spec).toContain('los pares ven texto plano')
     expect(spec).toContain('arma la oferta de contraseña')
     expect(spec).toContain('los pares conservan su historial')
