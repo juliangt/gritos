@@ -146,13 +146,18 @@ describe('joinRoom (RF-02, spec §6.3)', () => {
     })
   })
 
-  it('registers exactly the 12 protocol actions (§7.1, incl. ephkeys #93, react #98, hist #102)', async () => {
+  it('registers exactly the 17 protocol actions (§7.1, incl. ephkeys #93, react #98, hist #102, file #103)', async () => {
     const { room } = await join('lobby')
     expect([...room.actions.keys()].sort()).toEqual(
       [
         'chat',
         'dm',
         'ephkeys',
+        'file-abort',
+        'file-ack',
+        'file-chunk',
+        'file-end',
+        'file-meta',
         'hist',
         'hist-req',
         'keys',

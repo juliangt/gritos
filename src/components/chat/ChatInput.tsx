@@ -18,6 +18,9 @@ import {
   TTL_SELECT_LABEL,
 } from '../settings/messages'
 import { useRoomManager } from '../../hooks/useRoomManager'
+import { useFileTransfers } from '../../hooks/useFileTransfers'
+import { FileSendDialog } from './FileSendDialog'
+import { FILE_ATTACH_LABEL } from '../settings/messages'
 import {
   SLASH_COMMANDS,
   parseSlashCommand,
@@ -77,6 +80,11 @@ export interface DmComposerContext {
    * room paths.
    */
   manual?: boolean
+  /**
+   * Issue #103 phase 4 — the peer's display nickname for the pre-send file
+   * dialog's fixed recipient line (absent → the raw peerId shows).
+   */
+  peerNick?: string
 }
 
 /**
@@ -131,6 +139,12 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   // already closed.
   const [hint, setHint] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  // Issue #103 phase 4 — the pre-send file dialog behind the attachment
+  // button (room and DM modes; manual DM channels never offer it: the file
+  // engine rides Trystero rooms only). Memory-only component state, like
+  // every other composer affordance.
+  const [fileDialogOpen, setFileDialogOpen] = useState(false)
+  const fileTransfers = useFileTransfers()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const typingActiveRef = useRef(false)
   const lastTypingSentAtRef = useRef(0)
@@ -309,165 +323,206 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
 
   if (room === undefined && dm === undefined) return null
 
-  return (
-    <form
-      aria-label="Mensaje"
-      onSubmit={handleSubmit}
-      className="relative flex flex-col gap-1 border-t border-border bg-surface px-3 py-2"
-    >
-      {slashOpen && (
-        <ul
-          id={SLASH_LISTBOX_ID}
-          role="listbox"
-          aria-label={SLASH_POPUP_LABEL}
-          className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-md overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-lg"
-        >
-          {slashCandidates.map((def, index) => (
-            <li
-              key={def.verb}
-              id={`${SLASH_OPTION_ID_PREFIX}-${def.verb}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              // Hover only syncs the highlight; picking happens on click.
-              onMouseEnter={() => setActiveIndex(index)}
-              // The popup must never steal the focus from the textarea.
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => selectCandidate(def)}
-              className={`flex cursor-pointer flex-col gap-0.5 px-3 py-1.5 ${
-                index === activeIndex ? 'bg-bg' : ''
-              }`}
-            >
-              <code className="font-mono text-sm text-text">{def.usage}</code>
-              <span className="text-xs text-muted">{def.help}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <textarea
-        ref={textareaRef}
-        rows={1}
-        aria-label="Escribe un mensaje"
-        placeholder="Mensaje (Markdown)…"
-        value={value}
-        disabled={blocked}
-        // Issue #99 — ARIA combobox pattern for the slash popup: the
-        // textarea keeps the focus and announces the active candidate
-        // through aria-activedescendant (the options are never focusable).
-        role="combobox"
-        aria-expanded={slashOpen}
-        aria-controls={slashOpen ? SLASH_LISTBOX_ID : undefined}
-        aria-activedescendant={
-          activeCandidate === undefined
-            ? undefined
-            : `${SLASH_OPTION_ID_PREFIX}-${activeCandidate.verb}`
-        }
-        aria-autocomplete="list"
-        onChange={(event) => {
-          setValue(event.target.value)
-          setSlashDismissed(false)
-          setActiveIndex(0)
-          setHint(null)
-          resizeTextarea()
-          if (event.target.value !== '') signalTyping()
-        }}
-        onBlur={stopTypingSignal}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault()
-            // Popup open: Enter picks the active candidate, never sends.
-            if (activeCandidate !== undefined) selectCandidate(activeCandidate)
-            else submit()
-            return
-          }
-          if (activeCandidate !== undefined) {
-            switch (event.key) {
-              case 'ArrowDown':
-                event.preventDefault()
-                setActiveIndex((index) => (index + 1) % slashCandidates.length)
-                return
-              case 'ArrowUp':
-                event.preventDefault()
-                setActiveIndex(
-                  (index) => (index - 1 + slashCandidates.length) % slashCandidates.length,
-                )
-                return
-              case 'Tab':
-                // Shift+Tab keeps its normal focus-move meaning.
-                if (!event.shiftKey) {
-                  event.preventDefault()
-                  selectCandidate(activeCandidate)
-                }
-                return
-              case 'Escape':
-                event.preventDefault()
-                setSlashDismissed(true)
-                return
-            }
-          } else if (event.key === 'Escape') {
-            // Popup already closed: a second Esc clears a stale hint.
-            setHint(null)
-          }
-        }}
-        className="max-h-36 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm focus:border-accent disabled:opacity-50"
+  // Issue #103 phase 4 — the file dialog mounts for the active mode: room
+  // mode offers the connected-peer selector and the room/public encryption
+  // notice, DM mode fixes the recipient and always announces the DM key.
+  const fileDialog =
+    room !== undefined ? (
+      <FileSendDialog
+        open={fileDialogOpen}
+        onClose={() => setFileDialogOpen(false)}
+        roomId={room.id}
+        peers={room.peers}
+        encryptedRoom={room.hasPassword}
+        onSend={(peerId, file) => fileTransfers.sendRoomFile(room.id, peerId, file)}
       />
-      <div className="flex items-center gap-3 text-xs text-muted">
-        <span className="hidden sm:inline">**negrita** · *cursiva* · `código`</span>
-        {/* Issue #96 — native select (keyboard-operable by construction);
+    ) : dm !== undefined ? (
+      <FileSendDialog
+        open={fileDialogOpen}
+        onClose={() => setFileDialogOpen(false)}
+        dmPeer={{ peerId: dm.peerId, nickname: dm.peerNick ?? dm.peerId }}
+        onSend={(peerId, file) => fileTransfers.sendDmFile(peerId, file)}
+      />
+    ) : null
+
+  return (
+    <>
+      <form
+        aria-label="Mensaje"
+        onSubmit={handleSubmit}
+        className="relative flex flex-col gap-1 border-t border-border bg-surface px-3 py-2"
+      >
+        {slashOpen && (
+          <ul
+            id={SLASH_LISTBOX_ID}
+            role="listbox"
+            aria-label={SLASH_POPUP_LABEL}
+            className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-md overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-lg"
+          >
+            {slashCandidates.map((def, index) => (
+              <li
+                key={def.verb}
+                id={`${SLASH_OPTION_ID_PREFIX}-${def.verb}`}
+                role="option"
+                aria-selected={index === activeIndex}
+                // Hover only syncs the highlight; picking happens on click.
+                onMouseEnter={() => setActiveIndex(index)}
+                // The popup must never steal the focus from the textarea.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectCandidate(def)}
+                className={`flex cursor-pointer flex-col gap-0.5 px-3 py-1.5 ${
+                  index === activeIndex ? 'bg-bg' : ''
+                }`}
+              >
+                <code className="font-mono text-sm text-text">{def.usage}</code>
+                <span className="text-xs text-muted">{def.help}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          aria-label="Escribe un mensaje"
+          placeholder="Mensaje (Markdown)…"
+          value={value}
+          disabled={blocked}
+          // Issue #99 — ARIA combobox pattern for the slash popup: the
+          // textarea keeps the focus and announces the active candidate
+          // through aria-activedescendant (the options are never focusable).
+          role="combobox"
+          aria-expanded={slashOpen}
+          aria-controls={slashOpen ? SLASH_LISTBOX_ID : undefined}
+          aria-activedescendant={
+            activeCandidate === undefined
+              ? undefined
+              : `${SLASH_OPTION_ID_PREFIX}-${activeCandidate.verb}`
+          }
+          aria-autocomplete="list"
+          onChange={(event) => {
+            setValue(event.target.value)
+            setSlashDismissed(false)
+            setActiveIndex(0)
+            setHint(null)
+            resizeTextarea()
+            if (event.target.value !== '') signalTyping()
+          }}
+          onBlur={stopTypingSignal}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault()
+              // Popup open: Enter picks the active candidate, never sends.
+              if (activeCandidate !== undefined) selectCandidate(activeCandidate)
+              else submit()
+              return
+            }
+            if (activeCandidate !== undefined) {
+              switch (event.key) {
+                case 'ArrowDown':
+                  event.preventDefault()
+                  setActiveIndex((index) => (index + 1) % slashCandidates.length)
+                  return
+                case 'ArrowUp':
+                  event.preventDefault()
+                  setActiveIndex(
+                    (index) => (index - 1 + slashCandidates.length) % slashCandidates.length,
+                  )
+                  return
+                case 'Tab':
+                  // Shift+Tab keeps its normal focus-move meaning.
+                  if (!event.shiftKey) {
+                    event.preventDefault()
+                    selectCandidate(activeCandidate)
+                  }
+                  return
+                case 'Escape':
+                  event.preventDefault()
+                  setSlashDismissed(true)
+                  return
+              }
+            } else if (event.key === 'Escape') {
+              // Popup already closed: a second Esc clears a stale hint.
+              setHint(null)
+            }
+          }}
+          className="max-h-36 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm focus:border-accent disabled:opacity-50"
+        />
+        <div className="flex items-center gap-3 text-xs text-muted">
+          <span className="hidden sm:inline">**negrita** · *cursiva* · `código`</span>
+          {/* Issue #96 — native select (keyboard-operable by construction);
             hard-blocked together with the composer on a disconnected or
             legacy DM peer, still usable while a room is queueing. */}
-        <select
-          aria-label={TTL_SELECT_LABEL}
-          value={ttlDraft}
-          disabled={blocked}
-          onChange={(event) => setTtlDraft(event.target.value)}
-          className="rounded-md border border-border bg-surface px-1 py-1 text-xs focus:border-accent disabled:opacity-50"
-        >
-          <option value="">{SIN_EXPIRY_LABEL}</option>
-          {TTL_CHOICES.map((choice) => (
-            <option key={choice.seconds} value={choice.seconds}>
-              {choice.label}
-            </option>
-          ))}
-        </select>
-        {disconnected && (
-          <span className="text-accent" role="status">
-            {DM_DISCONNECTED_TEXT}
-          </span>
-        )}
-        {legacyPeer && (
-          <span className="text-accent" role="status">
-            {DM_LEGACY_PEER_TEXT}
-          </span>
-        )}
-        {queued && (
-          <span className="text-accent" role="status">
-            En cola hasta conectar…
-          </span>
-        )}
-        {/* Issue #99 — the rejected-submit hint (unknown verb, parse-level
+          <select
+            aria-label={TTL_SELECT_LABEL}
+            value={ttlDraft}
+            disabled={blocked}
+            onChange={(event) => setTtlDraft(event.target.value)}
+            className="rounded-md border border-border bg-surface px-1 py-1 text-xs focus:border-accent disabled:opacity-50"
+          >
+            <option value="">{SIN_EXPIRY_LABEL}</option>
+            {TTL_CHOICES.map((choice) => (
+              <option key={choice.seconds} value={choice.seconds}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+          {/* Issue #103 phase 4 — the attachment entry: opens the pre-send
+            dialog with the file picker, the encryption notice and the
+            recipient scope. Blocked with the composer on a disconnected or
+            legacy DM peer (a refused transfer teaches nothing new) and
+            hidden on manual channels, whose engine has no file host. */}
+          {(room !== undefined || dm?.manual !== true) && (
+            <button
+              type="button"
+              aria-label={FILE_ATTACH_LABEL}
+              disabled={blocked}
+              onClick={() => setFileDialogOpen(true)}
+              className="rounded-md border border-border px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
+            >
+              Adjuntar
+            </button>
+          )}
+          {disconnected && (
+            <span className="text-accent" role="status">
+              {DM_DISCONNECTED_TEXT}
+            </span>
+          )}
+          {legacyPeer && (
+            <span className="text-accent" role="status">
+              {DM_LEGACY_PEER_TEXT}
+            </span>
+          )}
+          {queued && (
+            <span className="text-accent" role="status">
+              En cola hasta conectar…
+            </span>
+          )}
+          {/* Issue #99 — the rejected-submit hint (unknown verb, parse-level
             error): same static role="status" region pattern as the DM
             states above; transient by content, cleared on edit/send/Esc. */}
-        {hint !== null && (
-          <span className="text-accent" role="status">
-            {hint}
-          </span>
-        )}
-        {showCounter && (
-          <span
-            className={`ml-auto tabular-nums ${overLimit ? 'font-semibold text-accent' : ''}`}
-            aria-live="polite"
+          {hint !== null && (
+            <span className="text-accent" role="status">
+              {hint}
+            </span>
+          )}
+          {showCounter && (
+            <span
+              className={`ml-auto tabular-nums ${overLimit ? 'font-semibold text-accent' : ''}`}
+              aria-live="polite"
+            >
+              {value.length}/{MAX_PLAINTEXT_LENGTH}
+            </span>
+          )}
+          <button
+            type="submit"
+            disabled={!canSend}
+            className="ml-auto rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-text disabled:opacity-40"
           >
-            {value.length}/{MAX_PLAINTEXT_LENGTH}
-          </span>
-        )}
-        <button
-          type="submit"
-          disabled={!canSend}
-          className="ml-auto rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-text disabled:opacity-40"
-        >
-          Enviar
-        </button>
-      </div>
-    </form>
+            Enviar
+          </button>
+        </div>
+      </form>
+      {fileDialog}
+    </>
   )
 }

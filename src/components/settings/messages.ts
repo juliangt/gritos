@@ -4,6 +4,8 @@
  * their tests so the spec strings live in one place.
  */
 
+import type { FileFailureReason, SendFileRefusal } from '../../lib/p2p/fileTransfer'
+
 export const TRACKER_ERROR_TEXT = 'Las URLs de tracker deben empezar por wss://'
 export const ICE_ERROR_TEXT = 'Los servidores ICE deben empezar por stun: o turn:'
 export const MAX_ROOMS_ERROR_TEXT = 'El límite de salas activas debe estar entre 1 y 6.'
@@ -312,6 +314,135 @@ export const CLEAR_FEED_DIALOG_CONFIRM = 'Borrar'
  * SLASH_COMMANDS (usage + help), like the /ayuda overlay.
  */
 export const SLASH_POPUP_LABEL = 'Sugerencias de comandos'
+
+// ---------------------------------------------------------------------------
+// Issue #103 phase 4 — P2P file transfer UI: the composer's pre-send dialog
+// (attachment button, file picker, encryption notice, recipient scope), the
+// consent/progress/result cards rendered from the engine's §12.4 map and the
+// honest terminal-state texts. All Spanish wording lives here so components
+// and tests share the exact texts, like every other surface.
+// ---------------------------------------------------------------------------
+
+/** Composer attachment button (accessible name; visible text is 'Adjuntar'). */
+export const FILE_ATTACH_LABEL = 'Adjuntar archivo'
+
+/** Pre-send dialog accessible name (the Modal label). */
+export const FILE_DIALOG_LABEL = 'Enviar un archivo'
+
+/** Visible text and accessible name of the styled file-picker affordance. */
+export const FILE_PICK_LABEL = 'Elegir archivo…'
+
+/** Recipient scope selector (room mode) accessible name. */
+export const FILE_RECIPIENT_LABEL = 'Destinatario'
+
+/** Recipient scope in DM mode: a fixed line (the peer cannot change). */
+export function fileRecipientDmText(peerNick: string): string {
+  return `Destinatario: ${peerNick}`
+}
+
+/** Pre-send encryption notice for a password room (room key, §9.3). */
+export const FILE_ENC_NOTICE_ROOM =
+  'Se cifrará con la clave de la sala: solo quien tenga la contraseña podrá leerlo.'
+
+/** Pre-send encryption notice for a DM (DM key v2, §9.2; always sealed). */
+export const FILE_ENC_NOTICE_DM =
+  'Se cifrará de extremo a extremo con la clave DM de esta conversación.'
+
+/** §12.4 pre-send warning for public rooms (the exact DTLS-only disclosure). */
+export const FILE_ENC_WARNING_PUBLIC =
+  'Sala pública: sin cifrado E2E — solo DTLS. El contenido no viaja cifrado de extremo a extremo.'
+
+/**
+ * Card encryption line for a sealed transfer. The wire cannot say whether
+ * the key is the room's or the DM's (§12.4's one ambiguity — GCM resolves it
+ * per chunk), so incoming cards stay honest with the generic line.
+ */
+export const FILE_ENC_STATE_SEALED = 'Cifrado de extremo a extremo.'
+
+/** Card encryption line for a cleartext transfer (public rooms, §12.4). */
+export const FILE_ENC_STATE_CLEAR = 'Sin cifrado E2E — solo DTLS.'
+
+/** Dialog buttons. */
+export const FILE_SEND_BUTTON = 'Enviar archivo'
+export const FILE_CANCEL_BUTTON = 'Cancelar'
+
+/** Room mode with no connected peers: there is nobody to address the offer to. */
+export const FILE_NO_PEERS_TEXT = 'Sin pares conectados: no hay destinatario para la oferta.'
+
+/** Display-only placeholder when the File carries no mime (legitimate, §12.4). */
+export const FILE_UNKNOWN_MIME_TEXT = 'tipo desconocido'
+
+/**
+ * Inline refusals for the pre-send dialog, keyed by the engine's
+ * SendFileRefusal (phase 3): every local rejection surfaces with its own
+ * honest line before anything hits the wire.
+ */
+export const FILE_REFUSAL_TEXT: Record<SendFileRefusal, string> = {
+  'unknown-room': 'La sala ya no está conectada: no se puede enviar.',
+  'not-connected': 'Sin conexión: la oferta no se ha podido enviar.',
+  'peer-not-in-room': 'El destinatario no está conectado a la sala.',
+  'invalid-file': 'El archivo no es válido.',
+  'file-too-big': 'El archivo supera el límite de 20 MB.',
+  'name-required': 'El nombre del archivo no es válido.',
+  'concurrency-cap':
+    'El destinatario ya tiene 3 transferencias activas: espera a que termine alguna.',
+  'dm-key-unavailable': 'No hay clave DM disponible: el archivo nunca viaja sin cifrar.',
+  'key-resolution-failed': 'No se pudo resolver la clave de cifrado: no se ha enviado.',
+}
+
+/** Transfer cards area accessible name (one region per room/DM view). */
+export const FILE_CARDS_REGION_LABEL = 'Transferencias de archivos'
+
+/** One card's accessible name, built from the file name and the peer nick. */
+export function fileCardLabel(fileName: string, peerNick: string | null): string {
+  return peerNick === null
+    ? `Transferencia de ${fileName}`
+    : `Transferencia de ${fileName} con ${peerNick}`
+}
+
+/** Consent card (incoming offer): the question, with the sender's nick. */
+export function fileOfferText(peerNick: string): string {
+  return `${peerNick} quiere enviarte un archivo:`
+}
+
+/** Sender-side pending offer line (waiting for the peer's consent). */
+export const FILE_OFFER_PENDING_TEXT = 'Oferta enviada: esperando a que el par la acepte.'
+
+/** In-flight lines, per direction. */
+export const FILE_PROGRESS_SENDING_TEXT = 'Enviando…'
+export const FILE_PROGRESS_RECEIVING_TEXT = 'Recibiendo…'
+
+/** Progress bar accessible name (role="progressbar" on the card). */
+export const FILE_PROGRESS_LABEL = 'Progreso de la transferencia'
+
+/** Done card text. */
+export const FILE_DONE_TEXT = 'Completado'
+
+/** Terminal texts: an explicitly declined offer and a cancelled transfer. */
+export const FILE_REJECTED_TEXT = 'Rechazado'
+export const FILE_ABORTED_TEXT = 'Cancelado'
+
+/** Failed-transfer line per the engine's FileFailureReason (honest states). */
+export const FILE_FAILURE_TEXT: Record<FileFailureReason, string> = {
+  stall: 'Falló: la transferencia se estancó.',
+  'peer-drop': 'Falló: el par se ha desconectado.',
+  'room-gone': 'Falló: la sala se ha cerrado.',
+  'size-limit': 'Falló: el archivo excede el tamaño permitido.',
+  'bad-frame': 'Falló: se recibieron datos corruptos.',
+  crypto: 'Falló: no se pudo descifrar el contenido.',
+  completeness: 'Falló: el archivo llegó incompleto.',
+  'identity-regenerated': 'Falló: la identidad de la sesión se regeneró.',
+}
+
+/** Consent card actions (before any byte flows, §12.4). */
+export const FILE_ACCEPT_BUTTON = 'Aceptar'
+export const FILE_DECLINE_BUTTON = 'Declinar'
+
+/** Download affordance on a done, non-image transfer (receiver side). */
+export const FILE_DOWNLOAD_BUTTON = 'Descargar'
+
+/** Dismiss control of a terminal card; revokes the object URL (§12.4). */
+export const FILE_DISMISS_BUTTON = 'Descartar'
 
 // ---------------------------------------------------------------------------
 // Issue #100 — QR invite (ChatHeader 'QR' button → popover over the share

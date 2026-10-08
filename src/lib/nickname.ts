@@ -153,9 +153,11 @@ export function normalizeNickname(nickname: string): string {
  * Issue #28 — Unicode Cc control characters plus the invisible-spoofing
  * extras (soft hyphen, zero-width spaces/joiners, bidi marks and overrides,
  * BOM). A remote-supplied nick carrying these would poison Peer.nickname,
- * author/system feed lines and notification titles.
+ * author/system feed lines and notification titles. Exported since issue
+ * #103 (spec §12.4): remote file names and mimes get the SAME character
+ * class (with their own length caps) at the fileTransfer boundary.
  */
-const REMOTE_NICK_INVISIBLE_PATTERN =
+export const REMOTE_NICK_INVISIBLE_PATTERN =
   /[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g
 
 /**
