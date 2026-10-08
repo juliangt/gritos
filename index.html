@@ -50,6 +50,15 @@
          iOS composites transparency onto black). -->
     <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <!-- Manifest (issue #104, phase 1): installability. Every URL inside the
+         manifest (start_url, scope, icon srcs) is relative to the manifest
+         URL, so installs resolve under any subpath (GitHub Pages project
+         sites, issue #40). theme_color/background_color pin the light
+         surface token (--gritos-bg, #fafaf9): a manifest color cannot be
+         media-scoped like the metas above, and light is the anti-flash
+         bootstrap's fallback, so the splash and standalone chrome match the
+         default first paint. Phase 3 of the issue revisits the dark scheme. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"

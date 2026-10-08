@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest'
+import { readFile } from 'node:fs/promises'
 import { build, resolveConfig } from 'vite'
 import config from '../vite.config'
 import robotsTxt from '../public/robots.txt?raw'
+import manifestSource from '../public/manifest.webmanifest?raw'
 
 /**
  * Regression guards for production-build issues:
@@ -29,6 +31,14 @@ import robotsTxt from '../public/robots.txt?raw'
  *   panel's raw join/nickname paths widen the malformed-input surface
  *   peers must tolerate. Only its absence from the emitted JS is checked
  *   here (a dev build is not produced in this suite).
+ * - Issue #104 (phase 1): the PWA manifest ships. The built index.html
+ *   links ./manifest.webmanifest relatively, and the manifest is
+ *   standalone with relative start_url/scope and relative icon srcs so
+ *   installs resolve under any subpath (GitHub Pages project sites). Every
+ *   referenced icon must exist in dist/ at exactly its advertised pixel
+ *   size (PNG signature + IHDR parse), the manifest colors pin the light
+ *   --gritos-bg token (the anti-flash bootstrap's fallback), and no
+ *   service worker ships yet — phase 2 adds it and replaces that guard.
  *
  * Cheap checks keep all of these from shipping again:
  *  1. the shared vite config registers the Tailwind plugin and resolves a
@@ -47,7 +57,10 @@ import robotsTxt from '../public/robots.txt?raw'
  * dist/), so the test leaves no build artifacts behind. Public assets
  * (robots.txt, the icons) are copied verbatim by Vite and are not part of
  * the rollup output; robots.txt is asserted from disk below and the icons
- * are covered by the link hrefs in the HTML.
+ * are covered by the link hrefs in the HTML. The issue #104 block runs a
+ * second, disk-writing build (dist/ is gitignored): the copied manifest and
+ * icon PNGs only exist on disk, and their content is what installers
+ * actually consume.
  */
 function collectPluginNames(plugins: readonly unknown[]): string[] {
   const names: string[] = []
@@ -137,6 +150,36 @@ function metaByName(html: string, name: string): string | undefined {
   return html.match(new RegExp(`<meta[^>]*name="${name}"[^>]*>`))?.[0]
 }
 
+/**
+ * Parses the PNG signature and the mandatory first (IHDR) chunk of a PNG
+ * file — a ~20-line dependency-free reader for exactly what the issue #104
+ * assertions need: magic bytes, pixel width/height (4-byte big-endian each,
+ * at offsets 16/20), bit depth and color type.
+ */
+function parsePngHeader(bytes: Uint8Array): {
+  width: number
+  height: number
+  bitDepth: number
+  colorType: number
+} {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  expect(
+    bytes.length >= 33 && signature.every((byte, index) => bytes[index] === byte),
+    'the file must start with the 8-byte PNG signature',
+  ).toBe(true)
+  expect(
+    String.fromCharCode(...bytes.subarray(12, 16)),
+    'IHDR must be the first chunk of a PNG file',
+  ).toBe('IHDR')
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  return {
+    width: view.getUint32(16),
+    height: view.getUint32(20),
+    bitDepth: bytes[24],
+    colorType: bytes[25],
+  }
+}
+
 /** The policy text of the CSP meta tag of a built index.html. */
 function cspPolicy(html: string): string {
   const meta = html.match(/<meta[^>]*Content-Security-Policy[^>]*>/)?.[0]
@@ -149,9 +192,11 @@ function cspPolicy(html: string): string {
  * Node types (`types: []`), so the one field needed below is declared here
  * instead of adding @types/node to the whole project.
  */
-const nodeProcess = (globalThis as unknown as {
-  process?: { env: Record<string, string | undefined> }
-}).process
+const nodeProcess = (
+  globalThis as unknown as {
+    process?: { env: Record<string, string | undefined> }
+  }
+).process
 
 describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => {
   it('registers the Tailwind Vite plugin', () => {
@@ -339,5 +384,139 @@ describe('robots.txt (issue #49)', () => {
     expect(robotsTxt, 'nothing is disallowed: room names live only in URL fragments').not.toMatch(
       /^Disallow:/m,
     )
+  })
+})
+
+describe('PWA manifest + icons (issue #104, phase 1)', () => {
+  interface ManifestIcon {
+    src: string
+    sizes: string
+    purpose: string
+  }
+
+  interface WebManifest {
+    name: string
+    short_name: string
+    display: string
+    start_url: string
+    scope: string
+    theme_color: string
+    background_color: string
+    icons: ManifestIcon[]
+  }
+
+  // Filled by the beforeAll: the disk state that installers actually
+  // consume (unlike the in-memory build of the block above).
+  let built: Awaited<ReturnType<typeof build>>
+  let distHtml = ''
+  let distManifest = ''
+  let manifest: WebManifest
+  const iconBytes = new Map<string, Uint8Array>()
+
+  beforeAll(async () => {
+    // Same NODE_ENV pin as the in-memory build above: exercise the real
+    // production pipeline. This build writes (the Vite default) so public/
+    // — the manifest and the icons — is copied into the gitignored dist/.
+    const previousNodeEnv = nodeProcess?.env.NODE_ENV
+    if (nodeProcess != null) nodeProcess.env.NODE_ENV = 'production'
+    try {
+      built = await build({ ...config, configFile: false, mode: 'production', logLevel: 'silent' })
+    } finally {
+      if (nodeProcess != null) nodeProcess.env.NODE_ENV = previousNodeEnv
+    }
+    const dist = new URL('../dist/', import.meta.url)
+    const decode = new TextDecoder()
+    distHtml = decode.decode(await readFile(new URL('index.html', dist)))
+    distManifest = decode.decode(await readFile(new URL('manifest.webmanifest', dist)))
+    manifest = JSON.parse(distManifest) as WebManifest
+    for (const icon of manifest.icons) {
+      iconBytes.set(icon.src, await readFile(new URL(icon.src, dist)))
+    }
+  }, 120_000)
+
+  it('links ./manifest.webmanifest from the built index.html with a relative URL', () => {
+    const link = distHtml.match(/<link[^>]*rel="manifest"[^>]*>/)?.[0]
+    expect(link, 'the built index.html must link the PWA manifest').toBeDefined()
+    expect(link).toContain('href="./manifest.webmanifest"')
+    expect(link, 'a root-absolute manifest href 404s under a subpath (GitHub Pages)').not.toContain(
+      'href="/',
+    )
+  })
+
+  it('copies the manifest from public/ verbatim into dist/', () => {
+    // Vite copies public/ as-is; byte equality proves the shipped manifest
+    // is exactly the reviewed file (and grounds the ?raw import above).
+    expect(distManifest).toBe(manifestSource)
+  })
+
+  it('names the app and installs standalone from fully relative URLs', () => {
+    expect(manifest.name, 'the install prompt name').toBe('Gritos')
+    expect(manifest.short_name).toBe('Gritos')
+    expect(manifest.display).toBe('standalone')
+    // start_url and scope resolve against the manifest URL, so './' keeps
+    // installs working from GitHub Pages project sites (/<repo>/) too —
+    // the acceptance criterion of issue #104.
+    expect(manifest.start_url).toBe('./')
+    expect(manifest.scope).toBe('./')
+    // No origin-pinned URLs anywhere: they would break deployments that
+    // move between paths or domains.
+    expect(distManifest).not.toMatch(/https?:\/\//)
+    expect(distManifest, 'no root-absolute URL fields').not.toMatch(/"(start_url|scope)": "\//)
+  })
+
+  it('pins theme_color and background_color to the light surface token', () => {
+    // Manifest colors are single values (unlike the media-scoped metas of
+    // issue #49); light --gritos-bg is the anti-flash bootstrap's fallback,
+    // so the splash and standalone chrome match the default first paint.
+    // Phase 3 of issue #104 revisits the dark scheme.
+    expect(manifest.theme_color).toBe('#fafaf9')
+    expect(manifest.background_color).toBe('#fafaf9')
+  })
+
+  it('declares 192/512 any icons plus a maskable variant', () => {
+    const sizes = manifest.icons.map((icon) => icon.sizes)
+    expect(sizes, 'both raster sizes launchers look for').toEqual(
+      expect.arrayContaining(['192x192', '512x512']),
+    )
+    const purposes = manifest.icons.map((icon) => icon.purpose)
+    expect(purposes).toContain('any')
+    expect(
+      purposes.some((purpose) => purpose.split(' ').includes('maskable')),
+      'Android launcher masks need a maskable icon',
+    ).toBe(true)
+  })
+
+  it('references only relative icon srcs, and every file exists in dist/', () => {
+    expect(manifest.icons.length).toBeGreaterThan(0)
+    for (const icon of manifest.icons) {
+      expect(
+        icon.src.startsWith('/'),
+        `root-absolute icon src ${icon.src} 404s under a subpath`,
+      ).toBe(false)
+      expect(icon.src.startsWith('./'), `icon src ${icon.src} must be relative`).toBe(true)
+      expect(
+        iconBytes.get(icon.src),
+        `the manifest icon ${icon.src} must exist in dist/`,
+      ).toBeInstanceOf(Uint8Array)
+    }
+  })
+
+  it('emits PNG icons matching their advertised pixel sizes exactly', () => {
+    for (const icon of manifest.icons) {
+      const bytes = iconBytes.get(icon.src)
+      expect(bytes).toBeInstanceOf(Uint8Array)
+      const header = parsePngHeader(bytes as Uint8Array)
+      const [width, height] = icon.sizes.split('x').map(Number)
+      expect([header.width, header.height], `${icon.src} pixel dimensions`).toEqual([width, height])
+      expect(header.bitDepth, `${icon.src} bit depth`).toBe(8)
+      expect(header.colorType, `${icon.src} color type (truecolor + alpha)`).toBe(6)
+    }
+  })
+
+  it('ships no service worker yet (phase 1 boundary — phase 2 replaces this)', () => {
+    // Phase 2 of issue #104 registers a ./sw.js from the bundle; until
+    // then, nothing worker-related may ship at all.
+    expect(emittedJs(built), 'no SW registration before phase 2').not.toContain('serviceWorker')
+    expect(distHtml).not.toContain('sw.js')
   })
 })
