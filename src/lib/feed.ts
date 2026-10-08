@@ -81,6 +81,15 @@ export function newMessagesButtonText(count: number): string {
 /** RF-04 — header state when the peer shares no active room anymore. */
 export const DM_DISCONNECTED_TEXT = 'El par se ha desconectado'
 
+/**
+ * Issue #93 (spec §12.1) — composer hint when the connected peer runs a
+ * legacy build (no session-ephemeral `ephkeys` announce): DMs are
+ * impossible until it updates, and the honest state replaces the silent
+ * message loss of the mixed-version degradation.
+ */
+export const DM_LEGACY_PEER_TEXT =
+  'Este par usa una versión anterior sin DM cifrado por sesión'
+
 /** RF-04 — TOFU verification notice shown under the peer's fingerprint. */
 export const DM_VERIFY_NOTICE = 'Compáralo con tu interlocutor para verificar su identidad'
 

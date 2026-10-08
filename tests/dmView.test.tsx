@@ -187,6 +187,39 @@ describe('DM view (RF-04)', () => {
     expect(screen.getByLabelText('par desconectado')).toBeInTheDocument()
   })
 
+  // Issue #93 (spec §12.1): a connected peer running a legacy build (no
+  // session-ephemeral announce) gets its own honest composer state — the
+  // history stays readable, sending is hard-blocked with a hint.
+  it('blocks the composer with the legacy hint when the peer is a legacy build', () => {
+    useAppStore.getState().setDmLegacyPeer('peer-9', true)
+    render(<ChatLayout />)
+
+    // The peer is still connected: header shows the normal peer count and
+    // no disconnected marker anywhere.
+    expect(screen.getByText('1 par')).toBeInTheDocument()
+    expect(screen.queryByText('El par se ha desconectado')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('par desconectado')).not.toBeInTheDocument()
+
+    // The composer is hard-blocked with the exact legacy hint.
+    expect(
+      screen.getByText('Este par usa una versión anterior sin DM cifrado por sesión'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Escribe un mensaje')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+  })
+
+  it('keeps the composer enabled for a v2-capable peer (legacyPeer false)', () => {
+    // Default channel state from beforeEach: legacyPeer is false.
+    render(<ChatLayout />)
+    expect(
+      screen.queryByText('Este par usa una versión anterior sin DM cifrado por sesión'),
+    ).not.toBeInTheDocument()
+    const textarea = screen.getByLabelText('Escribe un mensaje')
+    expect(textarea).toBeEnabled()
+    fireEvent.change(textarea, { target: { value: 'texto' } })
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeEnabled()
+  })
+
   it('opens the DM view from the peer menu (§10.1)', () => {
     // Start in the room view.
     useAppStore.getState().setActiveView({ kind: 'room', id: 'room-lobby' })

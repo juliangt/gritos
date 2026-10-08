@@ -18,6 +18,7 @@ import {
   MAX_PLAINTEXT_LENGTH,
   createEnvelope,
   parseEnvelope,
+  DM_PROTOCOL_VERSION,
 } from '../src/lib/p2p/protocol'
 import { sha256Hex } from '../src/lib/crypto/hashes'
 import { computeFingerprint, exportRawPublicKey, generateSessionKeypair } from '../src/lib/crypto/identity'
@@ -177,6 +178,8 @@ describe('sealed envelope size vs the ciphertext cap (issue #21)', () => {
       enc: true,
       iv: sealed.iv,
       body: sealed.payload,
+      // Issue #93 (spec §12.1) — dm envelopes carry v2 on the wire.
+      v: DM_PROTOCOL_VERSION,
     })
   }
 

@@ -14,7 +14,7 @@ import {
   type RoomStatus,
 } from '../../stores/useAppStore'
 import { DEFAULT_SETTINGS, useSettingsStore } from '../../stores/useSettingsStore'
-import { createEnvelope } from './protocol'
+import { createEnvelope, DM_PROTOCOL_VERSION } from './protocol'
 import {
   BoundedSeenIds,
   MAX_PLAINTEXT_LENGTH,
@@ -34,7 +34,7 @@ import {
 import { computeFingerprint, createSessionIdentity, loadIdentity, persistIdentity, regenerateIdentity, restoreSessionIdentity, type PersistedIdentity, type SessionIdentity } from '../crypto/identity'
 import { ensureEphemeralSession, setEphemeralSession } from '../crypto/sessionEphemeral'
 import { isValidNickname, sanitizeRemoteNick } from '../nickname'
-import { decryptDm, encryptDm, getCachedDmKey, clearDmKeyCache } from '../crypto/dm'
+import { decryptDm, encryptDm, getCachedDmKeyV2, clearDmKeyCache } from '../crypto/dm'
 import { mentionsNickname } from '../markdown/parse'
 import {
   decryptRoomMessage,
@@ -77,13 +77,18 @@ import { joinSystemLine, leaveSystemLine } from '../feed'
  * (`keyChanged`) instead of silently rotating the shown fingerprint. The
  * live key still feeds the DM crypto so conversations keep working.
  *
- * Issue #93 (spec §12.1) prepares DM forward secrecy on the wire: every
- * connection also registers the directed `ephkeys` action announcing the
+ * Issue #93 (spec §12.1) — DM forward secrecy on the wire: every connection
+ * also registers the directed `ephkeys` action announcing the
  * session-ephemeral ECDH P-256 public key (lib/crypto/sessionEphemeral,
  * memory-only). Received ephemeral keys land in per-connection maps for the
- * phase-4 v2 DM derivation; their fingerprints are never TOFU-pinned and
- * never displayed — the long-lived identity key stays the TOFU anchor. The
- * DM send/receive flow itself still runs v1 until phase 4.
+ * v2 DM derivation; their fingerprints are never TOFU-pinned and never
+ * displayed — the long-lived identity key stays the TOFU anchor. The DM
+ * send/receive flow runs v2: envelopes carry `v: DM_PROTOCOL_VERSION` and
+ * keys derive over the ephemeral pairs with BOTH fingerprint pairs in the
+ * HKDF salt. A connected peer that never announces `ephkeys` (a v1 build)
+ * gets an explicit legacy state — `sendDm` refuses and the channel flags
+ * `legacyPeer` — instead of the silent message loss of §12.1's mixed-room
+ * degradation.
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -761,6 +766,10 @@ function emitDmReceived(peerId: string, nick: string, text: string): void {
  * RF-04 — recomputes `DmChannel.available` for every channel: a peer is
  * available while it shares at least one active room. Runs after every
  * peer join/leave and room removal; true→false keeps the history in memory.
+ * Issue #93 (spec §12.1) — it also recomputes `legacyPeer`: a CONNECTED
+ * peer without an announced session-ephemeral key runs a v1 build that can
+ * neither open our v2 dms nor send one — the channel flags it so the UI
+ * shows an explicit hint instead of losing messages silently.
  */
 function refreshDmAvailability(): void {
   const state = useAppStore.getState()
@@ -771,6 +780,8 @@ function refreshDmAvailability(): void {
   for (const [peerId, channel] of Object.entries(state.dms)) {
     const available = connected.has(peerId)
     if (available !== channel.available) state.setDmAvailable(peerId, available)
+    const legacyPeer = available && peerEphemeralKeyOf(peerId) === null
+    if (legacyPeer !== channel.legacyPeer) state.setDmLegacyPeer(peerId, legacyPeer)
   }
 }
 
@@ -831,64 +842,85 @@ export function openDmChannel(peerId: string): boolean {
 }
 
 /**
- * RF-04/§9.2 — encrypts `text` for `peerId` and sends the `dm` Envelope
- * directed at the peer only (issue #18): the ciphertext never reaches other
- * room members, so they cannot profile who DMs whom. `filterDmForSelf`
- * stays on the receive path as defense in depth (older peers may still
- * broadcast, §7.1/§7.3). Returns the envelope, or null when there is no
+ * RF-04/§9.2 with issue #93 (spec §12.1) — encrypts `text` for `peerId` and
+ * sends the `dm` Envelope directed at the peer only (issue #18): the
+ * ciphertext never reaches other room members, so they cannot profile who
+ * DMs whom. `filterDmForSelf` stays on the receive path as defense in depth
+ * (older peers may still broadcast, §7.1/§7.3). Session-ephemeral E2EE: the
+ * key derives from THIS session's ephemeral keypair and the peer's announced
+ * `ephkeys` key (`getCachedDmKeyV2`), with both fingerprint pairs — identity
+ * and ephemeral — bound into the HKDF salt; the identity key no longer
+ * derives anything, it stays the TOFU/salt anchor. Envelopes carry
+ * `v: DM_PROTOCOL_VERSION`. Returns the envelope, or null when there is no
  * identity, the peer is unavailable (no shared room), its key is unknown,
- * or the text exceeds the 4000-char protocol limit (§7.3).
+ * it never announced an ephemeral key (a v1 build: DM unavailable — the
+ * channel's `legacyPeer` state makes this visible instead of losing
+ * messages silently), or the text exceeds the 4000-char protocol limit
+ * (§7.3).
  */
-export function sendDm(peerId: string, text: string): Promise<Envelope | null> {
+export async function sendDm(peerId: string, text: string): Promise<Envelope | null> {
   const identity = sessionIdentity
   const state = useAppStore.getState()
   const channel = state.dms[peerId]
-  if (identity === null) return Promise.resolve(null)
-  if (channel === undefined || !channel.available) return Promise.resolve(null)
-  if (text.length > MAX_PLAINTEXT_LENGTH) return Promise.resolve(null)
+  if (identity === null) return null
+  if (channel === undefined || !channel.available) return null
+  if (text.length > MAX_PLAINTEXT_LENGTH) return null
 
   const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
-  if (shared === undefined) return Promise.resolve(null)
+  if (shared === undefined) return null
 
-  const peerRawKey = shared.peerKeys.get(peerId) as Uint8Array
   const theirFp = shared.peerKeyFps.get(peerId)
-  if (theirFp === undefined) return Promise.resolve(null)
+  if (theirFp === undefined) return null
 
-  return getCachedDmKey(
-    identity.keypair.privateKey,
-    peerRawKey,
-    identity.identity.fingerprint,
-    theirFp,
-  )
-    .then((key) => encryptDm(key, text))
-    .then((sealed) => {
-      const envelope = createEnvelope({
-        from: trysteroSelfId,
-        nick: identity.identity.nickname,
-        kind: 'dm',
-        to: peerId,
-        enc: true,
-        iv: sealed.iv,
-        body: sealed.payload,
-      })
-      // Directed send (issue #18): only the recipient gets the ciphertext.
-      safeSend(shared.actions.dm, envelope, { target: peerId })
-      const nick = channel.peerNick !== '' ? channel.peerNick : peerId
-      syncDmTofuState(peerId, nick, theirFp)
-      useAppStore.getState().appendDmMessage(peerId, {
-        id: envelope.id,
-        roomId: `dm:${peerId}`,
-        authorId: 'self',
-        authorNick: envelope.nick,
-        text,
-        ts: envelope.ts,
-        encrypted: false,
-        status: 'sent',
-        kind: 'user',
-      })
-      return envelope
+  // Issue #93 (spec §12.1) — the peer must have announced a session-
+  // ephemeral key AND its fingerprint (`ephkeys`); without it this is a v1
+  // build that can never open a v2 dm: refuse here, the UI shows the
+  // legacy state instead of letting the message vanish.
+  const eph = peerEphemeralKeyOf(peerId)
+  if (eph === null) return null
+
+  try {
+    // The ephemeral keypair is generated lazily on first use — after the
+    // guards, so a refused send never triggers a pointless keygen.
+    const session = await ensureEphemeralSession()
+    const key = await getCachedDmKeyV2(
+      session.keypair.privateKey,
+      eph.rawKey,
+      identity.identity.fingerprint,
+      theirFp,
+      session.fingerprint,
+      eph.fingerprint,
+    )
+    const sealed = await encryptDm(key, text)
+    const envelope = createEnvelope({
+      from: trysteroSelfId,
+      nick: identity.identity.nickname,
+      kind: 'dm',
+      to: peerId,
+      enc: true,
+      iv: sealed.iv,
+      body: sealed.payload,
+      v: DM_PROTOCOL_VERSION,
     })
-    .catch(() => null)
+    // Directed send (issue #18): only the recipient gets the ciphertext.
+    safeSend(shared.actions.dm, envelope, { target: peerId })
+    const nick = channel.peerNick !== '' ? channel.peerNick : peerId
+    syncDmTofuState(peerId, nick, theirFp)
+    useAppStore.getState().appendDmMessage(peerId, {
+      id: envelope.id,
+      roomId: `dm:${peerId}`,
+      authorId: 'self',
+      authorNick: envelope.nick,
+      text,
+      ts: envelope.ts,
+      encrypted: false,
+      status: 'sent',
+      kind: 'user',
+    })
+    return envelope
+  } catch {
+    return null
+  }
 }
 
 /** §7.1 — DM typing signal, directed at the peer and flagged `dm`. */
@@ -987,10 +1019,11 @@ function livePeerFingerprint(peerId: string): string | null {
  * Issue #93 (spec §12.1) — the session-ephemeral public key announced by
  * `peerId` via `ephkeys` (first connection holding it) together with its
  * derived fingerprint, or null when the key (or its still-async
- * fingerprint) has not landed yet. Phase 4 consumes this for the send-side
- * v2 key derivation and the DM availability guard. The fingerprint here is
- * crypto-trust only — never pinned under `gritos:tofu` (the identity key
- * stays the TOFU anchor) and never displayed (§12.1).
+ * fingerprint) has not landed yet. The v2 send path ECDHs over it and the
+ * DM availability guard treats null as a LEGACY peer (v1 build, DM
+ * unavailable). The fingerprint here is crypto-trust only — never pinned
+ * under `gritos:tofu` (the identity key stays the TOFU anchor) and never
+ * displayed (§12.1).
  */
 export function peerEphemeralKeyOf(
   peerId: string,
@@ -1178,13 +1211,17 @@ function createConnection(init: {
       // The peer may have left while the hash was being computed.
       if (connection.peerEphKeys.has(peerId)) {
         connection.peerEphFps.set(peerId, fingerprint)
+        // Issue #93 (spec §12.1) — from this moment the peer is v2-capable:
+        // a legacy flag on its DM channel (if any) flips false, exactly in
+        // the async-tail style of the `keys` handler above.
+        refreshDmAvailability()
       }
     })
     // Spec §12.1 — deliberately NO pinTofuFingerprint and no store write:
     // the ephemeral fingerprint is never pinned (it changes on every
     // session; the long-lived identity key stays the TOFU anchor under
     // `gritos:tofu`) and is never displayed. The key only feeds the v2 DM
-    // derivation (phase 4).
+    // derivation.
   }
 
   actions.chat.onMessage = (data, context) => {
@@ -1431,6 +1468,8 @@ function handleDmEnvelope(
   transportPeerId: string,
 ): void {
   const envelope = parseEnvelope(data)
+  // Issue #93 (spec §12.1) — the parser only lets v2 dms through: a v1 dm
+  // (old build) dies here, the accepted mixed-version degradation.
   if (envelope === null || envelope.kind !== 'dm') return
   if (filterDmForSelf(envelope, trysteroSelfId) === null) return
   // Issue #19 — dedup against the session-wide set, not the connection's:
@@ -1440,32 +1479,60 @@ function handleDmEnvelope(
 
   const identity = sessionIdentity
   const peerRawKey = connection.peerKeys.get(transportPeerId)
-  // §9.2 — the sender's raw public key must be known; otherwise the payload
-  // is undecryptable and is discarded silently (§7.3).
+  // §9.2 — the sender's identity raw public key must be known (TOFU/salt
+  // anchor); otherwise the payload is undecryptable and is discarded
+  // silently (§7.3).
   if (identity === null || peerRawKey === undefined) return
 
-  const senderFp =
+  // Issue #93 (spec §12.1) — the v2 derivation ECDHs over the sender's
+  // session-ephemeral key, so BOTH the announced key and its fingerprint
+  // must have landed. A v2 envelope from a peer that never announced
+  // `ephkeys` (old build, forge or replay) is undecryptable: silent
+  // discard (§7.3).
+  const senderEphRaw = connection.peerEphKeys.get(transportPeerId)
+  const senderEphFp = connection.peerEphFps.get(transportPeerId)
+  if (senderEphRaw === undefined || senderEphFp === undefined) return
+
+  const senderIdFp =
     connection.peerKeyFps.get(transportPeerId) ?? null
-  void decryptDmEnvelope(connection, envelope, transportPeerId, peerRawKey, senderFp)
+  void decryptDmEnvelope(
+    connection,
+    envelope,
+    transportPeerId,
+    peerRawKey,
+    senderIdFp,
+    senderEphRaw,
+    senderEphFp,
+  )
 }
 
-/** Async tail of the DM receive path: derive → decrypt → store. */
+/**
+ * Async tail of the DM receive path (issue #93, spec §12.1): derive the v2
+ * key over the ephemeral pairs → decrypt → store. The identity fingerprints
+ * only anchor the salt (and the TOFU sync); the ECDH runs on the
+ * session-ephemeral material of both sides.
+ */
 async function decryptDmEnvelope(
   connection: RoomInternals,
   envelope: Envelope,
   senderId: string,
   peerRawKey: Uint8Array,
-  senderFp: string | null,
+  senderIdFp: string | null,
+  senderEphRaw: Uint8Array,
+  senderEphFp: string,
 ): Promise<void> {
   const identity = sessionIdentity
   if (identity === null) return
-  const theirFp = senderFp ?? (await computeFingerprint(peerRawKey))
+  const theirIdFp = senderIdFp ?? (await computeFingerprint(peerRawKey))
+  const ownSession = await ensureEphemeralSession()
   try {
-    const key = await getCachedDmKey(
-      identity.keypair.privateKey,
-      peerRawKey,
+    const key = await getCachedDmKeyV2(
+      ownSession.keypair.privateKey,
+      senderEphRaw,
       identity.identity.fingerprint,
-      theirFp,
+      theirIdFp,
+      ownSession.fingerprint,
+      senderEphFp,
     )
     const text = await decryptDm(key, { iv: envelope.iv ?? '', payload: envelope.body })
     // Issue #21 — the send-side cap only binds honest clients: a key-holding
@@ -1473,7 +1540,7 @@ async function decryptDmEnvelope(
     // with zero side effects (no channel, no receipt, no notification), the
     // same §7.3 silence as the catch below.
     if (text.length > MAX_PLAINTEXT_LENGTH) return
-    syncDmTofuState(senderId, envelope.nick, theirFp)
+    syncDmTofuState(senderId, envelope.nick, theirIdFp)
     useAppStore.getState().appendDmMessage(senderId, {
       id: envelope.id,
       roomId: `dm:${senderId}`,

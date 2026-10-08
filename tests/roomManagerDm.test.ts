@@ -1,20 +1,39 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as manager from '../src/lib/p2p/roomManager'
 import { useAppStore, type DmChannel } from '../src/stores/useAppStore'
+import { computeFingerprint } from '../src/lib/crypto/identity'
 import {
-  computeFingerprint,
-  exportRawPublicKey,
-  generateSessionKeypair,
-} from '../src/lib/crypto/identity'
-import { bytesToBase64, clearDmKeyCache, decryptDm, deriveDmKey, encryptDm } from '../src/lib/crypto/dm'
-import { createEnvelope, MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
-import { installFakeTrystero, type FakeTrysteroRoom } from './fakeTrystero'
+  bytesToBase64,
+  clearDmKeyCache,
+  decryptDm,
+  deriveDmKeyV2,
+  encryptDm,
+} from '../src/lib/crypto/dm'
+import {
+  createEnvelope,
+  DM_PROTOCOL_VERSION,
+  MAX_CLOCK_SKEW_MS,
+  MAX_ENVELOPE_AGE_MS,
+  type Envelope,
+} from '../src/lib/p2p/protocol'
+import {
+  fakePeerJoins,
+  installFakeTrystero,
+  makeFakeRemotePeer,
+  type FakeRemotePeer,
+  type FakeTrysteroRoom,
+} from './fakeTrystero'
 
 /**
- * M3 — E2EE DM flow over the fake Trystero mesh. The manager under test
- * plays peer B; the tests play peer A (building real sealed envelopes with
- * an A-side keypair against B's announced raw key) and peer C (a third peer
- * that must never decrypt or store what is not addressed to it).
+ * M3 — E2EE DM flow over the fake Trystero mesh. Since issue #93 (spec
+ * §12.1, phase 4) the flow runs v2: keys derive from SESSION-EPHEMERAL
+ * ECDH pairs (`ephkeys` announces) with both fingerprint pairs in the
+ * salt, envelopes carry `v: DM_PROTOCOL_VERSION`, and a connected peer
+ * without an ephemeral announce is an explicit legacy state. The manager
+ * under test plays peer B; the tests play peer A (building real sealed
+ * envelopes with an A-side ephemeral keypair against B's announced one)
+ * and peer C (a third peer that must never decrypt or store what is not
+ * addressed to it).
  */
 
 let fake: ReturnType<typeof installFakeTrystero>
@@ -54,44 +73,66 @@ function dmChannel(peerId: string): DmChannel {
   return channel
 }
 
-interface RemotePeer {
-  keypair: CryptoKeyPair
-  rawPublicKey: Uint8Array
-  fingerprint: string
-  id: string
-}
-
-async function makeRemotePeer(id: string): Promise<RemotePeer> {
-  const keypair = await generateSessionKeypair()
-  const rawPublicKey = await exportRawPublicKey(keypair.publicKey)
-  return { keypair, rawPublicKey, fingerprint: await computeFingerprint(rawPublicKey), id }
-}
-
-let A: RemotePeer
-let C: RemotePeer
+let A: FakeRemotePeer
+let C: FakeRemotePeer
 
 beforeEach(async () => {
   clearDmKeyCache()
-  A = await makeRemotePeer('peer-a')
-  C = await makeRemotePeer('peer-c')
+  A = await makeFakeRemotePeer('peer-a')
+  C = await makeFakeRemotePeer('peer-c')
 })
 
-/** Joins the manager into a room and introduces remote peer A into it. */
+/** Joins the manager into a room and introduces remote peer A into it as a
+ * v2-capable peer (join + presence + `keys` + `ephkeys`). */
 async function joinWithPeerA(
   name = 'lobby',
 ): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
   const connection = await manager.joinRoom(name)
   const room = fake.rooms[fake.rooms.length - 1]
-  room.peerJoin(A.id)
-  room.receive('presence', { nick: 'zorro-bravo', fp: A.fingerprint }, A.id)
-  room.receive('keys', A.rawPublicKey, A.id)
+  await fakePeerJoins(room, A, { nick: 'zorro-bravo' })
   await flushMicrotasks()
   return { roomId: connection.roomId, room }
 }
 
-/** Seals a DM from A's side against B's announced raw public key. */
-async function sealFromA(text: string, toPeerId: string, bRawPub: Uint8Array, bFp: string): Promise<Envelope> {
-  const key = await deriveDmKey(A.keypair.privateKey, bRawPub, A.fingerprint, bFp)
+/** The manager's announced material as the tests' B side: identity pair
+ * (`keys`) plus session-ephemeral pair (`ephkeys`), key + fingerprint. */
+async function myRawKeyAndFingerprint(room: FakeTrysteroRoom): Promise<{
+  rawPublicKey: Uint8Array
+  fingerprint: string
+  ephRawKey: Uint8Array
+  ephFingerprint: string
+}> {
+  await flushMicrotasks()
+  const keys = room.action('keys').sends
+  expect(keys.length).toBeGreaterThan(0)
+  const ephKeys = room.action('ephkeys').sends
+  expect(ephKeys.length).toBeGreaterThan(0)
+  const rawPublicKey = keys[0]?.data as Uint8Array
+  const ephRawKey = ephKeys[0]?.data as Uint8Array
+  expect(ephRawKey.byteLength).toBe(manager.RAW_PUBLIC_KEY_LENGTH)
+  return {
+    rawPublicKey,
+    fingerprint: await computeFingerprint(rawPublicKey),
+    ephRawKey,
+    ephFingerprint: await computeFingerprint(ephRawKey),
+  }
+}
+
+/** Seals a DM from A's side against B's announced material — the v2
+ * derivation over the session-ephemeral pairs (spec §12.1). */
+async function sealFromA(
+  text: string,
+  toPeerId: string,
+  mine: Awaited<ReturnType<typeof myRawKeyAndFingerprint>>,
+): Promise<Envelope> {
+  const key = await deriveDmKeyV2(
+    A.ephKeypair.privateKey,
+    mine.ephRawKey,
+    A.fingerprint,
+    mine.fingerprint,
+    A.ephFingerprint,
+    mine.ephFingerprint,
+  )
   return sealFromAWithKey(key, text, toPeerId)
 }
 
@@ -105,6 +146,7 @@ function sealFromAWithKey(key: CryptoKey, text: string, toPeerId: string): Promi
       enc: true,
       iv: sealed.iv,
       body: sealed.payload,
+      v: DM_PROTOCOL_VERSION,
     }),
   )
 }
@@ -138,26 +180,45 @@ async function sealFromAWithKeyRaw(
     enc: true,
     iv: bytesToBase64(iv),
     body: bytesToBase64(combined),
+    v: DM_PROTOCOL_VERSION,
   })
 }
 
-async function myRawKeyAndFingerprint(room: FakeTrysteroRoom): Promise<{
-  rawPublicKey: Uint8Array
-  fingerprint: string
-}> {
-  await flushMicrotasks()
-  const keys = room.action('keys').sends
-  expect(keys.length).toBeGreaterThan(0)
-  const rawPublicKey = keys[0]?.data as Uint8Array
-  return { rawPublicKey, fingerprint: await computeFingerprint(rawPublicKey) }
+/** Seals a DM from an arbitrary peer's side against B's announced material. */
+async function sealFromX(
+  peer: FakeRemotePeer,
+  text: string,
+  mine: Awaited<ReturnType<typeof myRawKeyAndFingerprint>>,
+): Promise<Envelope> {
+  const key = await deriveDmKeyV2(
+    peer.ephKeypair.privateKey,
+    mine.ephRawKey,
+    peer.fingerprint,
+    mine.fingerprint,
+    peer.ephFingerprint,
+    mine.ephFingerprint,
+  )
+  const sealed = await encryptDm(key, text)
+  return createEnvelope({
+    from: peer.id,
+    nick: 'desconocido',
+    kind: 'dm',
+    to: manager.getSelfPeerId(),
+    enc: true,
+    iv: sealed.iv,
+    body: sealed.payload,
+    v: DM_PROTOCOL_VERSION,
+  })
 }
 
-describe('incoming DM (RF-04, §9.2)', () => {
+describe('incoming DM (RF-04, §9.2, §12.1 v2)', () => {
   it('A sends to B: B decrypts, stores it on the channel and answers a directed receipt', async () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
 
-    const envelope = await sealFromA('hola en secreto', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('hola en secreto', manager.getSelfPeerId(), mine)
+    // Issue #93 — the wire field the whole v2 path hangs off.
+    expect(envelope.v).toBe(DM_PROTOCOL_VERSION)
     room.receive('dm', envelope, A.id)
     await flushMicrotasks()
 
@@ -174,8 +235,10 @@ describe('incoming DM (RF-04, §9.2)', () => {
     })
     // The sender is in a shared room: the channel is available.
     expect(channel.available).toBe(true)
+    // A announced `ephkeys`: a v2-capable peer, never flagged legacy.
+    expect(channel.legacyPeer).toBe(false)
     expect(channel.peerNick).toBe('zorro-bravo')
-    // The channel fingerprint is the keys-derived one.
+    // The channel fingerprint is the keys-derived (identity) one.
     expect(channel.peerFingerprint).toBe(A.fingerprint)
 
     // Read receipt, debounced and directed to the sender (§7.1).
@@ -192,7 +255,7 @@ describe('incoming DM (RF-04, §9.2)', () => {
     const listener = vi.fn()
     const unsubscribe = manager.onDmReceived(listener)
 
-    const envelope = await sealFromA('psst', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('psst', manager.getSelfPeerId(), mine)
     room.receive('dm', envelope, A.id)
     await flushMicrotasks()
 
@@ -208,14 +271,20 @@ describe('incoming DM (RF-04, §9.2)', () => {
     const mine = await myRawKeyAndFingerprint(room)
     void mine // B's raw key is only needed implicitly: C's payload can never open.
 
-    // C joins and announces its (different) keypair.
-    room.peerJoin(C.id)
-    room.receive('keys', C.rawPublicKey, C.id)
+    // C joins and announces its (different) identity AND ephemeral keys.
+    await fakePeerJoins(room, C)
     await flushMicrotasks()
 
     // Addressed to us, but sealed for the A↔C pair — C's transport relays
     // it (or C forges it): the payload cannot open under our A↔B key.
-    const keyAC = await deriveDmKey(A.keypair.privateKey, C.rawPublicKey, A.fingerprint, C.fingerprint)
+    const keyAC = await deriveDmKeyV2(
+      A.ephKeypair.privateKey,
+      C.ephRawKey,
+      A.fingerprint,
+      C.fingerprint,
+      A.ephFingerprint,
+      C.ephFingerprint,
+    )
     const sealed = await encryptDm(keyAC, 'secreto ajeno')
     const foreign = createEnvelope({
       from: A.id,
@@ -225,6 +294,7 @@ describe('incoming DM (RF-04, §9.2)', () => {
       enc: true,
       iv: sealed.iv,
       body: sealed.payload,
+      v: DM_PROTOCOL_VERSION,
     })
     room.receive('dm', foreign, C.id)
     await flushMicrotasks()
@@ -242,7 +312,7 @@ describe('incoming DM (RF-04, §9.2)', () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
 
-    const envelope = await sealFromA('para otro', 'someone-else', mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('para otro', 'someone-else', mine)
     room.receive('dm', envelope, A.id)
     await flushMicrotasks()
 
@@ -253,8 +323,8 @@ describe('incoming DM (RF-04, §9.2)', () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
 
-    const stranger = await makeRemotePeer('peer-x')
-    const envelope = await sealFromX(stranger, '¿quién eres?', mine.rawPublicKey)
+    const stranger = await makeFakeRemotePeer('peer-x')
+    const envelope = await sealFromX(stranger, '¿quién eres?', mine)
     room.receive('dm', envelope, stranger.id)
     await flushMicrotasks()
 
@@ -270,6 +340,7 @@ describe('incoming DM (RF-04, §9.2)', () => {
       to: manager.getSelfPeerId(),
       enc: false,
       body: 'en claro',
+      v: DM_PROTOCOL_VERSION,
     })
     room.receive('dm', envelope, A.id)
     await flushMicrotasks()
@@ -286,7 +357,14 @@ describe('incoming DM (RF-04, §9.2)', () => {
 
     // 4001 chars seals to ~5.4 KB of base64: inside the ciphertext cap, so
     // only the post-decrypt limit can reject it.
-    const keyAB = await deriveDmKey(A.keypair.privateKey, mine.rawPublicKey, A.fingerprint, mine.fingerprint)
+    const keyAB = await deriveDmKeyV2(
+      A.ephKeypair.privateKey,
+      mine.ephRawKey,
+      A.fingerprint,
+      mine.fingerprint,
+      A.ephFingerprint,
+      mine.ephFingerprint,
+    )
     const envelope = await sealFromAWithKeyRaw(keyAB, 'a'.repeat(4001), manager.getSelfPeerId())
     room.receive('dm', envelope, A.id)
     await flushMicrotasks()
@@ -298,25 +376,7 @@ describe('incoming DM (RF-04, §9.2)', () => {
   })
 })
 
-async function sealFromX(
-  peer: RemotePeer,
-  text: string,
-  bRawPub: Uint8Array,
-): Promise<Envelope> {
-  const key = await deriveDmKey(peer.keypair.privateKey, bRawPub, peer.fingerprint, peer.fingerprint)
-  const sealed = await encryptDm(key, text)
-  return createEnvelope({
-    from: peer.id,
-    nick: 'desconocido',
-    kind: 'dm',
-    to: manager.getSelfPeerId(),
-    enc: true,
-    iv: sealed.iv,
-    body: sealed.payload,
-  })
-}
-
-describe('outgoing DM (RF-04, §9.2)', () => {
+describe('outgoing DM (RF-04, §9.2, §12.1 v2)', () => {
   it('sendDm sends the encrypted envelope directed at the recipient (issue #18) and echoes the own message', async () => {
     await manager.ensureSessionIdentity()
     const { room } = await joinWithPeerA()
@@ -331,12 +391,23 @@ describe('outgoing DM (RF-04, §9.2)', () => {
     // the shared room's mesh (metadata leak, issue #18).
     expect(sent.options).toEqual({ target: A.id })
     const wire = envelope as Envelope
+    // Issue #93 (spec §12.1) — the sender is flipped to v2 envelopes.
+    expect(wire.v).toBe(DM_PROTOCOL_VERSION)
     expect(wire.kind).toBe('dm')
     expect(wire.to).toBe(A.id)
     expect(wire.enc).toBe(true)
 
-    // Only the holder of A's private key can open it.
-    const key = await deriveDmKey(A.keypair.privateKey, mine.rawPublicKey, A.fingerprint, mine.fingerprint)
+    // Only the holder of A's ephemeral private key can open it: the v2
+    // derivation mirrors the manager's (ephemeral pairs, identity fps in
+    // the salt).
+    const key = await deriveDmKeyV2(
+      A.ephKeypair.privateKey,
+      mine.ephRawKey,
+      A.fingerprint,
+      mine.fingerprint,
+      A.ephFingerprint,
+      mine.ephFingerprint,
+    )
     await expect(decryptDm(key, { iv: wire.iv as string, payload: wire.body })).resolves.toBe(
       'hola desde B',
     )
@@ -385,8 +456,9 @@ describe('outgoing DM (RF-04, §9.2)', () => {
     expect(dmChannel(A.id).messages.length).toBeGreaterThan(0)
     expect(await manager.sendDm(A.id, '¿sigues ahí?')).toBeNull()
 
-    // Back into a shared room → available again.
-    fake.rooms[0]?.peerJoin(A.id)
+    // Back into a shared room, announcing identity AND ephemeral keys →
+    // available again.
+    await fakePeerJoins(fake.rooms[0] as FakeTrysteroRoom, A)
     await flushMicrotasks()
     expect(dmChannel(A.id).available).toBe(true)
   })
@@ -412,6 +484,76 @@ describe('outgoing DM (RF-04, §9.2)', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// Issue #93 (spec §12.1) — mixed-version rules: a connected peer without an
+// `ephkeys` announce is a legacy (v1) build and gets an explicit unavailable
+// state; v1 dm envelopes are dropped at the parser; a v2 dm from a peer with
+// no announced ephemeral key is undecryptable and dropped (§7.3 silence).
+// ---------------------------------------------------------------------------
+
+describe('legacy peers and version gates (issue #93, spec §12.1)', () => {
+  it('a legacy peer (keys but no ephkeys): sendDm refuses, legacyPeer flags true, a late announce unlocks the channel', async () => {
+    await manager.ensureSessionIdentity()
+    await manager.joinRoom('lobby')
+    const room = fake.rooms[fake.rooms.length - 1]
+    // A announces its identity keys but never `ephkeys`: a v1 build.
+    await fakePeerJoins(room, A, { nick: 'zorro-bravo', announceEphemeral: false })
+    await flushMicrotasks()
+    manager.openDmChannel(A.id)
+
+    // Sending is refused — never put on the wire — and the channel flags
+    // the honest legacy state instead of losing the message silently.
+    expect(await manager.sendDm(A.id, 'hola')).toBeNull()
+    expect(dmChannel(A.id).available).toBe(true)
+    expect(dmChannel(A.id).legacyPeer).toBe(true)
+    expect(room.action('dm').sends).toHaveLength(0)
+
+    // A announces `ephkeys` late → the flag flips false and the DM goes
+    // through as a v2 envelope.
+    room.receive('ephkeys', A.ephRawKey, A.id)
+    await flushMicrotasks()
+    expect(dmChannel(A.id).legacyPeer).toBe(false)
+
+    const envelope = await manager.sendDm(A.id, 'hola ahora sí')
+    expect(envelope).not.toBeNull()
+    expect(envelope?.v).toBe(DM_PROTOCOL_VERSION)
+    expect(room.lastSend('dm').options).toEqual({ target: A.id })
+  })
+
+  it('an incoming v1 dm envelope is silently dropped (dm is v2-only since phase 4)', async () => {
+    const { room } = await joinWithPeerA()
+    const mine = await myRawKeyAndFingerprint(room)
+
+    const envelope = await sealFromA('legado', manager.getSelfPeerId(), mine)
+    // The v1 copy is exactly what an old build would put on the wire.
+    room.receive('dm', { ...envelope, v: 1 }, A.id)
+    await flushMicrotasks()
+
+    // No channel, no message, no debounced receipt (§7.3 silence).
+    expect(useAppStore.getState().dms[A.id]).toBeUndefined()
+    await waitForReceiptDebounce()
+    expect(room.action('receipt').sends).toHaveLength(0)
+  })
+
+  it('an incoming v2 dm from a peer with no announced ephemeral key is silently dropped', async () => {
+    await manager.joinRoom('lobby')
+    const room = fake.rooms[fake.rooms.length - 1]
+    // A never announces `ephkeys`, yet seals a structurally valid v2
+    // envelope against B's (announced) ephemeral key — a forged or
+    // forwarded v2 dm the manager cannot possibly open.
+    await fakePeerJoins(room, A, { nick: 'zorro-bravo', announceEphemeral: false })
+    const mine = await myRawKeyAndFingerprint(room)
+
+    const envelope = await sealFromA('sin anuncio', manager.getSelfPeerId(), mine)
+    room.receive('dm', envelope, A.id)
+    await flushMicrotasks()
+
+    expect(useAppStore.getState().dms[A.id]).toBeUndefined()
+    await waitForReceiptDebounce()
+    expect(room.action('receipt').sends).toHaveLength(0)
+  })
+})
+
 describe('DM unread (RF-04)', () => {
   it('increments unread for background DMs and clears it on open', async () => {
     await manager.ensureSessionIdentity()
@@ -420,9 +562,9 @@ describe('DM unread (RF-04)', () => {
     // A room is the active view: the DM stays in the background.
     useAppStore.getState().setActiveView({ kind: 'room', id: roomId })
 
-    const first = await sealFromA('uno', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const first = await sealFromA('uno', manager.getSelfPeerId(), mine)
     room.receive('dm', first, A.id)
-    const second = await sealFromA('dos', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const second = await sealFromA('dos', manager.getSelfPeerId(), mine)
     room.receive('dm', second, A.id)
     await flushMicrotasks()
 
@@ -433,7 +575,7 @@ describe('DM unread (RF-04)', () => {
     expect(dmChannel(A.id).unread).toBe(0)
 
     // Messages arriving while the DM is focused do not count.
-    const third = await sealFromA('tres', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const third = await sealFromA('tres', manager.getSelfPeerId(), mine)
     room.receive('dm', third, A.id)
     await flushMicrotasks()
     expect(dmChannel(A.id).unread).toBe(0)
@@ -447,8 +589,15 @@ describe('DM FIFO cap (RF-04: 500)', () => {
     const mine = await myRawKeyAndFingerprint(room)
     useAppStore.getState().setActiveView({ kind: 'dm', peerId: A.id })
 
-    // Derive the A↔B key once; only the AES sealing runs per message.
-    const keyAB = await deriveDmKey(A.keypair.privateKey, mine.rawPublicKey, A.fingerprint, mine.fingerprint)
+    // Derive the A↔B v2 key once; only the AES sealing runs per message.
+    const keyAB = await deriveDmKeyV2(
+      A.ephKeypair.privateKey,
+      mine.ephRawKey,
+      A.fingerprint,
+      mine.fingerprint,
+      A.ephFingerprint,
+      mine.ephFingerprint,
+    )
     for (let i = 0; i < 505; i += 1) {
       const envelope = await sealFromAWithKey(keyAB, `msg-${i}`, manager.getSelfPeerId())
       room.receive('dm', envelope, A.id)
@@ -520,7 +669,7 @@ describe('DM freshness and replay (issue #19)', () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
 
-    const envelope = await sealFromA('capturada', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('capturada', manager.getSelfPeerId(), mine)
     room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS - 1 }, A.id)
     await flushMicrotasks()
 
@@ -534,7 +683,7 @@ describe('DM freshness and replay (issue #19)', () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
 
-    const envelope = await sealFromA('del futuro', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('del futuro', manager.getSelfPeerId(), mine)
     // Far beyond the tolerance, not +1ms: the gate runs after real async
     // crypto work, so a hair-thin margin flips whenever the run is slow
     // (the exact boundary is pinned by the protocol unit tests instead).
@@ -548,7 +697,7 @@ describe('DM freshness and replay (issue #19)', () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
 
-    const envelope = await sealFromA('al límite', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('al límite', manager.getSelfPeerId(), mine)
     // 30s of slack inside the window, same real-timer reasoning as above.
     room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS + 30_000 }, A.id)
     await flushMicrotasks()
@@ -561,7 +710,7 @@ describe('DM freshness and replay (issue #19)', () => {
     const first = await joinWithPeerA('lobby')
     const mine = await myRawKeyAndFingerprint(first.room)
 
-    const envelope = await sealFromA('única', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('única', manager.getSelfPeerId(), mine)
     first.room.receive('dm', envelope, A.id)
     await flushMicrotasks()
     expect(dmChannel(A.id).messages).toHaveLength(1)
@@ -580,7 +729,7 @@ describe('DM freshness and replay (issue #19)', () => {
     const first = await joinWithPeerA('lobby')
     const mine = await myRawKeyAndFingerprint(first.room)
 
-    const envelope = await sealFromA('vieja', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('vieja', manager.getSelfPeerId(), mine)
     // First-ever delivery of this id, already aged beyond the window — a
     // captured envelope replayed after a reload reset the dedup set.
     first.room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS - 1 }, A.id)
@@ -598,7 +747,7 @@ describe('DM freshness and replay (issue #19)', () => {
     const first = await joinWithPeerA('lobby')
     const mine = await myRawKeyAndFingerprint(first.room)
 
-    const envelope = await sealFromA('insistente', manager.getSelfPeerId(), mine.rawPublicKey, mine.fingerprint)
+    const envelope = await sealFromA('insistente', manager.getSelfPeerId(), mine)
     first.room.receive('dm', envelope, A.id)
     await flushMicrotasks()
     expect(dmChannel(A.id).messages).toHaveLength(1)

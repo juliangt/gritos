@@ -100,7 +100,14 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
       parseEnvelope(validChat({ kind: 'system' as unknown as 'chat' })),
     ).toBeNull()
 
-    const dm = { ...validChat(), kind: 'dm' as const, to: 'peer-b', body: 'secret' }
+    // Since phase 4 (issue #93) a dm must carry v2.
+    const dm = {
+      ...validChat(),
+      v: DM_PROTOCOL_VERSION,
+      kind: 'dm' as const,
+      to: 'peer-b',
+      body: 'secret',
+    }
     expect(parseEnvelope(dm)).toEqual(dm)
 
     expect(parseEnvelope({ ...dm, to: undefined })).toBeNull()
@@ -164,19 +171,20 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
   })
 })
 
-describe('per-action envelope versions (issue #93, spec §12.1 — phase 3)', () => {
+describe('per-action envelope versions (issue #93, spec §12.1 — final rule)', () => {
   it('accepts a v1 chat and rejects a v2 chat (v2 is dm-only)', () => {
     expect(parseEnvelope(validChat())?.v).toBe(1)
     expect(parseEnvelope(validChat({ v: DM_PROTOCOL_VERSION }))).toBeNull()
   })
 
-  it('accepts a v1 dm (TRANSITIONAL) and a v2 dm', () => {
+  it('rejects a v1 dm (v2-only since phase 4) and accepts a v2 dm', () => {
     const dmV1 = { ...validChat(), kind: 'dm' as const, to: 'peer-b', body: 'legacy' }
     const dmV2 = { ...dmV1, v: DM_PROTOCOL_VERSION, id: '22222222-2222-4222-8222-222222222222' }
-    // TRANSITIONAL (issue #93 phase 3): the current build still SENDS v1
-    // dms; phase 4 flips the sender to DM_PROTOCOL_VERSION and tightens
-    // this gate to v2-only.
-    expect(parseEnvelope(dmV1)).toEqual(dmV1)
+    // Final rule (issue #93 phase 4, spec §12.1): DMs are sealed with
+    // session-ephemeral keys only v2 peers announce (`ephkeys`), so a v1 dm
+    // is dropped silently — the accepted mixed-version degradation, the
+    // mirror image of v1 peers dropping our v2 dms.
+    expect(parseEnvelope(dmV1)).toBeNull()
     expect(parseEnvelope(dmV2)).toEqual(dmV2)
     expect(parseEnvelope(dmV2)?.v).toBe(2)
   })

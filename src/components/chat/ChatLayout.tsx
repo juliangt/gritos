@@ -240,7 +240,13 @@ export function ChatLayout() {
               emptyStateText={EMPTY_DM_FEED_TEXT}
             />
             <TypingBar typing={activeDm.typing} peers={dmPeers} />
-            <ChatInput dm={{ peerId: activeDm.peerId, available: activeDm.available }} />
+            <ChatInput
+              dm={{
+                peerId: activeDm.peerId,
+                available: activeDm.available,
+                legacyPeer: activeDm.legacyPeer,
+              }}
+            />
           </>
         ) : activeRoom === null ? (
           <main className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">

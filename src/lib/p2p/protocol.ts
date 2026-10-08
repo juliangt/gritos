@@ -85,9 +85,9 @@ export type EnvelopeKind = 'chat' | 'dm'
  */
 export type Envelope = {
   /**
-   * Protocol version: 1 (chat, control plane and legacy static-identity
-   * `dm`) or 2 (session-ephemeral `dm`, issue #93 / spec §12.1); anything
-   * else is silently ignored.
+   * Protocol version: 1 (chat and the control plane) or 2 — the only version
+   * a `dm` may carry since phase 4 of issue #93 (spec §12.1); anything else
+   * is silently ignored.
    */
   v: number
   /** crypto.randomUUID() — dedup key (§7.3). */
@@ -195,11 +195,14 @@ export class BoundedSeenIds {
  * Rules: `v` ∈ {1, 2} (anything else is silently discarded) with a
  * per-action gate — `kind: 'chat'` requires v1 (control-plane actions are
  * Envelope-less payloads, so chat is the only broadcast kind), while
- * `kind: 'dm'` accepts BOTH v1 and v2. The dm rule is TRANSITIONAL (issue
- * #93 phase 3, spec §12.1): the current build still sends v1 DMs, phase 4
- * flips the sender to v2 (`DM_PROTOCOL_VERSION`) and tightens this gate to
- * v2-only. A v2 dm accepted here is only structurally valid — the v2
- * session-ephemeral crypto semantics arrive with phase 4.
+ * `kind: 'dm'` requires v2 = DM_PROTOCOL_VERSION (issue #93 phase 4, spec
+ * §12.1): DMs are sealed with session-ephemeral keys that only v2 peers
+ * announce (`ephkeys`), so a v1 dm has no honest sender anymore and is
+ * dropped. This is the accepted mixed-version degradation of §12.1, in
+ * both directions: our v2 dms are silently dropped by v1 peers (old
+ * builds), and we silently drop their v1 dms — the v2 sender additionally
+ * surfaces an explicit legacy-peer state in the UI instead of relying on
+ * the silence.
  *
  * Further rules: `id`, `from`, `nick`, `body` are non-empty
  * strings; `ts` a finite number; `kind` ∈ {chat, dm};
@@ -226,10 +229,12 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   if (raw.kind !== 'chat' && raw.kind !== 'dm') return null
 
   const kind: EnvelopeKind = raw.kind
-  // Per-action version gate: v2 is dm-only (issue #93, spec §12.1). The dm
-  // branch keeps accepting v1 too — TRANSITIONAL until phase 4 flips the
-  // sender to DM_PROTOCOL_VERSION and this becomes v2-only.
+  // Per-action version gate: v2 is dm-only, and `dm` is v2-only (issue #93
+  // phase 4, spec §12.1) — a v1 dm comes from an old build that cannot know
+  // the session-ephemeral key the v2 derivation needs, so it is dropped
+  // silently (§7.3), the mirror image of v1 peers dropping our v2 dms.
   if (kind === 'chat' && version !== PROTOCOL_VERSION) return null
+  if (kind === 'dm' && version !== DM_PROTOCOL_VERSION) return null
   const isDm = kind === 'dm'
   let to: string | undefined
   if (isDm) {
@@ -251,8 +256,8 @@ export function parseEnvelope(raw: unknown): Envelope | null {
 
   const envelope: Envelope = {
     // The normalized envelope carries the ACTUAL accepted version (1 or 2),
-    // not a hardcoded 1: the receive paths key off it once phase 4 wires the
-    // v2 crypto (issue #93).
+    // not a hardcoded 1: the DM receive path keys off it (v2 ⇒
+    // session-ephemeral derivation, issue #93 / spec §12.1).
     v: version,
     id: raw.id,
     ts: raw.ts,
@@ -270,8 +275,8 @@ export function parseEnvelope(raw: unknown): Envelope | null {
 /**
  * Builds a valid outgoing envelope with fresh id/timestamp (§7.2). The
  * version defaults to PROTOCOL_VERSION; DM senders pass
- * DM_PROTOCOL_VERSION once phase 4 flips the sender (issue #93, spec
- * §12.1). Deliberately NO kind-vs-version validation here — the parser is
+ * DM_PROTOCOL_VERSION (issue #93 phase 4, spec §12.1 — session-ephemeral
+ * E2EE). Deliberately NO kind-vs-version validation here — the parser is
  * the single gate (§7.3); a mis-versioned envelope would simply be ignored
  * by every receiving peer.
  */

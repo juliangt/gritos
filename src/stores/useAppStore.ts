@@ -128,6 +128,13 @@ export interface DmChannel {
    * keep flowing; the header warns and `peerFingerprint` stays pinned.
    */
   keyChanged: boolean
+  /**
+   * Issue #93 (spec §12.1): true while the peer is connected but has never
+   * announced a session-ephemeral key (`ephkeys`) — a legacy build that can
+   * neither open our v2 dms nor send one. The composer blocks with an
+   * explicit hint instead of letting messages vanish silently.
+   */
+  legacyPeer: boolean
 }
 
 export type ActiveView = { kind: 'room'; id: string } | { kind: 'dm'; peerId: string }
@@ -263,6 +270,12 @@ export interface AppActions {
    * never overwrites it with the live one.
    */
   setDmKeyChanged: (peerId: string, keyChanged: boolean) => void
+  /**
+   * Issue #93 (spec §12.1) — flips the channel's legacy-peer flag (a
+   * connected peer without a session-ephemeral announce). Recomputed by the
+   * room manager on every peer/room/`ephkeys` change.
+   */
+  setDmLegacyPeer: (peerId: string, legacyPeer: boolean) => void
 }
 
 export const useAppStore = create<AppState & AppActions>()((set) => ({
@@ -419,6 +432,7 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
               available: false,
               typing: {},
               keyChanged: false,
+              legacyPeer: false,
             },
           },
         }
@@ -495,5 +509,14 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       const channel = state.dms[peerId]
       if (channel === undefined || channel.keyChanged === keyChanged) return state
       return { dms: { ...state.dms, [peerId]: { ...channel, keyChanged } } }
+    }),
+
+  // Issue #93 (spec §12.1) — same guarded write discipline as
+  // `setDmAvailable`: the store is only touched when the value changes.
+  setDmLegacyPeer: (peerId, legacyPeer) =>
+    set((state) => {
+      const channel = state.dms[peerId]
+      if (channel === undefined || channel.legacyPeer === legacyPeer) return state
+      return { dms: { ...state.dms, [peerId]: { ...channel, legacyPeer } } }
     }),
 }))
