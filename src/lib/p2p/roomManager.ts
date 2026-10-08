@@ -71,12 +71,30 @@ import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
 import { dropRecentRoom, pushRecentRoom, removeRecentRoom, saveRecentRooms } from '../recentRooms'
 import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '../tofu'
 import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } from '../feed'
+import {
+  abortActiveTransfersWithPeer,
+  abortAllOnIdentityRegeneration,
+  handleFileAbort,
+  handleFileAck,
+  handleFileChunk,
+  handleFileEnd,
+  handleFileMeta,
+  onPeerGone,
+  registerFileHost,
+  resetFileTransfersForTests,
+  roomTornDown,
+  type FileAbortPayload,
+  type FileAckPayload,
+  type FileEndPayload,
+  type FileMeta,
+  type FileTransferHost,
+} from './fileTransfer'
 
 /**
  * The single Trystero surface of the app (plan.md §3 architecture rules:
  * only this module may import trystero). Multi-room core — spec §6.3/§6.5:
  * a Map<roomId, RoomConnection>; each connection encapsulates its Trystero
- * room, its 12 registered actions (§7.1) and its status heuristic, and feeds
+ * room, its 17 registered actions (§7.1) and its status heuristic, and feeds
  * the Zustand store (§8.1).
  *
  * M3 adds the E2EE DM path (RF-04, §9.2): received raw public keys are kept
@@ -164,6 +182,21 @@ import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } fro
  * plus the request side the UI card drives (`requestHistory`, the
  * per-room HISTORY_ASK_RATE_CAP budget with the §10.3 park-while-searching
  * flush).
+ *
+ * Issue #103 (spec §12.4) — P2P file transfer, phase 3 (engine): five more
+ * actions, registered in §12.4's reading order after `hist` and before
+ * `ping`/`pong` (`file-meta` → binary `file-chunk` → `file-ack` →
+ * `file-end` → `file-abort`). This module stays the thin shim: it drops
+ * muted senders BEFORE any parse (all five actions are content, issue #95),
+ * hands each handler a `FileTransferHost` (room id, live room key, mute
+ * gate, `resolveTransferKey`, directed sends) and delegates the whole
+ * machine — validation, credit window, framing, caps, state, blob
+ * assembly — to `lib/p2p/fileTransfer.ts`. Lifecycle hooks: peer leaves
+ * and connection teardowns fail that room's transfers (no resume, §12.4),
+ * a fresh mute aborts the muted peer's active transfers (with
+ * `file-abort`), identity regeneration invalidates every transfer (the
+ * §12.2 seam, wired at module load like the react/history subscriptions),
+ * and the panic path calls the engine's abortAll directly (lib/panic.ts).
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -314,6 +347,18 @@ interface RoomActions {
   /** Issue #102 — history gossip: the request {n ≤ 50} and the batches. */
   'hist-req': MessageAction<HistReqPayload>
   hist: MessageAction<HistPayload>
+  /**
+   * Issue #103 (spec §12.4) — the five file-transfer actions, in §12.4's
+   * registration/reading order (offer, data, credit, close, cancel).
+   * `file-chunk` is the binary one (framed `8 B fileId ‖ uint32 BE seq ‖
+   * payload`); the rest are tiny JSON payloads.
+   */
+  'file-meta': MessageAction<FileMeta>
+  /** Trystero delivers binary as ArrayBuffer; we always send Uint8Array. */
+  'file-chunk': MessageAction<Uint8Array | ArrayBuffer>
+  'file-ack': MessageAction<FileAckPayload>
+  'file-end': MessageAction<FileEndPayload>
+  'file-abort': MessageAction<FileAbortPayload>
   ping: MessageAction<PingPayload>
   pong: MessageAction<PongPayload>
 }
@@ -1054,6 +1099,24 @@ function appendRecoveredToStore(roomId: string, envelopes: Envelope[]): void {
 }
 
 onRecovered(appendRecoveredToStore)
+
+// ---------------------------------------------------------------------------
+// File transfer (issue #103, spec §12.4) — the engine's wiring lives here
+// ---------------------------------------------------------------------------
+
+/**
+ * Issue #103 (spec §12.4) — identity regeneration invalidates every file
+ * transfer, the same stroke as the manual-DM engines (§12.2): keys and
+ * ephemeral material were announced under the OLD identity, so active
+ * transfers fail (file-abort while the channels are still up) and every
+ * blob URL — done cards included — is revoked (§12.4's revocation list).
+ * Installed at module load exactly like the onReact/onHistRequest wiring:
+ * the identity-regenerated seam is never cleared by resetManagerForTests,
+ * so this subscription is wiring, not disposable listener state.
+ */
+onSessionIdentityRegenerated(function invalidateFileTransfersOnIdentityRegeneration() {
+  abortAllOnIdentityRegeneration()
+})
 
 // ---------------------------------------------------------------------------
 // Join / leave / reconnect
@@ -1917,6 +1980,14 @@ export function muteFromUi(fingerprint: string, nickname: string): boolean {
   const fresh = !store.settings.mutedFingerprints.includes(canonicalFingerprint(fingerprint))
   if (!store.muteFingerprint(fingerprint, nickname)) return false
   if (fresh) appendMuteLineToActiveRoom(muteSystemLine(nickname))
+  // Issue #103 (spec §12.4) — muting a peer aborts its active transfers on
+  // the spot (local discard + file-abort to the other side): a muted
+  // peer's content stops accumulating immediately.
+  for (const connection of connections.values()) {
+    for (const [peerId, peerFp] of connection.peerKeyFps) {
+      if (mutedFingerprint(peerFp)) abortActiveTransfersWithPeer(connection.roomId, peerId)
+    }
+  }
   return true
 }
 
@@ -2068,6 +2139,17 @@ function createConnection(init: {
     // `hist-req`/`hist` register as their own actions.
     'hist-req': trysteroRoom.makeAction<HistReqPayload>('hist-req'),
     hist: trysteroRoom.makeAction<HistPayload>('hist'),
+    // Issue #103 (spec §12.4) — the five file-transfer actions, registered
+    // together after `hist` and before `ping`/`pong` in §12.4's reading
+    // order: offer, data, credit, close, cancel (the order is NOT
+    // load-bearing — actions route by name). Same mixed-build tolerance as
+    // `react`/`hist`: an old build parks these payloads without firing a
+    // handler (silent §12.4 degradation with mixed builds).
+    'file-meta': trysteroRoom.makeAction<FileMeta>('file-meta'),
+    'file-chunk': trysteroRoom.makeAction<Uint8Array | ArrayBuffer>('file-chunk'),
+    'file-ack': trysteroRoom.makeAction<FileAckPayload>('file-ack'),
+    'file-end': trysteroRoom.makeAction<FileEndPayload>('file-end'),
+    'file-abort': trysteroRoom.makeAction<FileAbortPayload>('file-abort'),
     ping: trysteroRoom.makeAction<PingPayload>('ping'),
     pong: trysteroRoom.makeAction<PongPayload>('pong'),
   }
@@ -2102,6 +2184,30 @@ function createConnection(init: {
     errorTimer: null,
     typingTimer: null,
   }
+
+  // Issue #103 (spec §12.4) — the per-connection context every file
+  // handler receives (and the send path looks up by room id). The roomKey
+  // is read through a live getter: teardownConnection nulls it on leave,
+  // and a torn-down room must never re-seal with a dead key.
+  const fileHost: FileTransferHost = {
+    roomId: connection.roomId,
+    get roomKey() {
+      return connection.roomKey
+    },
+    isConnected: () => connection.status === 'connected',
+    hasPeer: (peerId) => connection.peerKeys.has(peerId),
+    isPeerMuted: (peerId) => isMuted(connection, peerId),
+    resolveKey: (ctx) => resolveTransferKey(ctx),
+    send: (action, data, target) =>
+      safeSend(
+        connection.actions[action] as {
+          send: (data: unknown, options?: { target: string }) => Promise<void>
+        },
+        data,
+        { target },
+      ),
+  }
+  registerFileHost(fileHost)
 
   actions.presence.onMessage = (payload, { peerId }) => {
     if (typeof payload?.nick !== 'string' || typeof payload?.fp !== 'string') {
@@ -2252,6 +2358,31 @@ function createConnection(init: {
   actions.hist.onMessage = (payload, { peerId }) => {
     handleHistBatch(connection, payload, peerId)
   }
+  // Issue #103 (spec §12.4) — the five file actions share ONE pre-parse
+  // gate: a muted sender's file traffic is content and drops before any
+  // parsing, effect or state (the same door as chat/dm/typing, issue #95).
+  // Everything after the gate (validation, caps, credit window, framing,
+  // the state machine) lives in the engine.
+  actions['file-meta'].onMessage = (payload, { peerId }) => {
+    if (isMuted(connection, peerId)) return
+    handleFileMeta(fileHost, payload, peerId)
+  }
+  actions['file-chunk'].onMessage = (data, { peerId }) => {
+    if (isMuted(connection, peerId)) return
+    handleFileChunk(fileHost, data, peerId)
+  }
+  actions['file-ack'].onMessage = (payload, { peerId }) => {
+    if (isMuted(connection, peerId)) return
+    handleFileAck(fileHost, payload, peerId)
+  }
+  actions['file-end'].onMessage = (payload, { peerId }) => {
+    if (isMuted(connection, peerId)) return
+    handleFileEnd(fileHost, payload, peerId)
+  }
+  actions['file-abort'].onMessage = (payload, { peerId }) => {
+    if (isMuted(connection, peerId)) return
+    handleFileAbort(fileHost, payload, peerId)
+  }
   actions.ping.onMessage = (payload, { peerId }) => {
     if (typeof payload?.t !== 'number' || !Number.isFinite(payload.t)) return
     safeSend(connection.actions.pong, { t: payload.t } satisfies PongPayload, { target: peerId })
@@ -2335,6 +2466,9 @@ function handlePeerLeave(connection: RoomInternals, peerId: string): void {
   // Issue #93 — the ephemeral material dies with the peer too.
   connection.peerEphKeys.delete(peerId)
   connection.peerEphFps.delete(peerId)
+  // Issue #103 (spec §12.4) — a reconnect mid-transfer FAILS the transfer,
+  // no resume: offsets and accumulators are per-connection memory.
+  onPeerGone(connection.roomId, peerId)
   connection.announcedPeers.delete(peerId)
   useAppStore.getState().removePeer(connection.roomId, peerId)
   useAppStore.getState().setTyping(connection.roomId, peerId, null)
@@ -2765,6 +2899,10 @@ export function pruneExpiredDmTyping(now: number): void {
 
 function teardownConnection(connection: RoomInternals): void {
   disarmErrorHeuristic(connection)
+  // Issue #103 (spec §12.4) — the room's file-transfer host dies with the
+  // connection and its active transfers fail locally (no file-abort: the
+  // channels are going away).
+  roomTornDown(connection.roomId)
   // M4 (RF-05) — leaving discards the room key: the password and its derived
   // key exist only for the lifetime of the connection.
   connection.roomKey = null
@@ -2820,6 +2958,9 @@ export function resetManagerForTests(): void {
   onRecovered(appendRecoveredToStore)
   dmListeners.clear()
   mentionListeners.clear()
+  // Issue #103 — the engine's records, sessions, hosts, rate budgets and
+  // seams die with the manager's state: tests start pristine.
+  resetFileTransfersForTests()
   clearDmKeyCache()
   sessionIdentity = null
   identityPromise = null

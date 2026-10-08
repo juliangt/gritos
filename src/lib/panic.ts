@@ -1,5 +1,6 @@
 import { abortAllRooms, resetSessionIdentity } from './p2p/roomManager'
 import { abortAllManualDms } from './p2p/manualDmManager'
+import { abortAllFileTransfers } from './p2p/fileTransfer'
 import { clearDmKeyCache } from './crypto/dm'
 import { IDENTITY_STORAGE_KEY } from './crypto/identity'
 import { wipeKeyVault } from './crypto/keyVault'
@@ -73,6 +74,9 @@ export function panicWipe(options: PanicWipeOptions = {}): void {
   // Issue #97 (spec §12.2) — manual engines die in the same stroke: the
   // wizard flow and every live trackerless channel are ephemeral state.
   abortAllManualDms()
+  // Issue #103 (spec §12.4) — every blob URL is revoked and the transfer
+  // maps are dropped: nothing about a file survives the wipe.
+  abortAllFileTransfers()
   resetSessionIdentity()
   clearDmKeyCache()
 
