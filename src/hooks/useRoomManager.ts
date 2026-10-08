@@ -13,6 +13,7 @@ import {
   sendTyping,
   setNickname,
   joinRoom,
+  toggleReaction,
   unmuteFromUi,
 } from '../lib/p2p/roomManager'
 import {
@@ -44,6 +45,12 @@ export interface RoomManagerApi {
   leaveRoom: (roomId: string) => void
   sendChat: (roomId: string, text: string, ttl?: number) => void
   sendTyping: (roomId: string, on: boolean) => void
+  /**
+   * Issue #98 — optimistic local reaction toggle; also sends the `react`
+   * payload (broadcast, or directed at `to` for DMs). False when the emoji
+   * is not whitelisted or the message id is unknown.
+   */
+  toggleReaction: (roomId: string, messageId: string, emo: string, to?: string) => boolean
   /** M3 (RF-04) — encrypts and broadcasts a DM; null when it cannot send. */
   sendDm: (peerId: string, text: string, ttl?: number) => Promise<boolean>
   /** M3 — directed DM typing signal. */
@@ -142,6 +149,11 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     sendTyping(roomId, on)
   }, [])
 
+  // Issue #98 — the manager applies the optimistic toggle and sends.
+  const react = useCallback((roomId: string, messageId: string, emo: string, to?: string) => {
+    return toggleReaction(roomId, messageId, emo, to)
+  }, [])
+
   const dm = useCallback(
     (peerId: string, text: string, ttl?: number) =>
       sendDm(peerId, text, ttl).then((envelope) => envelope !== null),
@@ -188,6 +200,7 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     leaveRoom: leave,
     sendChat: chat,
     sendTyping: typing,
+    toggleReaction: react,
     sendDm: dm,
     sendDmTyping: dmTyping,
     openDm,

@@ -4,6 +4,7 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MessageFeed } from '../src/components/chat/MessageFeed'
+import { getSelfPeerId } from '../src/lib/p2p/roomManager'
 import { MESSAGE_CAP, type Message, type Peer } from '../src/stores/useAppStore'
 import { useAppStore } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
@@ -214,5 +215,74 @@ describe('MessageItem mute affordance (issue #95)', () => {
     expect(
       screen.queryByRole('button', { name: 'Silenciar a @luna-cauta' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('MessageItem reactions through the real manager toggle (issue #98)', () => {
+  const FEED_PEERS: Peer[] = [
+    { id: 'peer-1', nickname: 'luna-cauta', fingerprint: null, latencyMs: 42, degraded: false },
+  ]
+  const FEED_PROPS = { peers: FEED_PEERS, fifoTrimmed: false, expiredCount: 0, ariaLabel: 'feed' }
+
+  beforeEach(() => {
+    localStorage.clear()
+    useSettingsStore.getState().resetSettings()
+    useAppStore.setState({
+      identity: { nickname: 'yo-propio', fingerprint: 'A31F 09BC', createdAt: 0 },
+    })
+  })
+
+  afterEach(cleanup)
+
+  /** Seeds the store room the manager's toggleReaction reads and writes. */
+  function seedRoom(messages: Message[]): void {
+    useAppStore.getState().upsertRoom({
+      id: 'room-1',
+      name: 'lobby',
+      hasPassword: false,
+      status: 'connected',
+      peers: [],
+      messages,
+      typing: {},
+      unread: 0,
+      fifoTrimmed: false,
+      expiredCount: 0,
+    })
+  }
+
+  function storedMessages(): Message[] {
+    return useAppStore.getState().rooms['room-1']!.messages
+  }
+
+  it('clicking a chip toggles the own reaction on and off', () => {
+    const selfId = getSelfPeerId()
+    seedRoom([{ ...makeMessages(1)[0]!, reactions: { '👍': ['peer-1'] } }])
+    const { rerender } = render(<MessageFeed {...FEED_PROPS} messages={storedMessages()} />)
+
+    // The local optimistic toggle lands in the store with the session's own
+    // peerId even with no connection (cosmetic class: the toggle stands).
+    fireEvent.click(screen.getByRole('button', { name: '👍 1' }))
+    expect(storedMessages()[0]!.reactions?.['👍']).toEqual(['peer-1', selfId])
+
+    rerender(<MessageFeed {...FEED_PROPS} messages={storedMessages()} />)
+    expect(screen.getByRole('button', { name: '👍 2' })).toHaveAttribute('aria-pressed', 'true')
+
+    // Second click on the same chip unreacts (the manager reads the live
+    // direction from state).
+    fireEvent.click(screen.getByRole('button', { name: '👍 2' }))
+    expect(storedMessages()[0]!.reactions?.['👍']).toEqual(['peer-1'])
+  })
+
+  it('the quick-pick adds the own reaction to the message', () => {
+    const selfId = getSelfPeerId()
+    seedRoom(makeMessages(1))
+    const { rerender } = render(<MessageFeed {...FEED_PROPS} messages={storedMessages()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reaccionar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reaccionar con 🎉' }))
+
+    expect(storedMessages()[0]!.reactions?.['🎉']).toEqual([selfId])
+    rerender(<MessageFeed {...FEED_PROPS} messages={storedMessages()} />)
+    expect(screen.getByRole('button', { name: '🎉 1' })).toHaveAttribute('aria-pressed', 'true')
   })
 })

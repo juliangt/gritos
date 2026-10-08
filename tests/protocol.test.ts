@@ -9,9 +9,11 @@ import {
   MAX_MESSAGE_TTL_S,
   MAX_PAYLOAD_BYTES,
   MAX_PLAINTEXT_LENGTH,
+  MAX_REACT_BATCH,
   MAX_RECEIPT_BATCH,
   MIN_MESSAGE_TTL_S,
   PROTOCOL_VERSION,
+  REACT_EMOJIS,
   SEEN_IDS_CAP,
   createEnvelope,
   filterDmForSelf,
@@ -19,6 +21,8 @@ import {
   isWithinFreshnessWindow,
   markSeen,
   parseEnvelope,
+  parseReact,
+  reactSeenKey,
   shouldProcess,
   validateReceipt,
   type Envelope,
@@ -520,5 +524,120 @@ describe('validateReceipt (spec §7.1: batch ≤ 50)', () => {
     expect(validateReceipt({ ids: 'a' })).toBe(false)
     expect(validateReceipt(null)).toBe(false)
     expect(validateReceipt('ids')).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #98 — emoji reactions (phase 1): whitelist, payload validation,
+// replay dedup key
+// ---------------------------------------------------------------------------
+
+function reactPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return { ids: ['m-1'], emo: '👍', on: true, ...overrides }
+}
+
+describe('REACT_EMOJIS (issue #98: the canonical whitelist)', () => {
+  it('is exactly the seven proposed emoji', () => {
+    expect([...REACT_EMOJIS]).toEqual(['👍', '❤️', '😂', '😮', '😢', '🎉', '👎'])
+  })
+})
+
+describe('parseReact (issue #98, spec §7.1/§9.5: cosmetic class, drop-whole)', () => {
+  it('accepts and normalizes a valid payload', () => {
+    expect(parseReact(reactPayload())).toEqual({ ids: ['m-1'], emo: '👍', on: true })
+  })
+
+  it('accepts every whitelisted emoji', () => {
+    for (const emo of REACT_EMOJIS) {
+      expect(parseReact(reactPayload({ emo }))).toEqual({ ids: ['m-1'], emo, on: true })
+    }
+  })
+
+  it('drops a non-whitelisted or non-string emo whole', () => {
+    expect(parseReact(reactPayload({ emo: '🚀' }))).toBeNull()
+    expect(parseReact(reactPayload({ emo: 'like' }))).toBeNull()
+    expect(parseReact(reactPayload({ emo: '' }))).toBeNull()
+    expect(parseReact(reactPayload({ emo: 7 }))).toBeNull()
+    expect(parseReact(reactPayload({ emo: undefined }))).toBeNull()
+  })
+
+  it('requires on to be a boolean', () => {
+    expect(parseReact(reactPayload({ on: false }))).toEqual({ ids: ['m-1'], emo: '👍', on: false })
+    expect(parseReact(reactPayload({ on: 'true' }))).toBeNull()
+    expect(parseReact(reactPayload({ on: 1 }))).toBeNull()
+    expect(parseReact(reactPayload({ on: null }))).toBeNull()
+    expect(parseReact(reactPayload({ on: undefined }))).toBeNull()
+  })
+
+  it('accepts batches of 1..MAX_REACT_BATCH non-empty string ids', () => {
+    const fifty = Array.from({ length: MAX_REACT_BATCH }, (_, i) => `id-${i}`)
+    expect(parseReact(reactPayload({ ids: fifty }))?.ids).toEqual(fifty)
+  })
+
+  it('drops oversized, empty or malformed id batches whole', () => {
+    const fiftyOne = Array.from({ length: MAX_REACT_BATCH + 1 }, (_, i) => `id-${i}`)
+    expect(parseReact(reactPayload({ ids: fiftyOne }))).toBeNull()
+    expect(parseReact(reactPayload({ ids: [] }))).toBeNull()
+    expect(parseReact(reactPayload({ ids: 'm-1' }))).toBeNull()
+    expect(parseReact(reactPayload({ ids: ['m-1', 42] }))).toBeNull()
+    expect(parseReact(reactPayload({ ids: ['m-1', ''] }))).toBeNull()
+    expect(parseReact(reactPayload({ ids: null }))).toBeNull()
+  })
+
+  it('dedups ids keeping first-occurrence order', () => {
+    expect(parseReact(reactPayload({ ids: ['b', 'a', 'b', 'c', 'a'] }))?.ids).toEqual([
+      'b',
+      'a',
+      'c',
+    ])
+  })
+
+  it('keeps a valid directed `to` and drops a malformed one whole', () => {
+    expect(parseReact(reactPayload({ to: 'peer-9' }))).toEqual({
+      ids: ['m-1'],
+      emo: '👍',
+      on: true,
+      to: 'peer-9',
+    })
+    expect(parseReact(reactPayload({ to: '' }))).toBeNull()
+    expect(parseReact(reactPayload({ to: 42 }))).toBeNull()
+    expect(parseReact(reactPayload({ to: null }))).toBeNull()
+  })
+
+  it('drops non-object payloads', () => {
+    expect(parseReact(null)).toBeNull()
+    expect(parseReact('react')).toBeNull()
+    expect(parseReact(['m-1'])).toBeNull()
+  })
+})
+
+describe('reactSeenKey (issue #98: content-keyed replay dedup)', () => {
+  it('keys identical payloads identically', () => {
+    const first = reactSeenKey(parseReact(reactPayload())!)
+    const second = reactSeenKey(parseReact(reactPayload())!)
+    expect(first).toBe(second)
+  })
+
+  it('keys directed payloads apart from broadcasts with the same ids', () => {
+    const broadcast = reactSeenKey(parseReact(reactPayload())!)
+    const directed = reactSeenKey(parseReact(reactPayload({ to: 'peer-9' }))!)
+    expect(directed).not.toBe(broadcast)
+  })
+
+  it('keys the inverse toggle apart so toggles survive dedup', () => {
+    const on = reactSeenKey(parseReact(reactPayload({ on: true }))!)
+    const off = reactSeenKey(parseReact(reactPayload({ on: false }))!)
+    expect(off).not.toBe(on)
+  })
+
+  it('keys different emo or id sets apart', () => {
+    const base = reactSeenKey(parseReact(reactPayload())!)
+    expect(reactSeenKey(parseReact(reactPayload({ emo: '🎉' }))!)).not.toBe(base)
+    expect(reactSeenKey(parseReact(reactPayload({ ids: ['m-2'] }))!)).not.toBe(base)
+    expect(reactSeenKey(parseReact(reactPayload({ ids: ['m-1', 'm-2'] }))!)).not.toBe(base)
+  })
+
+  it('never collides with the envelope-id namespace of the shared seen set', () => {
+    expect(reactSeenKey(parseReact(reactPayload())!)).toMatch(/^react:/)
   })
 })

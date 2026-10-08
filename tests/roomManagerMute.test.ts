@@ -294,6 +294,32 @@ describe('typing and system lines (issue #95)', () => {
   })
 })
 
+describe('reactions stay mute-gated (issue #98 through the issue #95 gate)', () => {
+  it('delivers reactions while unmuted and drops a muted peer before the seam', async () => {
+    const { roomId, room } = await join()
+    await fakePeerJoins(room, A)
+    await flushMicrotasks()
+    const deliveries: unknown[] = []
+    const unsubscribe = manager.onReact((rid, peerId, payload) => {
+      deliveries.push({ roomId: rid, peerId, payload })
+    })
+
+    // Unmuted, a reaction flows through the seam (phase 1: no store effect
+    // beyond the join line fakePeerJoins already produced).
+    room.receive('react', { ids: ['m-1'], emo: '👍', on: true }, A.id)
+    expect(deliveries).toEqual([
+      { roomId, peerId: A.id, payload: { ids: ['m-1'], emo: '👍', on: true } },
+    ])
+    expect(storedRoom(roomId).messages.filter((message) => message.kind === 'user')).toHaveLength(0)
+
+    // Muted, the gate drops it like the typing flags (cosmetic class).
+    useSettingsStore.getState().muteFingerprint(A.fingerprint, 'zorro-bravo')
+    room.receive('react', { ids: ['m-2'], emo: '🎉', on: true }, A.id)
+    expect(deliveries).toHaveLength(1)
+    unsubscribe()
+  })
+})
+
 describe('receipts and ping/pong stay honest (issue #95)', () => {
   it('still processes receipt, ping and pong from a muted peer', async () => {
     const { roomId, room } = await join()
