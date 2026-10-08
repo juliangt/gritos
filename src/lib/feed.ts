@@ -82,6 +82,44 @@ export function unmuteSystemLine(nickname: string): string {
   return `@${nickname} ya no está silenciado`
 }
 
+// ---------------------------------------------------------------------------
+// Issue #99 — local feed lines for the slash commands (executor feedback and
+// errors). Like the mute lines above, they are never sent over the wire.
+// ---------------------------------------------------------------------------
+
+/** Inline hint for an unknown verb — never sent, points at /ayuda. */
+export const UNKNOWN_COMMAND_HINT = 'Comando desconocido — /ayuda'
+
+/** Error line when a room-scoped command (/limpiar, /salir) has no target. */
+export const NO_ACTIVE_ROOM_TEXT = 'No hay ninguna sala activa.'
+
+/** Confirmation line after a successful /nick (the manager re-announced presence). */
+export function nicknameChangedLine(nickname: string): string {
+  return `Apodo cambiado a «${nickname}»`
+}
+
+/**
+ * /salas output: one line listing the active rooms in join order, each with
+ * its unread badge when it has pending messages.
+ */
+export function activeRoomsLine(rooms: ReadonlyArray<{ name: string; unread: number }>): string {
+  if (rooms.length === 0) return 'No hay salas activas.'
+  const parts = rooms.map((room) =>
+    room.unread > 0 ? `#${room.name} (${room.unread} sin leer)` : `#${room.name}`,
+  )
+  return `Salas activas: ${parts.join(', ')}`
+}
+
+/** /dm error: no current peer carries that nickname (case-insensitive match). */
+export function dmPeerNotFoundLine(nickname: string): string {
+  return `Nadie se llama «${nickname}» entre tus pares.`
+}
+
+/** /dm error: several peers share the nickname; the peer list disambiguates. */
+export function dmAmbiguousLine(nickname: string): string {
+  return `Varios pares se llaman «${nickname}»: abre la conversación desde la lista de pares.`
+}
+
 /**
  * Typing indicator line (RF-03): one known nick → 'nick está escribiendo…',
  * several → 'N personas están escribiendo…', none → null (bar hidden).

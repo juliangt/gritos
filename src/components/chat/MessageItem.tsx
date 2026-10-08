@@ -201,7 +201,17 @@ export const MessageItem = memo(function MessageItem(props: {
         )}
       </div>
       <div className="max-w-[85%] break-words text-sm leading-relaxed">
-        <MarkdownRenderer text={props.message.text} mentions={props.mentionCandidates} />
+        {props.message.isAction === true ? (
+          // Issue #99 — /me rendering convention: the italic «*nick acción*»
+          // line, no Markdown parsing (a literal '*' inside the action prose
+          // must not flip emphasis). LOCAL ONLY: the wire envelope carries no
+          // marker (parseEnvelope drops unknown fields), so a peer's copy of
+          // the same message renders as a plain row — the documented
+          // asymmetry of the no-protocol-change convention.
+          <em>{`*${displayName} ${props.message.text}*`}</em>
+        ) : (
+          <MarkdownRenderer text={props.message.text} mentions={props.mentionCandidates} />
+        )}
       </div>
       {barVisible && (
         <div role="group" aria-label={REACTION_BAR_LABEL} className="mt-0.5 flex gap-0.5">

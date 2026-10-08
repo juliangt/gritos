@@ -5,6 +5,7 @@ import { DmList } from './DmList'
 import { JoinRoomPopover } from './JoinRoomPopover'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
+import { useUiStore } from '../../stores/useUiStore'
 import { useRoomManager } from '../../hooks/useRoomManager'
 
 /**
@@ -21,12 +22,19 @@ export function Sidebar(props: { onRoomOpened?: () => void; onOpenManualDm?: () 
   const recentRooms = useAppStore((state) => state.recentRooms)
   const activeView = useAppStore((state) => state.activeView)
   const rememberRooms = useSettingsStore((state) => state.settings.rememberRooms)
+  // Issue #99 — /sala on a room that may need a password (or any executor
+  // path) opens this popover prefilled through the ui-store seam; the local
+  // toggle keeps working as before. Either source opens the same form, and
+  // either close path clears both.
+  const joinPopoverName = useUiStore((state) => state.joinPopoverName)
+  const closeJoinPopover = useUiStore((state) => state.closeJoinPopover)
   const { joinRoomFocused, leaveRoom } = useRoomManager()
 
   const [joinOpen, setJoinOpen] = useState(false)
   // Last joinByName rejection; rendered inside the open popover (issue #87),
   // so it is always set together with joinOpen and cleared on close/success.
   const [joinError, setJoinError] = useState<string | null>(null)
+  const joinFormOpen = joinOpen || joinPopoverName !== null
 
   const roomList = Object.values(rooms)
   // Issue #97 — room-backed and manual channels render as one list; manual
@@ -76,24 +84,28 @@ export function Sidebar(props: { onRoomOpened?: () => void; onOpenManualDm?: () 
         <button
           type="button"
           onClick={() => setJoinOpen((open) => !open)}
-          aria-expanded={joinOpen}
+          aria-expanded={joinFormOpen}
           className="rounded-md border border-border px-2 py-1.5 text-left text-sm font-medium hover:border-accent"
         >
           [+ Unirse]
         </button>
-        {joinOpen && (
+        {joinFormOpen && (
           <JoinRoomPopover
             // Issue #87: a rejected joinByName (e.g. the RF-02 cap) surfaces
             // inside this popover; onJoined/onDismiss clear it with it.
+            // Issue #99: an executor request prefills the name.
+            initialName={joinPopoverName ?? undefined}
             managerError={joinError}
             onJoined={() => {
               setJoinOpen(false)
               setJoinError(null)
+              closeJoinPopover()
               props.onRoomOpened?.()
             }}
             onDismiss={() => {
               setJoinOpen(false)
               setJoinError(null)
+              closeJoinPopover()
             }}
           />
         )}

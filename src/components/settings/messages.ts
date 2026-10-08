@@ -237,3 +237,35 @@ export const MANUAL_PEER_ERROR_TEXT: Partial<
   'not-connected': 'El canal no está conectado.',
   'too-long': 'El mensaje supera el límite de 4000 caracteres.',
 }
+
+// ---------------------------------------------------------------------------
+// Issue #99 — slash commands: the /ayuda overlay and the /limpiar
+// confirmation dialog. The command list itself renders straight from
+// SLASH_COMMANDS (verb + usage + help live in the parser table); only the
+// overlay chrome and the escape-hatch explanation live here. Local feed-line
+// wording (command feedback/errors) is in lib/feed.ts, per the issue-#95
+// precedent.
+// ---------------------------------------------------------------------------
+
+/** /ayuda overlay — dialog accessible name. */
+export const SLASH_HELP_LABEL = 'Comandos de barra'
+
+/** /ayuda overlay — heading. */
+export const SLASH_HELP_TITLE = 'Comandos'
+
+/**
+ * /ayuda overlay — the escape hatch for literal messages starting with '/',
+ * documented here per the issue ("Documented in /ayuda").
+ */
+export const SLASH_HELP_ESCAPE_HINT =
+  'Para enviar un texto que empiece por «/», antepón una barra invertida: \\/hola envía «/hola».'
+
+/** /limpiar — ConfirmDialog title. */
+export const CLEAR_FEED_DIALOG_TITLE = 'Borrar el historial local'
+
+/** /limpiar — ConfirmDialog body: what is (and is not) destroyed. */
+export const CLEAR_FEED_DIALOG_BODY =
+  'Se borrarán los mensajes de esta sala solo en tu navegador. La conexión no se cierra y tus pares conservan su historial. ¿Continuar?'
+
+/** /limpiar — ConfirmDialog confirm button. */
+export const CLEAR_FEED_DIALOG_CONFIRM = 'Borrar'

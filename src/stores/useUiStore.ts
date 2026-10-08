@@ -15,9 +15,41 @@ export interface UiPersisted {
 
 export const DEFAULT_UI: UiPersisted = { sidebarCollapsed: false }
 
-export interface UiStore extends UiPersisted {
+/**
+ * Issue #99 — session-only UI seams the slash-command executor flips. Never
+ * persisted (`partialize` keeps only `sidebarCollapsed`): they describe
+ * transient intents (open a popover, show an overlay, confirm a wipe, offer
+ * a password form) that must die with the tab.
+ */
+export interface UiSession {
+  /** Room name the sidebar's JoinRoomPopover opens prefilled with; null = closed. */
+  joinPopoverName: string | null
+  /** The /ayuda overlay. */
+  helpOpen: boolean
+  /** The /limpiar confirmation dialog. */
+  clearFeedOpen: boolean
+  /**
+   * Room joined by name whose join may still need its password (the issue
+   * #41 recovery pattern, armed by /sala): ChatLayout offers the prefilled
+   * password form when that room exhausts the not-found heuristic.
+   */
+  recoveryRoom: string | null
+}
+
+export interface UiStore extends UiPersisted, UiSession {
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
+  /** /sala on a room that may need a password: opens the popover prefilled. */
+  openJoinPopover: (name: string) => void
+  closeJoinPopover: () => void
+  openHelp: () => void
+  closeHelp: () => void
+  /** /limpiar: opens the confirmation; the dialog owns the actual wipe. */
+  requestClearFeed: () => void
+  cancelClearFeed: () => void
+  /** /sala joined a room by name: arm its password-recovery offer. */
+  armPasswordRecovery: (name: string) => void
+  clearPasswordRecovery: () => void
 }
 
 /** Same defensive raw-JSON storage as the settings store (§8.2). */
@@ -47,8 +79,20 @@ export const useUiStore = create<UiStore>()(
   persist(
     (set) => ({
       sidebarCollapsed: DEFAULT_UI.sidebarCollapsed,
+      joinPopoverName: null,
+      helpOpen: false,
+      clearFeedOpen: false,
+      recoveryRoom: null,
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      openJoinPopover: (joinPopoverName) => set({ joinPopoverName }),
+      closeJoinPopover: () => set({ joinPopoverName: null }),
+      openHelp: () => set({ helpOpen: true }),
+      closeHelp: () => set({ helpOpen: false }),
+      requestClearFeed: () => set({ clearFeedOpen: true }),
+      cancelClearFeed: () => set({ clearFeedOpen: false }),
+      armPasswordRecovery: (recoveryRoom) => set({ recoveryRoom }),
+      clearPasswordRecovery: () => set({ recoveryRoom: null }),
     }),
     {
       name: UI_STORAGE_KEY,

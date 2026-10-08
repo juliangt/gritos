@@ -8,6 +8,8 @@ import { NetworkErrorBanner } from './NetworkErrorBanner'
 import { JoinRoomPopover } from '../sidebar/JoinRoomPopover'
 import { DmHeader } from '../dm/DmHeader'
 import { ManualDmWizard } from '../dm/ManualDmWizard'
+import { SlashHelpModal } from './SlashHelpModal'
+import { ConfirmDialog } from '../common/ConfirmDialog'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useUiStore } from '../../stores/useUiStore'
@@ -19,6 +21,11 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
 import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
 import { joinRoom } from '../../lib/p2p/roomManager'
+import {
+  CLEAR_FEED_DIALOG_BODY,
+  CLEAR_FEED_DIALOG_CONFIRM,
+  CLEAR_FEED_DIALOG_TITLE,
+} from '../settings/messages'
 
 /** Spec §10.1 — at this width the sidebar becomes an overlay drawer. */
 const MOBILE_QUERY = '(max-width: 768px)'
@@ -41,6 +48,15 @@ export function ChatLayout() {
   const isMobile = useMediaQuery(MOBILE_QUERY)
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
+  // Issue #99 — slash-command seams: the /ayuda overlay, the /limpiar
+  // confirmation and the password-recovery offer armed by a /sala join.
+  // All session-only ui-store fields (never persisted).
+  const helpOpen = useUiStore((state) => state.helpOpen)
+  const closeHelp = useUiStore((state) => state.closeHelp)
+  const clearFeedOpen = useUiStore((state) => state.clearFeedOpen)
+  const cancelClearFeed = useUiStore((state) => state.cancelClearFeed)
+  const slashRecoveryRoom = useUiStore((state) => state.recoveryRoom)
+  const clearPasswordRecovery = useUiStore((state) => state.clearPasswordRecovery)
   const activeView = useAppStore((state) => state.activeView)
   const rooms = useAppStore((state) => state.rooms)
   const dms = useAppStore((state) => state.dms)
@@ -212,9 +228,12 @@ export function ChatLayout() {
             the not-found heuristic may simply need its password (RF-05:
             indistinguishable from a nonexistent room): offer the regular
             join form, prefilled, so the password can be entered. The form
-            never reaches the URL or storage. */}
+            never reaches the URL or storage. Issue #99 — /sala arms the
+            same recovery for its name-only join (password rooms are
+            undetectable from the name): the first source with a matching
+            name wins, and dismissing either clears both. */}
         {activeRoom !== null &&
-          linkedRoomName === activeRoom.name &&
+          (linkedRoomName ?? slashRecoveryRoom) === activeRoom.name &&
           activeRoom.status === 'error' && (
             <section
               aria-label="Unirse con contraseña"
@@ -227,7 +246,10 @@ export function ChatLayout() {
                   // Keeping the name on join lets the form come back when a
                   // wrong password exhausts the heuristic again; only an
                   // explicit dismiss retires the recovery offer.
-                  onDismiss={() => setLinkedRoomName(null)}
+                  onDismiss={() => {
+                    setLinkedRoomName(null)
+                    clearPasswordRecovery()
+                  }}
                 />
               </div>
             </section>
@@ -299,6 +321,25 @@ export function ChatLayout() {
       {/* Issue #97 — one wizard instance for both entry points; Esc and the
           backdrop cancel the pending flow (engine dispose, no traces). */}
       <ManualDmWizard open={manualWizardOpen} onClose={() => setManualWizardOpen(false)} />
+
+      {/* Issue #99 — /ayuda overlay: the command table renders straight from
+          SLASH_COMMANDS; Esc/backdrop close through the Modal base. */}
+      <SlashHelpModal open={helpOpen} onClose={closeHelp} />
+
+      {/* Issue #99 — /limpiar confirmation (the mute-with-DM ConfirmDialog
+          pattern): only an explicit confirm wipes the ACTIVE room's local
+          feed; cancel and Esc leave it untouched. */}
+      <ConfirmDialog
+        open={clearFeedOpen}
+        title={CLEAR_FEED_DIALOG_TITLE}
+        body={CLEAR_FEED_DIALOG_BODY}
+        confirmLabel={CLEAR_FEED_DIALOG_CONFIRM}
+        onConfirm={() => {
+          cancelClearFeed()
+          if (activeView?.kind === 'room') useAppStore.getState().clearRoomFeed(activeView.id)
+        }}
+        onCancel={cancelClearFeed}
+      />
     </div>
   )
 }

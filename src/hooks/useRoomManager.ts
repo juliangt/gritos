@@ -43,7 +43,7 @@ export interface RoomManagerApi {
     password?: string,
   ) => Promise<{ roomId: string | null; error: string | null }>
   leaveRoom: (roomId: string) => void
-  sendChat: (roomId: string, text: string, ttl?: number) => void
+  sendChat: (roomId: string, text: string, ttl?: number, opts?: { isAction?: boolean }) => void
   sendTyping: (roomId: string, on: boolean) => void
   /**
    * Issue #98 — optimistic local reaction toggle; also sends the `react`
@@ -140,10 +140,14 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
   }, [])
 
   // Issue #96 — the optional ttl (seconds) threads through to the envelope;
-  // Phase 3 wires the composer selector to it.
-  const chat = useCallback((roomId: string, text: string, ttl?: number) => {
-    sendChat(roomId, text, ttl)
-  }, [])
+  // Phase 3 wires the composer selector to it. Issue #99 — the /me options
+  // (local isAction echo marker) ride along; the envelope stays untouched.
+  const chat = useCallback(
+    (roomId: string, text: string, ttl?: number, opts?: { isAction?: boolean }) => {
+      sendChat(roomId, text, ttl, opts)
+    },
+    [],
+  )
 
   const typing = useCallback((roomId: string, on: boolean) => {
     sendTyping(roomId, on)
