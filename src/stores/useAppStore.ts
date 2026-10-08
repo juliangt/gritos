@@ -162,6 +162,13 @@ export interface DmChannel {
    * explicit hint instead of letting messages vanish silently.
    */
   legacyPeer: boolean
+  /**
+   * Issue #97 (spec §12.2) — additive marker, true ONLY on trackerless
+   * manual channels (keyed `manual:<fingerprint>` in `manualDms`): DmList
+   * shows the «(sin sala)» marker for them. Room-backed channels never set
+   * it; the room-DM shapes and behavior are untouched.
+   */
+  manual?: boolean
 }
 
 export type ActiveView = { kind: 'room'; id: string } | { kind: 'dm'; peerId: string }
@@ -173,6 +180,14 @@ export interface AppState {
   activeView: ActiveView | null
   /** Key: peerId. */
   dms: Record<string, DmChannel>
+  /**
+   * Issue #97 (spec §12.2) — trackerless manual DM channels, keyed
+   * `manual:<canonical-fingerprint>` (the fingerprint-keyed TOFU convention;
+   * manual peers have no Trystero peerId). Same DmChannel shape as `dms`, so
+   * MessageFeed/DmHeader/ChatInput work unchanged. Session-only like every
+   * channel here: nothing is persisted beyond the `gritos:tofu` pins.
+   */
+  manualDms: Record<string, DmChannel>
   /** Room names only, never content. */
   recentRooms: string[]
 }
@@ -182,6 +197,7 @@ export const INITIAL_APP_STATE: AppState = {
   rooms: {},
   activeView: null,
   dms: {},
+  manualDms: {},
   recentRooms: [],
 }
 
@@ -329,6 +345,18 @@ export interface AppActions {
    * room manager on every peer/room/`ephkeys` change.
    */
   setDmLegacyPeer: (peerId: string, legacyPeer: boolean) => void
+  /**
+   * Issue #97 (spec §12.2) — the manual-channel mirrors of the `dms` slice
+   * above, over `manualDms` (key `manual:<canonical-fingerprint>`). Same
+   * guarded-write discipline; fed by the manualPeer engine callbacks.
+   */
+  ensureManualDmChannel: (key: string, peerNick: string, peerFingerprint: string | null) => void
+  appendManualDmMessage: (key: string, message: Message) => void
+  markManualDmMessagesDelivered: (key: string, ids: string[]) => void
+  setManualDmAvailable: (key: string, available: boolean) => void
+  /** ts = null clears the peer's typing entry. */
+  setManualDmTyping: (key: string, ts: number | null) => void
+  setManualDmKeyChanged: (key: string, keyChanged: boolean) => void
 }
 
 export const useAppStore = create<AppState & AppActions>()((set) => ({
@@ -454,10 +482,27 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
           },
         }
       }
-      if (rooms === null && dms === null) return state
+      // Issue #97 — the manual channels ride the same sweep: their ttl
+      // messages expire on the receiver clock exactly like room DMs.
+      let manualDms: Record<string, DmChannel> | null = null
+      for (const [key, channel] of Object.entries(state.manualDms)) {
+        const { kept, expired } = partitionExpired(channel.messages, now)
+        if (expired.length === 0) continue
+        for (const message of expired) removed.push(message.id)
+        manualDms = {
+          ...(manualDms ?? state.manualDms),
+          [key]: {
+            ...channel,
+            messages: kept,
+            expiredCount: channel.expiredCount + expired.length,
+          },
+        }
+      }
+      if (rooms === null && dms === null && manualDms === null) return state
       const patch: Partial<AppState> = {}
       if (rooms !== null) patch.rooms = rooms
       if (dms !== null) patch.dms = dms
+      if (manualDms !== null) patch.manualDms = manualDms
       return patch
     })
     return removed
@@ -499,6 +544,18 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
             dms: {
               ...state.dms,
               [view.peerId]: { ...channel, unread: 0 },
+            },
+          }
+        }
+        // Issue #97 — a manual channel clears its badge the same way (the
+        // key namespaces keep `dms` and `manualDms` disjoint).
+        const manual = state.manualDms[view.peerId]
+        if (manual !== undefined && manual.unread > 0) {
+          return {
+            activeView: view,
+            manualDms: {
+              ...state.manualDms,
+              [view.peerId]: { ...manual, unread: 0 },
             },
           }
         }
@@ -611,5 +668,107 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       const channel = state.dms[peerId]
       if (channel === undefined || channel.legacyPeer === legacyPeer) return state
       return { dms: { ...state.dms, [peerId]: { ...channel, legacyPeer } } }
+    }),
+
+  // ---------------------------------------------------------------------------
+  // Issue #97 (spec §12.2) — manual channel slice: line-for-line mirrors of
+  // the `dms` actions above over `manualDms`, plus the `manual: true` marker.
+  // ---------------------------------------------------------------------------
+
+  ensureManualDmChannel: (key, peerNick, peerFingerprint) =>
+    set((state) => {
+      const existing = state.manualDms[key]
+      if (existing === undefined) {
+        return {
+          manualDms: {
+            ...state.manualDms,
+            [key]: {
+              peerId: key,
+              peerNick,
+              peerFingerprint,
+              messages: [],
+              unread: 0,
+              expiredCount: 0,
+              available: false,
+              typing: {},
+              keyChanged: false,
+              legacyPeer: false,
+              manual: true,
+            },
+          },
+        }
+      }
+      // Same TOFU discipline as `ensureDmChannel`: a flagged channel keeps
+      // its pinned fingerprint — a rotated live value never overwrites it.
+      if (existing.keyChanged) return state
+      if (peerFingerprint !== null && existing.peerFingerprint !== peerFingerprint) {
+        return {
+          manualDms: { ...state.manualDms, [key]: { ...existing, peerFingerprint } },
+        }
+      }
+      return state
+    }),
+
+  appendManualDmMessage: (key, message) =>
+    set((state) => {
+      const channel = state.manualDms[key]
+      if (channel === undefined) return state
+      const messages = appendMessageCapped(channel.messages, message)
+      const isActiveView = state.activeView?.kind === 'dm' && state.activeView.peerId === key
+      const countsAsUnread =
+        message.authorId !== 'self' && message.kind !== 'system' && !isActiveView
+      return {
+        manualDms: {
+          ...state.manualDms,
+          [key]: {
+            ...channel,
+            messages,
+            unread: countsAsUnread ? channel.unread + 1 : channel.unread,
+          },
+        },
+      }
+    }),
+
+  markManualDmMessagesDelivered: (key, ids) =>
+    set((state) => {
+      const channel = state.manualDms[key]
+      if (channel === undefined) return state
+      const idSet = new Set(ids)
+      let changed = false
+      const messages = channel.messages.map((message) => {
+        if (message.authorId !== 'self' || !idSet.has(message.id)) return message
+        if (message.status === 'delivered') return message
+        changed = true
+        return { ...message, status: 'delivered' as const }
+      })
+      return changed
+        ? { manualDms: { ...state.manualDms, [key]: { ...channel, messages } } }
+        : state
+    }),
+
+  setManualDmAvailable: (key, available) =>
+    set((state) => {
+      const channel = state.manualDms[key]
+      if (channel === undefined || channel.available === available) return state
+      // true→false keeps the history in memory (RF-04 analog) — flag only.
+      return { manualDms: { ...state.manualDms, [key]: { ...channel, available } } }
+    }),
+
+  setManualDmTyping: (key, ts) =>
+    set((state) => {
+      const channel = state.manualDms[key]
+      if (channel === undefined) return state
+      if (ts === null && !(key in channel.typing)) return state
+      const typing = { ...channel.typing }
+      if (ts === null) delete typing[key]
+      else typing[key] = ts
+      return { manualDms: { ...state.manualDms, [key]: { ...channel, typing } } }
+    }),
+
+  setManualDmKeyChanged: (key, keyChanged) =>
+    set((state) => {
+      const channel = state.manualDms[key]
+      if (channel === undefined || channel.keyChanged === keyChanged) return state
+      return { manualDms: { ...state.manualDms, [key]: { ...channel, keyChanged } } }
     }),
 }))

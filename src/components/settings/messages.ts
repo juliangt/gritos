@@ -98,3 +98,117 @@ export const SIN_EXPIRY_LABEL = 'Sin caducidad'
 export const TTL_30S_LABEL = '30 segundos'
 export const TTL_5M_LABEL = '5 minutos'
 export const TTL_1H_LABEL = '1 hora'
+
+// ---------------------------------------------------------------------------
+// Issue #97 (spec §12.2) — trackerless manual DMs: wizard strings, entry
+// points and the DmList marker. All Spanish wording lives here so components
+// and tests share the exact spec texts.
+// ---------------------------------------------------------------------------
+
+/** Sidebar DM section entry button (visible text and accessible name). */
+export const MANUAL_DM_INVITE_ENTRY = '+ invitación'
+
+/** Tooltip of the sidebar entry button. */
+export const MANUAL_DM_INVITE_ENTRY_TITLE =
+  'Iniciar una conversación directa sin trackers, intercambiando invitaciones'
+
+/** Tracker-error banner shortcut (visible text and accessible name). */
+export const MANUAL_DM_BANNER_SHORTCUT = 'o conéctate sin trackers'
+
+/** DmList marker on manual channels (spec §12.2: «(sin sala)»). */
+export const MANUAL_DM_NO_SALA_MARKER = '(sin sala)'
+
+/** Tooltip explaining the DmList marker. */
+export const MANUAL_DM_NO_SALA_TITLE = 'Conversación manual creada mediante invitación, sin sala'
+
+/** Wizard dialog accessible name. */
+export const MANUAL_DM_WIZARD_LABEL = 'Conexión manual sin trackers'
+
+/** Role-pick intro line. */
+export const MANUAL_DM_INTRO_TEXT =
+  'Crea una conversación directa sin trackers: intercambiáis dos invitaciones por cualquier canal (correo, otro mensajero) y la conexión es directa entre vosotros.'
+
+/** Role-pick button: role A (creates the invite). */
+export const MANUAL_DM_ROLE_INVITE_BUTTON = 'Crear invitación'
+
+/** Role-pick button: role B (answers an invite). */
+export const MANUAL_DM_ROLE_ANSWER_BUTTON = 'Responder invitación'
+
+/** Exact §12.2 warning shown wherever a blob is displayed for copying. */
+export const MANUAL_DM_NETWORK_WARNING = 'La invitación puede contener información de tu red'
+
+/** Role A — accessible name of the readonly textarea holding the invite blob. */
+export const MANUAL_DM_INVITE_BLOB_LABEL = 'Tu invitación: cópiala y envíasela a tu interlocutor'
+
+/** Role B — accessible name of the paste textarea for A's invite. */
+export const MANUAL_DM_PASTE_INVITE_LABEL = 'Pega aquí la invitación que te han enviado'
+
+/** Role B — button that validates the pasted invite and produces the answer. */
+export const MANUAL_DM_GENERATE_ANSWER_BUTTON = 'Generar respuesta'
+
+/** Role A — accessible name of the paste textarea for B's answer. */
+export const MANUAL_DM_PASTE_ANSWER_LABEL = 'Pega aquí la respuesta de tu interlocutor'
+
+/** Role A — button that validates the pasted answer and starts connecting. */
+export const MANUAL_DM_CONNECT_BUTTON = 'Conectar'
+
+/** Copy button next to a displayed blob (clipboard with manual fallback). */
+export const MANUAL_DM_COPY_BUTTON = 'Copiar'
+
+/** Transient feedback after a successful copy (aria-live). */
+export const MANUAL_DM_COPIED_FEEDBACK = 'Copiado'
+
+/** Progress: the invite/answer is being generated (ICE gathering, §12.2). */
+export const MANUAL_DM_PROGRESS_GENERATING = 'Generando invitación…'
+
+/** Progress: waiting for the WebRTC handshake to finish. */
+export const MANUAL_DM_PROGRESS_ESTABLISHING = 'Estableciendo canal P2P…'
+
+/** Progress/connection status vocabulary (§10.3) reused at wizard connect. */
+export const MANUAL_DM_PROGRESS_CONNECTED = 'Canal P2P establecido'
+
+/** Cancel control, available at every wizard state (§12.2). */
+export const MANUAL_DM_CANCEL_BUTTON = 'Cancelar'
+
+/** Retry control after a guard failure (visible error + retry, RNF-07). */
+export const MANUAL_DM_RETRY_BUTTON = 'Volver a empezar'
+
+/** Failure text when the link drops after connecting (RF-04 vocabulary). */
+export const MANUAL_DM_DROPPED_TEXT = 'El par se ha desconectado'
+
+/**
+ * Inline errors for a rejected paste, keyed by the engine's ManualBlobError
+ * reason (§12.2 validation order). The wizard stays open: the paste can be
+ * corrected and retried.
+ */
+export const MANUAL_BLOB_ERROR_TEXT: Record<
+  'encoding' | 'version' | 'role' | 'keys' | 'fingerprint' | 'sdp',
+  string
+> = {
+  encoding: 'El texto pegado no es una invitación válida.',
+  version: 'La invitación usa una versión desconocida de formato.',
+  role: 'El texto pegado no es del tipo esperado (invitación o respuesta).',
+  keys: 'La invitación contiene claves inválidas.',
+  fingerprint: 'La huella no coincide con la clave: la invitación está corrupta o manipulada.',
+  sdp: 'La invitación contiene una descripción de conexión inválida.',
+}
+
+/** Inline errors for engine rejections beyond the blob parse. */
+export const MANUAL_PEER_ERROR_TEXT: Partial<
+  Record<
+    | 'bad-blob'
+    | 'fingerprint-mismatch'
+    | 'connect-timeout'
+    | 'illegal-transition'
+    | 'not-connected'
+    | 'too-long',
+    string
+  >
+> = {
+  'bad-blob': 'El texto pegado no es una respuesta válida para esta invitación.',
+  'fingerprint-mismatch': 'La huella de la respuesta no coincide con la esperada.',
+  'connect-timeout': 'La conexión no se estableció a tiempo. Vuelve a intentarlo.',
+  'illegal-transition': 'El asistente ya no está en el estado esperado. Vuelve a empezar.',
+  'not-connected': 'El canal no está conectado.',
+  'too-long': 'El mensaje supera el límite de 4000 caracteres.',
+}

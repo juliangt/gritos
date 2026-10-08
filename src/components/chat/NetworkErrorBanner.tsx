@@ -3,6 +3,7 @@ import { useAppStore, type AppState } from '../../stores/useAppStore'
 import { SettingsModal } from '../settings/SettingsModal'
 import { StatusDot } from '../common/StatusDot'
 import { INSECURE_CONTEXT_BANNER_TEXT, NETWORK_ERROR_BANNER_TEXT } from '../../lib/rooms'
+import { MANUAL_DM_BANNER_SHORTCUT } from '../settings/messages'
 
 /**
  * Network error banner (RNF-07 — never an indistinguishable silence):
@@ -34,7 +35,7 @@ interface BannerState {
   dismissed: string[]
 }
 
-export function NetworkErrorBanner() {
+export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
   const joinedErrorIds = useAppStore(selectErrorRoomIds)
   const [state, setState] = useState<BannerState>({ lastJoined: joinedErrorIds, dismissed: [] })
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -99,6 +100,16 @@ export function NetworkErrorBanner() {
           >
             Abrir ajustes
           </button>
+          {props.onOpenManualDm !== undefined && (
+            <button
+              type="button"
+              onClick={props.onOpenManualDm}
+              title="Iniciar una conversación directa sin trackers"
+              className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
+            >
+              {MANUAL_DM_BANNER_SHORTCUT}
+            </button>
+          )}
           <button
             type="button"
             onClick={dismiss}
