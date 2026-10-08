@@ -31,16 +31,27 @@ import {
   type ReceiptPayload,
   type TypingPayload,
 } from './protocol'
-import { computeFingerprint, createSessionIdentity, loadIdentity, persistIdentity, regenerateIdentity, restoreSessionIdentity, type PersistedIdentity, type SessionIdentity } from '../crypto/identity'
+import {
+  computeFingerprint,
+  createSessionIdentity,
+  loadIdentity,
+  persistIdentity,
+  regenerateIdentity,
+  restoreSessionIdentity,
+  type PersistedIdentity,
+  type SessionIdentity,
+} from '../crypto/identity'
 import { ensureEphemeralSession, setEphemeralSession } from '../crypto/sessionEphemeral'
 import { isValidNickname, sanitizeRemoteNick } from '../nickname'
-import { decryptDm, encryptDm, getCachedDmKeyV2, clearDmKeyCache } from '../crypto/dm'
-import { mentionsNickname } from '../markdown/parse'
 import {
-  decryptRoomMessage,
-  deriveRoomKey,
-  encryptRoomMessage,
-} from '../crypto/roomKey'
+  canonicalFingerprint,
+  clearDmKeyCache,
+  decryptDm,
+  encryptDm,
+  getCachedDmKeyV2,
+} from '../crypto/dm'
+import { mentionsNickname } from '../markdown/parse'
+import { decryptRoomMessage, deriveRoomKey, encryptRoomMessage } from '../crypto/roomKey'
 import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
 import { dropRecentRoom, pushRecentRoom, removeRecentRoom, saveRecentRooms } from '../recentRooms'
 import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '../tofu'
@@ -89,6 +100,18 @@ import { joinSystemLine, leaveSystemLine } from '../feed'
  * gets an explicit legacy state — `sendDm` refuses and the channel flags
  * `legacyPeer` — instead of the silent message loss of §12.1's mixed-room
  * degradation.
+ *
+ * Issue #95 — local moderation: the mute list (`gritos:settings`
+ * .mutedFingerprints, keyed by identity fingerprint) gates the receive
+ * paths. A muted author's room chat drops before the store append, the
+ * mention seam and the receipt queue; directed dms are ignored before any
+ * decrypt work (no channel opens); typing flags and join/leave system
+ * lines never surface. Receipts and ping/pong still process — they keep
+ * the transport honest (✓✓ and latency dots). Content gates resolve the
+ * peerId → fingerprint on the keys-derived map and an envelope arriving
+ * before that fingerprint is known fails open (see `isMuted`); the
+ * join/leave line gate additionally consults the announced `presence` fp
+ * (see `mutedFingerprint`).
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -308,10 +331,7 @@ export function ensureSessionIdentity(nickname?: string): Promise<SessionIdentit
   if (identityPromise === null) {
     identityPromise = (async () => {
       const stored = useAppStore.getState().identity
-      const persisted =
-        stored !== null
-          ? persistedFromStoreProfile(stored)
-          : loadIdentity()
+      const persisted = stored !== null ? persistedFromStoreProfile(stored) : loadIdentity()
       if (persisted !== null) {
         const { session } = await restoreSessionIdentity(persisted)
         sessionIdentity = session
@@ -336,7 +356,11 @@ export function ensureSessionIdentity(nickname?: string): Promise<SessionIdentit
  * yields a profile-only identity, which the restore path migrates exactly
  * as before.
  */
-function persistedFromStoreProfile(stored: { nickname: string; fingerprint: string; createdAt: number }): PersistedIdentity {
+function persistedFromStoreProfile(stored: {
+  nickname: string
+  fingerprint: string
+  createdAt: number
+}): PersistedIdentity {
   const persisted = loadIdentity()
   return {
     nickname: stored.nickname,
@@ -807,12 +831,7 @@ export function onMentionReceived(listener: MentionReceivedListener): () => void
 }
 
 /** Fires the mention seam for every listener (gating lives in the hook). */
-function emitMentionReceived(
-  roomId: string,
-  roomName: string,
-  nick: string,
-  text: string,
-): void {
+function emitMentionReceived(roomId: string, roomName: string, nick: string, text: string): void {
   for (const listener of mentionListeners) {
     listener(roomId, roomName, nick, text)
   }
@@ -1003,6 +1022,39 @@ export function pruneExpiredTyping(roomId: string, now: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Local mute enforcement (issue #95) — receive-path gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Issue #95 — whether a fingerprint (either notation) is on the local mute
+ * list. Deliberately cheap: one canonicalization plus one `includes()` over
+ * the canonical list per envelope, no index or cache.
+ */
+function mutedFingerprint(fingerprint: string): boolean {
+  return useSettingsStore
+    .getState()
+    .settings.mutedFingerprints.includes(canonicalFingerprint(fingerprint))
+}
+
+/**
+ * Issue #95 — whether `peerId`'s identity fingerprint is muted. The
+ * fingerprint comes from the connection's keys-derived map (the same
+ * crypto-trusted value the peer list shows), never from the spoofable
+ * `presence` self-announcement. Fail-open by decision (issue #95): a peer
+ * whose `keys` announce has not landed yet has no known fingerprint and is
+ * NOT muted — presence and keys travel the same join burst, so the window
+ * is tiny, and buffering or retro-filtering would cost more than the leak.
+ * (The join/leave line gate below is the one exception: there the announced
+ * `fp` is consulted too, since on a fresh join it is all the identity
+ * material received so far — and a spoofed value can only suppress the
+ * spoofer's own line.)
+ */
+function isMuted(connection: RoomInternals, peerId: string): boolean {
+  const fingerprint = connection.peerKeyFps.get(peerId)
+  return fingerprint !== undefined && mutedFingerprint(fingerprint)
+}
+
+// ---------------------------------------------------------------------------
 // TOFU pinning (issue #22) — fingerprint pin + DM channel reconciliation
 // ---------------------------------------------------------------------------
 
@@ -1051,14 +1103,8 @@ function syncDmTofuState(peerId: string, peerNick: string, liveFingerprint: stri
   const state = useAppStore.getState()
   const pinned = getTofuFingerprint(peerId)
   const pinStaleForLive =
-    pinned !== null &&
-    liveFingerprint !== null &&
-    !pinMatchesFingerprint(pinned, liveFingerprint)
-  state.ensureDmChannel(
-    peerId,
-    peerNick,
-    pinStaleForLive ? pinned : (liveFingerprint ?? pinned),
-  )
+    pinned !== null && liveFingerprint !== null && !pinMatchesFingerprint(pinned, liveFingerprint)
+  state.ensureDmChannel(peerId, peerNick, pinStaleForLive ? pinned : (liveFingerprint ?? pinned))
   state.setDmKeyChanged(peerId, pinStaleForLive)
 }
 
@@ -1152,7 +1198,19 @@ function createConnection(init: {
     // Issue #36 — beyond the per-peer rate cap the line is suppressed and
     // the peer stays unannounced, so the join line is emitted (at most
     // SYSTEM_LINE_RATE_CAP times) once the rolling window allows it again.
-    if (nick !== null && !connection.announcedPeers.has(peerId)) {
+    // Issue #95 — a muted peer announces no line and stays unannounced
+    // (no budget burned either): once unmuted, its next presence
+    // announcement surfaces the deferred join line. The line gate falls
+    // back to the announced `fp` because on a fresh join it is the only
+    // fingerprint received so far (the keys announce lands moments later,
+    // after the async hash) — and a spoofed value can only suppress the
+    // spoofer's own line.
+    const lineFingerprint = connection.peerKeyFps.get(peerId) ?? payload.fp
+    if (
+      nick !== null &&
+      !connection.announcedPeers.has(peerId) &&
+      !mutedFingerprint(lineFingerprint)
+    ) {
       if (consumeSystemLineBudget(connection, peerId)) {
         connection.announcedPeers.add(peerId)
         appendSystemMessage(connection.roomId, joinSystemLine(nick))
@@ -1184,9 +1242,7 @@ function createConnection(init: {
         const pinned = getTofuFingerprint(peerId)
         useAppStore.getState().updatePeer(connection.roomId, peerId, {
           fingerprint:
-            pinned !== null && !pinMatchesFingerprint(pinned, fingerprint)
-              ? pinned
-              : fingerprint,
+            pinned !== null && !pinMatchesFingerprint(pinned, fingerprint) ? pinned : fingerprint,
         })
         // Refresh the DM header fingerprint of an existing channel (RF-04);
         // channels are only created on demand (open/send/receive).
@@ -1234,6 +1290,8 @@ function createConnection(init: {
 
   actions.typing.onMessage = (payload, { peerId }) => {
     if (typeof payload?.on !== 'boolean') return
+    // Issue #95 — a muted peer's typing flags (room and dm) never land.
+    if (isMuted(connection, peerId)) return
     if (payload.dm === true) {
       // M3 — directed DM typing (RF-04): lands on the channel, not the room.
       useAppStore.getState().setDmTyping(peerId, payload.on ? Date.now() : null)
@@ -1314,10 +1372,11 @@ function handlePeerLeave(connection: RoomInternals, peerId: string): void {
   // RF-06 — the leave becomes a discrete system line with the last known
   // nickname, before the peer entry is dropped. Issue #36 — leave lines
   // share the per-peer budget with join lines, so rejoin churn cannot use
-  // them to flood the feed either.
+  // them to flood the feed either. Issue #95 — a muted peer stays silent
+  // (checked before the fingerprint maps are dropped below).
   const room = useAppStore.getState().rooms[connection.roomId]
   const nickname = room?.peers.find((peer) => peer.id === peerId)?.nickname
-  if (nickname !== undefined && nickname.trim() !== '') {
+  if (nickname !== undefined && nickname.trim() !== '' && !isMuted(connection, peerId)) {
     if (consumeSystemLineBudget(connection, peerId)) {
       appendSystemMessage(connection.roomId, leaveSystemLine(nickname))
     }
@@ -1350,6 +1409,9 @@ function handleChatEnvelope(
   data: unknown,
   transportPeerId: string,
 ): void {
+  // Issue #95 — a muted author drops before any parsing, dedup, store
+  // append, mention emission or receipt queuing (§7.3 silence).
+  if (isMuted(connection, transportPeerId)) return
   const envelope = parseEnvelope(data)
   if (envelope === null || envelope.kind !== 'chat') return
   // Dedup BEFORE the async decrypt tail: full-mesh duplicates of an
@@ -1462,11 +1524,10 @@ function appendSystemMessage(roomId: string, text: string): void {
   })
 }
 
-function handleDmEnvelope(
-  connection: RoomInternals,
-  data: unknown,
-  transportPeerId: string,
-): void {
+function handleDmEnvelope(connection: RoomInternals, data: unknown, transportPeerId: string): void {
+  // Issue #95 — a muted sender is ignored before ANY work: no parse, no
+  // dedup slot, no channel reconciliation, no decrypt (§7.3 silence).
+  if (isMuted(connection, transportPeerId)) return
   const envelope = parseEnvelope(data)
   // Issue #93 (spec §12.1) — the parser only lets v2 dms through: a v1 dm
   // (old build) dies here, the accepted mixed-version degradation.
@@ -1493,8 +1554,7 @@ function handleDmEnvelope(
   const senderEphFp = connection.peerEphFps.get(transportPeerId)
   if (senderEphRaw === undefined || senderEphFp === undefined) return
 
-  const senderIdFp =
-    connection.peerKeyFps.get(transportPeerId) ?? null
+  const senderIdFp = connection.peerKeyFps.get(transportPeerId) ?? null
   void decryptDmEnvelope(
     connection,
     envelope,
