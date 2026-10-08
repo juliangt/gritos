@@ -5,6 +5,7 @@ import config from '../vite.config'
 import indexHtmlSource from '../index.html?raw'
 import robotsTxt from '../public/robots.txt?raw'
 import manifestSource from '../public/manifest.webmanifest?raw'
+import swSource from '../public/sw.js?raw'
 
 /**
  * Regression guards for production-build issues:
@@ -62,6 +63,13 @@ import manifestSource from '../public/manifest.webmanifest?raw'
  *   static stand-in for a console watch — jsdom cannot observe CSP
  *   violations; the worker's own same-origin fetch gate is pinned by the
  *   phase-2 tests above).
+ * - Issue #104 (phase 4): the update flow ships as designed. The worker
+ *   never calls skipWaiting() (a new deploy waits for the toast's
+ *   «Recargar» reload, which is what activates it and triggers the
+ *   activate-time cleanup), and the bundle carries the waiting-worker
+ *   detection (updatefound/statechange) plus the App-level toast with its
+ *   exact wording — string literals survive minification, so their
+ *   presence is cheap proof the flow shipped.
  *
  * Cheap checks keep all of these from shipping again:
  *  1. the shared vite config registers the Tailwind plugin and resolves a
@@ -814,5 +822,40 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
         `raw network primitive in src/${relative} — review the CSP meta in index.html`,
       ).not.toMatch(forbidden)
     }
+  })
+
+  // --- Phase 4 (issue #104): update flow ---
+
+  it('leaves new versions waiting for the toast reload — no skipWaiting call anywhere (issue #104, phase 4)', () => {
+    // The phase-4 decision: the worker never calls skipWaiting(), so a new
+    // deploy installs and WAITS while the page's toast («Nueva versión
+    // disponible — [Recargar]») offers the swap; location.reload() is what
+    // activates it. Pinning the shipped dist copy AND the public/ source it
+    // is generated from: a re-added skipWaiting() would swap the shell
+    // under a live chat session with no consent, exactly what the toast
+    // exists to prevent (the source comment documenting the decision is
+    // allowed; the call is not). The version-bust interplay above still
+    // holds — the digest hashes this source, so the no-skipWaiting rewrite
+    // bumped the cache version like any content change.
+    expect(distSw, 'a waiting worker is the update toast whole job').not.toContain('skipWaiting(')
+    expect(swSource, 'the dist copy is generated from this source').not.toContain('skipWaiting(')
+    // activate-time cleanup and the first-visit claim stay exactly as
+    // designed in phase 2.
+    expect(distSw).toContain("startsWith('gritos-shell-')")
+    expect(distSw).toContain('clients.claim')
+  })
+
+  it('ships the waiting-worker detection and the toast in the bundle (issue #104, phase 4)', () => {
+    // Minification mangles identifiers but never string literals: the
+    // update-flow event names and the toast's exact wording must survive
+    // into the emitted chunks (the toast is mounted unconditionally from
+    // App, not dev-gated).
+    const js = emittedJs(built)
+    expect(js, 'the registration must watch for updatefound installs').toContain('updatefound')
+    expect(js, 'and for the install worker statechange transitions').toContain('statechange')
+    expect(js, 'the App-level toast ships with its exact wording').toContain(
+      'Nueva versión disponible',
+    )
+    expect(js, 'the reload action of the toast').toContain('Recargar')
   })
 })

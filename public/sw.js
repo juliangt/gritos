@@ -30,16 +30,17 @@ const CACHE_VERSION = '__GRITOS_CACHE_VERSION__'
 const PRECACHE_URLS = '__GRITOS_PRECACHE_URLS__'
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_VERSION)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      // skipWaiting: with no update toast yet (phase 4) a waiting worker
-      // would leave every deploy one visit behind on clients that never
-      // navigate away. The activate handler cleans up behind it.
-      .then(() => self.skipWaiting()),
-  )
+  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(PRECACHE_URLS)))
 })
+
+// Deliberately NO skipWaiting (issue #104, phase 4): a new version installs
+// and then WAITS while the page — still running the old one — shows the
+// «Nueva versión disponible — Recargar» toast, and only the user's reload
+// dismisses the old client so the waiting worker activates (the activate
+// handler below cleans the stale caches behind it). Swapping the shell
+// under a live chat session without asking is exactly what the toast
+// exists to prevent; the registerSw module detects the waiting worker and
+// drives the toast.
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
