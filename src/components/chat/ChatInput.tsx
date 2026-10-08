@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { CHAR_COUNTER_FROM, DM_DISCONNECTED_TEXT, TYPING_IDLE_STOP_MS, TYPING_SIGNAL_THROTTLE_MS } from '../../lib/feed'
+import {
+  CHAR_COUNTER_FROM,
+  DM_DISCONNECTED_TEXT,
+  DM_LEGACY_PEER_TEXT,
+  TYPING_IDLE_STOP_MS,
+  TYPING_SIGNAL_THROTTLE_MS,
+} from '../../lib/feed'
 import { MAX_PLAINTEXT_LENGTH } from '../../lib/p2p/protocol'
 import type { Room } from '../../stores/useAppStore'
 import { useRoomManager } from '../../hooks/useRoomManager'
@@ -12,6 +18,12 @@ export interface DmComposerContext {
   peerId: string
   /** False once the peer shares no active room: sending is blocked. */
   available: boolean
+  /**
+   * Issue #93 (spec §12.1): true while the connected peer runs a legacy
+   * build without a session-ephemeral `ephkeys` announce — sending is
+   * blocked with an explicit hint (it could never open a v2 dm).
+   */
+  legacyPeer?: boolean
 }
 
 /**
@@ -21,7 +33,8 @@ export interface DmComposerContext {
  * from 3800 (sending blocked above the limit). Typing signals are
  * throttled to 1/s while composing and stop on send, blur or 2 s of idle.
  * Rooms queue locally while `searching`/`error` ('En cola hasta
- * conectar…'); a disconnected DM is hard-blocked with the exact RF-04 text.
+ * conectar…'); a disconnected DM is hard-blocked with the exact RF-04 text
+ * and a legacy (v1-build) peer with the issue #93 hint.
  */
 export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   const [value, setValue] = useState('')
@@ -33,10 +46,13 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
 
   const room = props.room
   const dm = props.dm
-  // Room: not ready → local queue (§10.3). DM: not available → blocked.
+  // Room: not ready → local queue (§10.3). DM: not available or a legacy
+  // peer (issue #93) → blocked.
   const ready = room !== undefined ? room.status === 'connected' : (dm?.available ?? false)
   const queued = room !== undefined && !ready
-  const blocked = dm !== undefined && !dm.available
+  const disconnected = dm !== undefined && !dm.available
+  const legacyPeer = dm?.legacyPeer ?? false
+  const blocked = disconnected || legacyPeer
   const overLimit = value.length > MAX_PLAINTEXT_LENGTH
   const canSend = !blocked && value.trim() !== '' && !overLimit
   const showCounter = value.length >= CHAR_COUNTER_FROM
@@ -126,9 +142,14 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
       />
       <div className="flex items-center gap-3 text-xs text-muted">
         <span className="hidden sm:inline">**negrita** · *cursiva* · `código`</span>
-        {blocked && (
+        {disconnected && (
           <span className="text-accent" role="status">
             {DM_DISCONNECTED_TEXT}
+          </span>
+        )}
+        {legacyPeer && (
+          <span className="text-accent" role="status">
+            {DM_LEGACY_PEER_TEXT}
           </span>
         )}
         {queued && (

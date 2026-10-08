@@ -262,7 +262,8 @@ Los trackers solo intervienen en el *discovery* e intercambio SDP inicial. El tr
 | Acción (`makeAction`) | Alcance | Payload | Uso |
 |---|---|---|---|
 | `presence` | broadcast (al conectar y al cambiar apodo) | `{nick: string, fp: string}` | Anuncio de apodo y fingerprint. |
-| `keys` | broadcast (al conectar) | `Uint8Array` (clave pública ECDH P-256 cruda, 65 B) | Establecimiento de clave DM. |
+| `keys` | broadcast (al conectar) | `Uint8Array` (clave pública ECDH P-256 cruda, 65 B) | Anuncio de la clave de identidad: fingerprint visible en la UI, ancla TOFU (8.2) y una de las dos parejas de fingerprints de la sal DM v2 (9.2). |
+| `ephkeys` | dirigido (al conectar y al regenerar identidad) | `Uint8Array` (clave pública efímera de sesión ECDH P-256 cruda, 65 B) | Anuncio de la clave efímera de sesión para la derivación DM v2 (issue #93; 9.2, 12.1). Vive solo en memoria, jamás se persiste y no se fija por TOFU: `gritos:tofu` sigue anclando solo fingerprints de identidad (8.2). Un par conectado sin este anuncio es un build v1 (12.1). |
 | `chat` | broadcast | `Envelope` JSON | Mensaje de sala (plano o cifrado por contraseña). |
 | `dm` | dirigido al destinatario (`target`, issue #18) | `Envelope` JSON (`kind:'dm'`, siempre cifrado) | Mensaje directo E2EE entre A↔B: el sobre cifrado solo llega al destinatario — el resto de la malla de la sala no lo captura, evitando el perfilado por metadatos (quién escribe a quién, volumen, tiempos). El filtro local del `to` en el receptor (7.3) queda como defensa en profundidad ante pares antiguos que aún difunden. |
 | `typing` | broadcast | `{on: boolean}` | Indicador de escritura. |
@@ -274,7 +275,7 @@ Los trackers solo intervienen en el *discovery* e intercambio SDP inicial. El tr
 
 ```jsonc
 {
-  "v": 1,                    // versión de protocolo; v≠1 → ignorar silenciosamente
+  "v": 1,                    // versión por kind: chat y plano de control exigen v=1, dm exige v=2 (issue #93); otro valor → ignorar silenciosamente (7.3)
   "id": "uuid-v4",           // crypto.randomUUID() — deduplicación
   "ts": 1760000000000,       // Date.now() del autor
   "from": "peerId-trystero",
@@ -293,7 +294,7 @@ Los trackers solo intervienen en el *discovery* e intercambio SDP inicial. El tr
 - **Orden**: se muestra por orden de llegada; dentro de una ventana de 2 s se ordena por `ts`. No hay orden global consensuado (sin servidor) — documentado como limitación aceptable para chat informal.
 - **Tamaño**: cuerpo ≤4000 caracteres en claro; payloads binarios >64 KB se descartan por seguridad.
 - **Desconexión**: `onPeerLeave` limpia presencia y typing del par en esa sala; sus DMs quedan en modo "par desconectado".
-- **Compatibilidad futura**: los campos desconocidos del Envelope se ignoran; solo `v` es discriminatorio.
+- **Compatibilidad y versionado**: los campos desconocidos del Envelope se ignoran; `v` es discriminatorio por `kind` — `chat` exige `v: 1` y `dm` exige `v: 2` (issue #93) — y cualquier otro valor se descarta en silencio. En salas con builds mezclados, un par v1 descarta en silencio los `dm` v2 y un par nuevo los `dm` v1, en ambas direcciones, hasta que las builds convergen (12.1).
 - **Silencio**: jamás se retransmite un mensaje recibido a terceros (no hay relay en v1; el `to` de un `dm` ajeno se ignora y se descarta).
 
 ## 8. Modelo de estado y datos
@@ -391,11 +392,16 @@ Todo con Web Crypto (`crypto.subtle`). Ninguna primitiva implementada a mano.
 
 ### 9.2 Clave DM (1:1)
 
-1. Al conectar dos pares en una sala, ambos emiten `keys` con su clave pública cruda.
-2. Cada extremo computa `secreto = ECDH(miPriv, suPub)` → 256 bits.
-3. `claveDM = HKDF-SHA256(secreto, salt = SHA-256(fpA ‖ fpB ordenados), info = "gritos/dm/v1", 32 B)` → clave AES-GCM-256. Los `fp` son los fingerprints de 9.1 en forma canónica (sin espacios, mayúsculas); cada extremo calcula los suyos desde las claves crudas anunciadas. Issue #23: la ampliación a 128 bits cambia la sal de forma deliberada y uniforme — los DMs entre builds de formatos distintos no interoperan, y no hay migración de claves porque canales y claves DM viven solo en memoria.
-4. Cada mensaje DM: IV aleatorio de 12 B; se transmite `base64(IV ‖ AES-GCM(texto))`.
-5. La clave vive solo en memoria por sesión y por par; no se persiste.
+La derivación vigente es la **v2** (issue #93; nota de diseño en 12.1): el secreto DM procede de un ECDH **efímero de sesión**, no de las claves de identidad de larga vida.
+
+1. Cada par genera un par ECDH P-256 **efímero por sesión de la app** al arrancar (y lo regenera con la identidad): vive solo en memoria, jamás se persiste —ni `localStorage` ni el almacén IndexedDB— y lo borra el panic button (RF-08). Su clave pública cruda (65 B) se anuncia con la acción dirigida `ephkeys` al conectar y tras regenerar identidad (7.1).
+2. El anuncio se guarda junto a su fingerprint **sin pin TOFU**: solo el fingerprint de identidad queda anclado en `gritos:tofu` (8.2) y solo la identidad se muestra para verificación manual (9.1, RF-04). Una clave efímera sustituida no deriva la misma clave DM: el dual-salt del punto 4 hace que el GCM falle a la vista.
+3. Para enviar o recibir, cada extremo computa `secreto = ECDH(miPrivEfímera, suPubEfímera)` → 256 bits.
+4. `claveDM = HKDF-SHA256(secreto, salt = SHA-256(los cuatro fingerprints canónicos ordenados ascendente: identidad y efímero de ambos extremos), info = "gritos/dm/v2", 32 B)` → clave AES-GCM-256 **no exportable** (*dual-salt*: al entrar ambas parejas de fingerprints en la sal, el enlace identidad→efímero queda atado sin firmas; ver 12.1). Los `fp` son los de 9.1 en forma canónica (sin espacios, mayúsculas); cada extremo calcula los suyos desde las claves crudas anunciadas.
+5. Cada mensaje DM: IV aleatorio de 12 B; se transmite `base64(IV ‖ AES-GCM(texto))` en un sobre `dm` con `v: 2` (7.2).
+6. La clave vive solo en memoria, en una caché por sesión y por par (clave: los fingerprints ordenados); no se persiste. Al cerrar la sesión desaparece la clave privada efímera y lo grabado deja de ser descifrable (12.1).
+
+**Formato legacy v1 (ya no se envía ni se acepta).** La derivación estático-estático original —ECDH entre claves de identidad, salt = SHA-256(fpA ‖ fpB ordenados), `info = "gritos/dm/v1"`, sobre `dm` con `v: 1`— permanece en el código solo como referencia del formato antiguo. La regla del parser es final: `chat` exige `v: 1` y `dm` exige `v: 2` (7.3). En salas con builds mezclados los sobres que no se abren se descartan en silencio en ambas direcciones; el par nuevo ve además un estado explícito de par legado —compositor deshabilitado: «Este par usa una versión anterior sin DM cifrado por sesión»— en lugar de una pérdida silenciosa de mensajes. No hay migración de claves: canales y claves DM viven solo en memoria (la ampliación a 128 bits del fingerprint, issue #23, ya cambió la sal de forma deliberada y uniforme en v1).
 
 ### 9.3 Clave de sala con contraseña
 
@@ -423,7 +429,7 @@ La derivación con contraseña hace que la sala sea **indescubrible** en el trac
 - Plano de control sin autenticar (issue #36): las señales ajenas al contenido del chat —confirmaciones `receipt` (los ✓✓), «escribiendo…» (`typing`), líneas de sistema «se ha unido / ha salido» y ecos `pong` de latencia— viajan sin autenticación de mensaje, de modo que cualquier par puede forjarlas (marcar entregados mensajes ajenos, fingir que escribe, emitir líneas de sistema con apodos arbitrarios —que además desplazan historial real por el FIFO de 500 mensajes— o inflar los puntos de latencia) o inundar el chat para saturar insignias de no leídos y notificaciones de mención. Es inherente a la malla sin confianza de v1 —misma raíz que la suplantación de apodo, más arriba—; la mitigación de v1 es cosmética: tope de líneas de sistema por par y minuto, y descarte de RTT negativos y acotado de RTT absurdos en el eco `pong`.
 - Compromiso del dispositivo o del origen (XSS): la clave privada se guarda cifrada en reposo (issue #24), pero un script del propio origen tiene acceso a `localStorage` **y** a IndexedDB, por lo que un contexto totalmente comprometido sigue pudiendo usar la clave (suplantar al usuario). Mitigación: la envoltura eleva el listón frente a volcados ingenuos de `localStorage` (extensiones con permisos de lectura, acceso físico al disco); contra el compromiso del propio origen no hay defensa local. El renderer Markdown propio con tests de XSS y la superficie mínima de dependencias siguen siendo la primera barrera.
 - Metadatos: los pares conectados ven tu IP (naturaleza de WebRTC); usar TURN mitiga parcialmente.
-- Avances criptoanalíticos / contraseña de sala débil: PBKDF2 eleva el coste, pero una contraseña trivial es comprometible por fuerza bruta offline por quien conozca el nombre de sala. En los DMs el riesgo concreto es *harvest now, decrypt later* (issue #25): los sobres grabados hoy se descifrarían en bloque si la clave privada se compromete mañana — nota de diseño y migración en 12.1.
+- Avances criptoanalíticos / contraseña de sala débil: PBKDF2 eleva el coste, pero una contraseña trivial es comprometible por fuerza bruta offline por quien conozca el nombre de sala. En los DMs, el riesgo *harvest now, decrypt later* (issue #25) queda **mitigado a alcance de sesión** con la derivación v2 (issue #93; 9.2): al cerrar la sesión desaparece la clave privada efímera y lo grabado deja de ser descifrable. Riesgo residual, a secas: capturar el tráfico **durante** una sesión activa y comprometer después el dispositivo expone esa sesión —y habilita la suplantación de identidad hasta la alerta de rotación TOFU (8.2)—. Los pares v1, y lo grabado en v1 antes de la migración, siguen bajo la exposición estático-estático original (12.1).
 
 ## 10. UX/UI
 
@@ -507,21 +513,27 @@ El *discovery* en trackers públicos tarda típicamente 2–6 s; la UI debe comu
 4. Salas masivas: topología de retransmisión o SFU.
 5. PWA (service worker, iconos, offline shell).
 6. i18n y mensajes editables/borrables.
-7. Secrecía hacia delante en DMs (issue #25; nota de diseño en 12.1): claves DM efímeras por sesión como mínimo; *prekeys* + *double ratchet* como solución completa.
+7. Secrecía hacia delante en DMs (issue #25; nota de diseño en 12.1): **el mínimo está implementado** (issue #93) — claves DM efímeras por sesión (9.2); queda como trabajo futuro la solución completa: *prekeys* + *double ratchet* (fase B del issue).
 
 ### 12.1 Nota de diseño: secrecía hacia delante en DMs (issue #25)
 
-**Amenaza — *harvest now, decrypt later*.** El envío del `dm` ya es **dirigido al destinatario** (7.1; issue #18, implementada), de modo que los demás miembros de la sala dejaron de capturar los sobres cifrados. La superficie de grabación residual queda en los extremos de la conversación: la clave DM se deriva de un ECDH **estático-estático** P-256 (9.2) entre claves de identidad de larga vida, así que basta un único compromiso posterior de una clave privada (acceso al dispositivo, volcado de `localStorage`/IndexedDB, avance criptoanalítico) para descifrar **todo el historial grabado** de esa pareja de pares. 9.5 lo recoge como riesgo aceptado de v1; esta nota fija la migración.
+**Estado: el mínimo viable está implementado (issue #93).** La derivación v2 de 9.2 está en producción, con tres desviaciones deliberadas sobre lo esbozado aquí:
 
-**Mínimo viable: secrecía por sesión.** Derivar la clave DM de un par ECDH **efímero por sesión de la app**, anunciado con la acción `keys` existente (7.1): el ECDH de 9.2 deja de usar la clave privada de identidad y pasa a usar material efímero de sesión. La clave de identidad de larga vida y su fingerprint siguen siendo el ancla TOFU: se muestran en la lista de pares y en la cabecera del DM para la verificación manual (RF-04, 9.1). Consecuencias a documentar:
+1. **La clave efímera viaja en una acción dirigida dedicada, `ephkeys` (7.1), y no dentro del payload de `keys`.** Un anuncio compuesto habría obligado a los pares v1 a descartar el conjunto —también las claves de identidad—, rompiendo su vista TOFU en salas mezcladas.
+2. **La degradación en versiones mezcladas no es solo silenciosa.** El descarte silencioso de sobres sigue (7.3), pero el par nuevo marca al par v1 sin anuncio `ephkeys` como legado y deshabilita el compositor con el aviso «Este par usa una versión anterior sin DM cifrado por sesión», en vez de dejarle escribir a un buzón que nadie abrirá.
+3. **El enlace identidad→efímero usa la doble sal** (ambas parejas de fingerprints en la sal de HKDF, 9.2): la opción de firmar la clave efímera con la de identidad no hizo falta.
+
+**Amenaza — *harvest now, decrypt later*.** El envío del `dm` ya es **dirigido al destinatario** (7.1; issue #18, implementada), de modo que los demás miembros de la sala dejaron de capturar los sobres cifrados. Antes de la migración, la superficie de grabación residual quedaba en los extremos de la conversación: la clave DM se derivaba de un ECDH **estático-estático** P-256 (9.2) entre claves de identidad de larga vida, así que bastaba un único compromiso posterior de una clave privada (acceso al dispositivo, volcado de `localStorage`/IndexedDB, avance criptoanalítico) para descifrar **todo el historial grabado** de esa pareja de pares. 9.5 lo recoge como riesgo aceptado de v1; esta nota fijó la migración, ya materializada.
+
+**Mínimo viable: secrecía por sesión.** Derivar la clave DM de un par ECDH **efímero por sesión de la app**, anunciado a los pares de cada sala (implementado como la acción dedicada `ephkeys`; desviación 1 del Estado): el ECDH de 9.2 deja de usar la clave privada de identidad y pasa a usar material efímero de sesión. La clave de identidad de larga vida y su fingerprint siguen siendo el ancla TOFU: se muestran en la lista de pares y en la cabecera del DM para la verificación manual (RF-04, 9.1). Consecuencias a documentar:
 
 - El pin `gritos:tofu` (8.2, issue #22) debe seguir fijando el fingerprint de **identidad**, nunca el de la clave efímera (que cambia en cada sesión y rompería el pin al reiniciar).
-- Cada par debe enlazar identidad → clave efímera sin abrir la puerta a suplantación: la clave efímera viaja firmada por la clave de identidad, o la sal de 9.2 se deriva de ambos pares de fingerprints (identidad y efímero), de modo que una clave efímera sustituida no derive la misma clave.
+- Cada par debe enlazar identidad → clave efímera sin abrir la puerta a suplantación: la clave efímera viaja firmada por la clave de identidad, o la sal de 9.2 se deriva de ambos pares de fingerprints (identidad y efímero), de modo que una clave efímera sustituida no derive la misma clave (implementado: la segunda opción —dual-salt—; desviación 3 del Estado).
 - La ventana de exposición se reduce de "vida completa de la identidad" a "una sesión": lo grabado deja de ser descifrable al cerrar la pestaña; lo capturado antes de la migración sigue expuesto.
 
-**Solución completa (fuera del alcance de v1).** *Prekeys* anunciadas por par y establecimiento tipo X3DH con *double ratchet* por conversación (secrecía hacia delante y recuperación post-compromiso, estilo Signal). Exige canal de anuncio de prekeys y estado de ratchet por conversación; el envío dirigido sobre el que cobra sentido ya está implementado (7.1, issue #18).
+**Solución completa (fuera del alcance de v1).** *Prekeys* anunciadas por par y establecimiento tipo X3DH con *double ratchet* por conversación (secrecía hacia delante y recuperación post-compromiso, estilo Signal). Exige canal de anuncio de prekeys y estado de ratchet por conversación; el envío dirigido sobre el que cobra sentido ya está implementado (7.1, issue #18). Es la fase B del issue #93 y sigue siendo trabajo futuro.
 
-**Disciplina de migración.** El formato actual queda fijado por contrato: derivación con `info = 'gritos/dm/v1'` sobre la sal de fingerprints ordenados (9.2) y sobre DM `{iv, payload}` (7.2). Cualquier cambio en las entradas de derivación (par de claves, sal, info) o en el formato wire debe **incrementar un marcador de versión** — `info = 'gritos/dm/v2'`, o Envelope `v: 2`, que los pares v1 ya ignoran silenciosamente (7.2) — y estar controlado por tests, de forma que pares viejos y nuevos nunca deriven silenciosamente claves distintas de los mismos sobres. En salas con versiones mezcladas la degradación es la prevista: los sobres que no se abren se descartan en silencio (7.3) hasta que los pares convergen a la misma versión. Un test guard fija hoy `DM_KEY_INFO === 'gritos/dm/v1'`; cambiar esa cadena (o la forma del sobre) es la puerta deliberada de la migración v2.
+**Disciplina de migración.** El formato v1 queda fijado por contrato como legado: derivación con `info = 'gritos/dm/v1'` sobre la sal de fingerprints ordenados (9.2) y sobre DM `{iv, payload}` (7.2). Cualquier cambio en las entradas de derivación (par de claves, sal, info) o en el formato wire debe **incrementar un marcador de versión** y estar controlado por tests, de forma que pares viejos y nuevos nunca deriven silenciosamente claves distintas de los mismos sobres. La migración v2 materializó exactamente ese marcador: `DM_KEY_INFO_V2 = 'gritos/dm/v2'` y Envelope `v: 2`, ambos fijados por tests guard (`DM_KEY_INFO` conserva `'gritos/dm/v1'` como constante del formato legado, que ya no se envía ni se acepta). En salas con versiones mezcladas los sobres que no se abren se descartan en silencio (7.3) —y el par nuevo muestra además el estado explícito de par legado (desviación 2 del Estado)— hasta que las builds convergen.
 
 ---
 
@@ -533,6 +545,7 @@ El *discovery* en trackers públicos tarda típicamente 2–6 s; la UI debe comu
 | **roomId** | Hash derivado que identifica una sala ante los trackers (9.4). |
 | **peerId** | Identificador aleatorio que Trystero asigna a cada cliente por sesión. |
 | **fingerprint** | Hash corto de la clave pública de un par; verificación manual de identidad (TOFU). |
+| **Clave efímera de sesión** | Par ECDH P-256 vivo solo durante la sesión de la app, en memoria; base de la derivación DM v2 (9.2, 12.1). |
 | **Full mesh** | Topología donde cada cliente mantiene DataChannel directo con todos los demás pares de la sala. |
 | **E2EE** | Cifrado de extremo a extremo aplicado sobre el payload, además del DTLS del transporte. |
 | **Panic button** | Borrado total e inmediato de identidad, ajustes y rastro local (RF-08). |

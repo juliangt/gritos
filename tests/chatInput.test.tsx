@@ -4,17 +4,19 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ChatInput } from '../src/components/chat/ChatInput'
-import { TYPING_SIGNAL_THROTTLE_MS } from '../src/lib/feed'
+import { DM_DISCONNECTED_TEXT, DM_LEGACY_PEER_TEXT, TYPING_SIGNAL_THROTTLE_MS } from '../src/lib/feed'
 import type { Room } from '../src/stores/useAppStore'
 
-const { sendChat, sendTyping } = vi.hoisted(() => ({
+const { sendChat, sendTyping, sendDm, sendDmTyping } = vi.hoisted(() => ({
   sendChat: vi.fn(),
   sendTyping: vi.fn(),
+  sendDm: vi.fn(async () => true),
+  sendDmTyping: vi.fn(),
 }))
 
 vi.mock('../src/hooks/useRoomManager', () => ({
   // Stable references: the component's cleanup effects depend on them.
-  useRoomManager: () => ({ sendChat, sendTyping }),
+  useRoomManager: () => ({ sendChat, sendTyping, sendDm, sendDmTyping }),
 }))
 
 function makeRoom(overrides: Partial<Room> = {}): Room {
@@ -36,6 +38,8 @@ beforeEach(() => {
   vi.useFakeTimers()
   sendChat.mockClear()
   sendTyping.mockClear()
+  sendDm.mockClear()
+  sendDmTyping.mockClear()
 })
 
 afterEach(() => {
@@ -154,5 +158,38 @@ describe('ChatInput (RF-03)', () => {
     fireEvent.change(textarea(), { target: { value: 'en cola' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
     expect(sendChat).toHaveBeenCalledWith('room-1', 'en cola')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DM composer states (RF-04 + issue #93, spec §12.1): the same mechanism
+// that hard-blocks a disconnected peer blocks a legacy one (a v1 build
+// without a session-ephemeral `ephkeys` announce) with its own hint.
+// ---------------------------------------------------------------------------
+
+describe('ChatInput DM composer (RF-04, issue #93)', () => {
+  it('sends a DM through the manager bridge when the peer is available', () => {
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
+    fireEvent.change(textarea(), { target: { value: 'hola dm' } })
+    expect(sendDmTyping).toHaveBeenCalledWith('peer-9', true)
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola dm')
+    expect(textarea()).toBeEnabled()
+    expect(screen.queryByText(DM_DISCONNECTED_TEXT)).not.toBeInTheDocument()
+    expect(screen.queryByText(DM_LEGACY_PEER_TEXT)).not.toBeInTheDocument()
+  })
+
+  it('blocks the composer with the legacy-peer hint (issue #93)', () => {
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true, legacyPeer: true }} />)
+
+    expect(textarea()).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+    expect(screen.getByText(DM_LEGACY_PEER_TEXT)).toBeInTheDocument()
+    // The peer IS connected: the disconnected text must not appear too.
+    expect(screen.queryByText(DM_DISCONNECTED_TEXT)).not.toBeInTheDocument()
+
+    // Even a submit attempt (Enter) never reaches the manager.
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(sendDm).not.toHaveBeenCalled()
   })
 })

@@ -5,16 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, renderHook } from '@testing-library/react'
 import { useNotifications } from '../src/hooks/useNotifications'
 import * as manager from '../src/lib/p2p/roomManager'
-import {
-  computeFingerprint,
-  exportRawPublicKey,
-  generateSessionKeypair,
-} from '../src/lib/crypto/identity'
-import { deriveDmKey, encryptDm, clearDmKeyCache } from '../src/lib/crypto/dm'
-import { createEnvelope, type Envelope } from '../src/lib/p2p/protocol'
+import { computeFingerprint } from '../src/lib/crypto/identity'
+import { deriveDmKeyV2, encryptDm, clearDmKeyCache } from '../src/lib/crypto/dm'
+import { createEnvelope, DM_PROTOCOL_VERSION, type Envelope } from '../src/lib/p2p/protocol'
 import { useAppStore, INITIAL_APP_STATE } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
-import { installFakeTrystero } from './fakeTrystero'
+import { fakePeerJoins, installFakeTrystero, makeFakeRemotePeer } from './fakeTrystero'
 
 /**
  * M5 end-to-end (RF-09): the useNotifications hook turns the two manager
@@ -156,24 +152,25 @@ describe('useNotifications (RF-09 end to end)', () => {
     stubEnvironment({ hidden: true, permission: 'granted' })
     renderHook(() => useNotifications())
 
-    // Remote peer A with a real keypair shares #lobby with the manager.
-    const aKeypair = await generateSessionKeypair()
-    const aRawKey = await exportRawPublicKey(aKeypair.publicKey)
-    const aFingerprint = await computeFingerprint(aRawKey)
+    // Remote peer A — a v2-capable peer (identity + ephemeral announces) —
+    // shares #lobby with the manager (issue #93, spec §12.1).
+    const a = await makeFakeRemotePeer('peer-a')
 
     const connection = await manager.joinRoom('lobby')
     const room = fake.rooms[fake.rooms.length - 1]
-    room.peerJoin('peer-a')
-    room.receive('presence', { nick: 'luna-cauta', fp: aFingerprint }, 'peer-a')
-    room.receive('keys', aRawKey, 'peer-a')
+    await fakePeerJoins(room, a, { nick: 'luna-cauta' })
     await flushCrypto()
 
-    const mine = room.action('keys').sends[0]?.data as Uint8Array
-    const dmKey = await deriveDmKey(
-      aKeypair.privateKey,
-      mine,
-      aFingerprint,
+    // A seals the DM against the manager's announced EPHEMERAL key with the
+    // v2 derivation (both fingerprint pairs in the salt).
+    const mineEph = room.action('ephkeys').sends[0]?.data as Uint8Array
+    const dmKey = await deriveDmKeyV2(
+      a.ephKeypair.privateKey,
+      mineEph,
+      a.fingerprint,
       manager.getSessionIdentity()?.identity.fingerprint as string,
+      a.ephFingerprint,
+      await computeFingerprint(mineEph),
     )
     const sealed = await encryptDm(dmKey, '¿me ves?')
     room.receive(
@@ -186,6 +183,7 @@ describe('useNotifications (RF-09 end to end)', () => {
         enc: true,
         iv: sealed.iv,
         body: sealed.payload,
+        v: DM_PROTOCOL_VERSION,
       }),
       'peer-a',
     )

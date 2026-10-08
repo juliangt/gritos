@@ -11,11 +11,22 @@ import { MAX_PLAINTEXT_LENGTH } from '../p2p/protocol'
  *    `base64(IV ‖ AES-GCM(texto))` (Envelope §7.2: `iv` + `body`).
  * 5. Derived keys live in memory per session and per peer — never persisted.
  *
+ * v2 (spec.md §12.1, issue #93 — phase 2 of the migration, wire switch in
+ * later phases): DM keys derive from SESSION-EPHEMERAL ECDH keypairs instead
+ * of the long-lived identity keys. The HKDF salt binds BOTH fingerprint
+ * pairs (identity + session-ephemeral) and the `info` separator moves to
+ * 'gritos/dm/v2'; the ephemeral keypair lives only for the app session, so
+ * the exposure window per session shrinks from the identity's full lifetime
+ * to the session itself (recorded DM history dies with the tab).
+ *
  * Everything runs on Web Crypto (`crypto.subtle`); no hand-rolled primitives.
  */
 
 /** §9.2 step 3 — HKDF `info` domain separator. */
 export const DM_KEY_INFO = 'gritos/dm/v1'
+
+/** §12.1 (issue #93) — HKDF `info` domain separator of the v2 derivation. */
+export const DM_KEY_INFO_V2 = 'gritos/dm/v2'
 
 /** AES-GCM nonce length in bytes (§9.2 step 4). */
 export const DM_IV_BYTES = 12
@@ -96,6 +107,42 @@ export async function deriveDmSalt(fpA: string, fpB: string): Promise<Uint8Array
   return new Uint8Array(digest)
 }
 
+/**
+ * HKDF salt for the v2 derivation (spec §12.1, issue #93): SHA-256 over the
+ * UTF-8 concatenation of all four fingerprints — the long-lived identity
+ * pair AND the session-ephemeral pair — canonicalized and sorted ascending.
+ *
+ * Binding design: because the salt covers BOTH pairs, an ephemeral key
+ * substituted by an attacker (a swapped `ephkeys` announcement) can no
+ * longer steer the derivation silently — with the substituted fingerprint
+ * mixed in, both ends compute a DIFFERENT salt, hence a different AES-GCM
+ * key, and the attacker-substituted traffic simply fails GCM authentication
+ * visibly on decrypt instead of ever decrypting under a key the attacker
+ * knows. The identity pair keeps the TOFU anchor (`gritos:tofu`, §12.1)
+ * inside the derivation.
+ *
+ * Role independence: all four canonical fingerprints are fixed-width —
+ * 39 chars in display form (8 groups of 4 hex chars + 7 separators), 32 hex
+ * chars canonicalized — so a plain ascending sort of the four strings is
+ * unambiguous: both ends sort to the identical sequence regardless of who
+ * is "own" and who is "peer", and hash the identical salt.
+ */
+export async function deriveDmSaltV2(
+  ownIdFp: string,
+  peerIdFp: string,
+  ownEphFp: string,
+  peerEphFp: string,
+): Promise<Uint8Array> {
+  const [first, second, third, fourth] = [ownIdFp, peerIdFp, ownEphFp, peerEphFp]
+    .map(canonicalFingerprint)
+    .sort()
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    textEncoder.encode(first + second + third + fourth),
+  )
+  return new Uint8Array(digest)
+}
+
 // ---------------------------------------------------------------------------
 // Key derivation (§9.2 steps 2–3)
 // ---------------------------------------------------------------------------
@@ -142,6 +189,52 @@ export async function deriveDmKey(
   )
 }
 
+/**
+ * Derives the v2 shared DM key (spec §12.1, issue #93): ECDH P-256 over the
+ * SESSION-EPHEMERAL keypair of this side and the peer's announced ephemeral
+ * raw public key → HKDF-SHA256 (salt = `deriveDmSaltV2` over both fingerprint
+ * pairs, info = 'gritos/dm/v2', 32 B) → non-extractable AES-GCM-256 key.
+ * Same import/derive shape as v1's `deriveDmKey`; mirrored inputs on both
+ * ends yield the same key.
+ */
+export async function deriveDmKeyV2(
+  ownEphemeralPrivateKey: CryptoKey,
+  peerEphemeralRawPublicKey: Uint8Array,
+  ownIdFp: string,
+  peerIdFp: string,
+  ownEphFp: string,
+  peerEphFp: string,
+): Promise<CryptoKey> {
+  const peerPublicKey = await crypto.subtle.importKey(
+    'raw',
+    peerEphemeralRawPublicKey as BufferSource,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    [],
+  )
+  const secret = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: peerPublicKey },
+    ownEphemeralPrivateKey,
+    256,
+  )
+  const salt = await deriveDmSaltV2(ownIdFp, peerIdFp, ownEphFp, peerEphFp)
+  const baseKey = await crypto.subtle.importKey('raw', secret as BufferSource, 'HKDF', false, [
+    'deriveKey',
+  ])
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: salt as BufferSource,
+      info: textEncoder.encode(DM_KEY_INFO_V2),
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Per-session key cache (§9.2 step 5 — memory only, never persisted)
 // ---------------------------------------------------------------------------
@@ -173,9 +266,49 @@ export function getCachedDmKey(
   return derived
 }
 
-/** Drops every cached DM key (identity regeneration, tests). */
+/** v2 (§12.1): identity pair ‖ ephemeral pair (each ordered) → derived key. */
+const keyCacheV2 = new Map<string, Promise<CryptoKey>>()
+
+/**
+ * Cached variant of `deriveDmKeyV2` (spec §12.1, issue #93), keyed by the
+ * ordered identity fingerprint pair AND the ordered ephemeral pair — one
+ * derived key per peer per session: a fresh session regenerates the
+ * ephemeral pair, so the cache entry dies with it. Failures evict
+ * themselves so a transient error is retried on the next call.
+ */
+export function getCachedDmKeyV2(
+  ownEphemeralPrivateKey: CryptoKey,
+  peerEphemeralRawPublicKey: Uint8Array,
+  ownIdFp: string,
+  peerIdFp: string,
+  ownEphFp: string,
+  peerEphFp: string,
+): Promise<CryptoKey> {
+  const [idFirst, idSecond] = orderedFingerprints(ownIdFp, peerIdFp)
+  const [ephFirst, ephSecond] = orderedFingerprints(ownEphFp, peerEphFp)
+  const cacheKey = `${idFirst}|${idSecond}|${ephFirst}|${ephSecond}`
+  let derived = keyCacheV2.get(cacheKey)
+  if (derived === undefined) {
+    derived = deriveDmKeyV2(
+      ownEphemeralPrivateKey,
+      peerEphemeralRawPublicKey,
+      ownIdFp,
+      peerIdFp,
+      ownEphFp,
+      peerEphFp,
+    )
+    derived.catch(() => {
+      keyCacheV2.delete(cacheKey)
+    })
+    keyCacheV2.set(cacheKey, derived)
+  }
+  return derived
+}
+
+/** Drops every cached DM key (v1 and v2) — identity regeneration, tests. */
 export function clearDmKeyCache(): void {
   keyCache.clear()
+  keyCacheV2.clear()
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,10 @@
 import { vi } from 'vitest'
 import * as manager from '../src/lib/p2p/roomManager'
+import {
+  computeFingerprint,
+  exportRawPublicKey,
+  generateSessionKeypair,
+} from '../src/lib/crypto/identity'
 
 /**
  * Fake Trystero layer for tests: captures the joinRoom config/roomId,
@@ -91,4 +96,61 @@ export function installFakeTrystero(): ReturnType<typeof createFakeTrystero> {
   const fake = createFakeTrystero()
   manager.setJoinRoomFactory(fake.joinRoomFn as unknown as manager.TrysteroJoinRoom)
   return fake
+}
+
+// ---------------------------------------------------------------------------
+// Issue #93 (spec §12.1) — v2-capable fake remote peers
+// ---------------------------------------------------------------------------
+
+/**
+ * A fake remote peer's cryptographic material: the long-lived identity
+ * keypair (announced via `keys`) plus a session-ephemeral one (announced
+ * via `ephkeys`), each with its raw public key and fingerprint — exactly
+ * what a v2-capable build announces when joining.
+ */
+export interface FakeRemotePeer {
+  id: string
+  keypair: CryptoKeyPair
+  rawPublicKey: Uint8Array
+  fingerprint: string
+  ephKeypair: CryptoKeyPair
+  ephRawKey: Uint8Array
+  ephFingerprint: string
+}
+
+/** Generates a full v2-capable remote peer under a fixed Trystero peerId. */
+export async function makeFakeRemotePeer(id: string): Promise<FakeRemotePeer> {
+  const keypair = await generateSessionKeypair()
+  const rawPublicKey = await exportRawPublicKey(keypair.publicKey)
+  const ephKeypair = await generateSessionKeypair()
+  const ephRawKey = await exportRawPublicKey(ephKeypair.publicKey)
+  return {
+    id,
+    keypair,
+    rawPublicKey,
+    fingerprint: await computeFingerprint(rawPublicKey),
+    ephKeypair,
+    ephRawKey,
+    ephFingerprint: await computeFingerprint(ephRawKey),
+  }
+}
+
+/**
+ * Introduces `peer` into `room` the way a v2-capable build does (issue #93,
+ * spec §12.1): peer join + presence + identity `keys` + session-ephemeral
+ * `ephkeys` (65 bytes) announces. With `announceEphemeral: false` the peer
+ * models a legacy (v1) build that never announces `ephkeys` — the explicit
+ * mixed-version state the manager must surface instead of hiding.
+ */
+export async function fakePeerJoins(
+  room: FakeTrysteroRoom,
+  peer: FakeRemotePeer,
+  options: { nick?: string; announceEphemeral?: boolean } = {},
+): Promise<void> {
+  room.peerJoin(peer.id)
+  room.receive('presence', { nick: options.nick ?? 'par', fp: peer.fingerprint }, peer.id)
+  room.receive('keys', peer.rawPublicKey, peer.id)
+  if (options.announceEphemeral !== false) {
+    room.receive('ephkeys', peer.ephRawKey, peer.id)
+  }
 }

@@ -13,6 +13,14 @@ import { sanitizeRemoteNick } from '../nickname'
 
 export const PROTOCOL_VERSION = 1
 
+/**
+ * Issue #93 (spec §12.1) — envelope version of DMs sealed with
+ * session-ephemeral ECDH keys. v1 envelopes cover chat, every control-plane
+ * action and the legacy static-identity `dm`; v2 envelopes only ever carry
+ * `kind: 'dm'`.
+ */
+export const DM_PROTOCOL_VERSION = 2
+
 /** Max plaintext body length in characters (RF-03). */
 export const MAX_PLAINTEXT_LENGTH = 4000
 /** Binary payloads above this size are discarded (§7.3). */
@@ -76,7 +84,11 @@ export type EnvelopeKind = 'chat' | 'dm'
  * only `v` is discriminating (§7.3).
  */
 export type Envelope = {
-  /** Protocol version; anything other than 1 is silently ignored. */
+  /**
+   * Protocol version: 1 (chat and the control plane) or 2 — the only version
+   * a `dm` may carry since phase 4 of issue #93 (spec §12.1); anything else
+   * is silently ignored.
+   */
   v: number
   /** crypto.randomUUID() — dedup key (§7.3). */
   id: string
@@ -180,7 +192,19 @@ export class BoundedSeenIds {
  * copy containing only the known fields; null when the payload must be
  * silently discarded.
  *
- * Rules: `v` must be exactly 1; `id`, `from`, `nick`, `body` are non-empty
+ * Rules: `v` ∈ {1, 2} (anything else is silently discarded) with a
+ * per-action gate — `kind: 'chat'` requires v1 (control-plane actions are
+ * Envelope-less payloads, so chat is the only broadcast kind), while
+ * `kind: 'dm'` requires v2 = DM_PROTOCOL_VERSION (issue #93 phase 4, spec
+ * §12.1): DMs are sealed with session-ephemeral keys that only v2 peers
+ * announce (`ephkeys`), so a v1 dm has no honest sender anymore and is
+ * dropped. This is the accepted mixed-version degradation of §12.1, in
+ * both directions: our v2 dms are silently dropped by v1 peers (old
+ * builds), and we silently drop their v1 dms — the v2 sender additionally
+ * surfaces an explicit legacy-peer state in the UI instead of relying on
+ * the silence.
+ *
+ * Further rules: `id`, `from`, `nick`, `body` are non-empty
  * strings; `ts` a finite number; `kind` ∈ {chat, dm};
  * `to` required (non-empty) iff kind is 'dm'; `enc` defaults to false, and
  * the body is capped before any decode work: plaintext bodies at
@@ -193,7 +217,8 @@ export class BoundedSeenIds {
  */
 export function parseEnvelope(raw: unknown): Envelope | null {
   if (!isPlainObject(raw)) return null
-  if (raw.v !== PROTOCOL_VERSION) return null
+  const version = raw.v
+  if (version !== PROTOCOL_VERSION && version !== DM_PROTOCOL_VERSION) return null
   if (typeof raw.id !== 'string' || raw.id.length === 0) return null
   if (typeof raw.ts !== 'number' || !Number.isFinite(raw.ts)) return null
   if (typeof raw.from !== 'string' || raw.from.length === 0) return null
@@ -204,6 +229,12 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   if (raw.kind !== 'chat' && raw.kind !== 'dm') return null
 
   const kind: EnvelopeKind = raw.kind
+  // Per-action version gate: v2 is dm-only, and `dm` is v2-only (issue #93
+  // phase 4, spec §12.1) — a v1 dm comes from an old build that cannot know
+  // the session-ephemeral key the v2 derivation needs, so it is dropped
+  // silently (§7.3), the mirror image of v1 peers dropping our v2 dms.
+  if (kind === 'chat' && version !== PROTOCOL_VERSION) return null
+  if (kind === 'dm' && version !== DM_PROTOCOL_VERSION) return null
   const isDm = kind === 'dm'
   let to: string | undefined
   if (isDm) {
@@ -224,7 +255,10 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   }
 
   const envelope: Envelope = {
-    v: PROTOCOL_VERSION,
+    // The normalized envelope carries the ACTUAL accepted version (1 or 2),
+    // not a hardcoded 1: the DM receive path keys off it (v2 ⇒
+    // session-ephemeral derivation, issue #93 / spec §12.1).
+    v: version,
     id: raw.id,
     ts: raw.ts,
     from: raw.from,
@@ -238,13 +272,20 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   return envelope
 }
 
-/** Builds a valid outgoing envelope with fresh id/timestamp (§7.2). */
+/**
+ * Builds a valid outgoing envelope with fresh id/timestamp (§7.2). The
+ * version defaults to PROTOCOL_VERSION; DM senders pass
+ * DM_PROTOCOL_VERSION (issue #93 phase 4, spec §12.1 — session-ephemeral
+ * E2EE). Deliberately NO kind-vs-version validation here — the parser is
+ * the single gate (§7.3); a mis-versioned envelope would simply be ignored
+ * by every receiving peer.
+ */
 export function createEnvelope(
   fields: Pick<Envelope, 'from' | 'nick' | 'kind' | 'body'> &
-    Partial<Pick<Envelope, 'to' | 'enc' | 'iv'>>,
+    Partial<Pick<Envelope, 'to' | 'enc' | 'iv' | 'v'>>,
 ): Envelope {
   return {
-    v: PROTOCOL_VERSION,
+    v: fields.v ?? PROTOCOL_VERSION,
     id: newMessageId(),
     ts: Date.now(),
     from: fields.from,
