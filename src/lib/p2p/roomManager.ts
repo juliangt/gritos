@@ -18,9 +18,14 @@ import { createEnvelope, DM_PROTOCOL_VERSION } from './protocol'
 import {
   BoundedSeenIds,
   MAX_PLAINTEXT_LENGTH,
+  MAX_REACT_BATCH,
+  REACT_EMOJIS,
   filterDmForSelf,
   isOversized,
+  markSeen,
   parseEnvelope,
+  parseReact,
+  reactSeenKey,
   shouldProcess,
   validateReceipt,
   MAX_RECEIPT_BATCH,
@@ -28,6 +33,8 @@ import {
   type PingPayload,
   type PongPayload,
   type PresencePayload,
+  type ReactEmoji,
+  type ReactPayload,
   type ReceiptPayload,
   type TypingPayload,
 } from './protocol'
@@ -61,7 +68,7 @@ import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } fro
  * The single Trystero surface of the app (plan.md §3 architecture rules:
  * only this module may import trystero). Multi-room core — spec §6.3/§6.5:
  * a Map<roomId, RoomConnection>; each connection encapsulates its Trystero
- * room, its 9 registered actions (§7.1) and its status heuristic, and feeds
+ * room, its 10 registered actions (§7.1) and its status heuristic, and feeds
  * the Zustand store (§8.1).
  *
  * M3 adds the E2EE DM path (RF-04, §9.2): received raw public keys are kept
@@ -113,6 +120,17 @@ import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } fro
  * join/leave line gate additionally consults the announced `presence` fp
  * (see `mutedFingerprint`).
  *
+ * Issue #98 — emoji reactions: one more action, `react` (spec §7.1), same
+ * cosmetic control-plane class as receipts and typing (spec §9.5). Phase 1
+ * wires the protocol only: broadcast by default (every peer maintains
+ * counts), directed via the optional `to` field for DM reactions (they ride
+ * the room swarm targeted at the peer so they never leak to the room).
+ * Receive path: mute gate → `parseReact` (whitelist/caps) → foreign-`to`
+ * drop → per-peer rate cap (REACT_RATE_CAP/min) → payload dedup through the
+ * connection's BoundedSeenIds → delivery through the `onReact` seam. Phase 2
+ * subscribes to that seam to maintain state (dropping unknown message ids
+ * there, silently); nothing persists and nothing notifies, ever.
+ *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
  */
@@ -141,6 +159,18 @@ export const SYSTEM_LINE_RATE_CAP = 3
 
 /** Rolling window over which SYSTEM_LINE_RATE_CAP applies. */
 export const SYSTEM_LINE_RATE_WINDOW_MS = 60_000
+
+/**
+ * Issue #98 — reactions are cosmetic control-plane traffic (spec §9.5), so a
+ * peer may deliver at most this many `react` payloads per peer per rolling
+ * REACT_RATE_WINDOW_MS; excess is dropped before any state can churn (the
+ * same posture as SYSTEM_LINE_RATE_CAP for join/leave lines: the mesh is
+ * trustless, so receive-path caps are the only flood defense).
+ */
+export const REACT_RATE_CAP = 30
+
+/** Rolling window over which REACT_RATE_CAP applies. */
+export const REACT_RATE_WINDOW_MS = 60_000
 
 /**
  * Issue #20 — the §10.3 local chat queue (envelopes typed while the room has
@@ -208,6 +238,8 @@ interface RoomActions {
   dm: MessageAction<Envelope>
   typing: MessageAction<TypingPayload>
   receipt: MessageAction<ReceiptPayload>
+  /** Issue #98 — emoji reactions; broadcast, or directed via payload.to. */
+  react: MessageAction<ReactPayload>
   ping: MessageAction<PingPayload>
   pong: MessageAction<PongPayload>
 }
@@ -259,6 +291,14 @@ interface RoomInternals extends RoomConnection {
    * freed with the connection itself (memory-only, like every queue here).
    */
   readonly systemLineTimes: Map<string, number[]>
+  /**
+   * Issue #98 — timestamps of the react payloads already accepted per peer
+   * (each queue holds at most REACT_RATE_CAP entries) gating the cosmetic-
+   * class flood over the rolling window. Kept across peer leaves — like
+   * systemLineTimes, clearing on leave would let rejoin churn reset the cap
+   * — and freed with the connection itself (memory-only).
+   */
+  readonly reactTimes: Map<string, number[]>
   /**
    * Chat envelopes awaiting the first DataChannel (§10.3 local queue).
    * Issue #20 — capped at PENDING_CHATS_CAP, oldest dropped on overflow:
@@ -553,6 +593,56 @@ export function onPong(listener: PongListener): () => void {
     pongListeners.delete(listener)
   }
 }
+
+// ---------------------------------------------------------------------------
+// React routing (issue #98, phase 1 seam — phase 2 state subscribes here)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validated, rate-capped and dedup'd inbound reaction. `roomId` is the swarm
+ * it rode in on; `payload.to === undefined` is a room-wide broadcast, a set
+ * `to` a DM reaction addressed to THIS peer. Phase 2 owns the state policy
+ * (including dropping ids of unknown/evicted messages — silently, cosmetic
+ * class); phase 1 only gates and delivers.
+ */
+export type ReactListener = (roomId: string, peerId: string, payload: ReactPayload) => void
+
+const reactListeners = new Set<ReactListener>()
+
+/** Subscribes to validated inbound reactions; returns the unsubscribe function. */
+export function onReact(listener: ReactListener): () => void {
+  reactListeners.add(listener)
+  return () => {
+    reactListeners.delete(listener)
+  }
+}
+
+/**
+ * Issue #98 phase 2 — the store-side policy for one validated inbound
+ * reaction: broadcast payloads mutate ONLY the room slice, directed ones
+ * ONLY the DM slice. The channel key is the SENDER's peerId (dms[peerId],
+ * the same key appendDmMessage/markDmMessagesDelivered use) — `payload.to`
+ * is this peer (the phase-1 gate guaranteed it) and carries no routing
+ * beyond "this is a DM reaction". Unknown or FIFO/TTL-evicted message ids
+ * drop silently inside the store action (cosmetic class).
+ */
+function applyInboundReactionToStore(roomId: string, peerId: string, payload: ReactPayload): void {
+  const store = useAppStore.getState()
+  if (payload.to !== undefined) {
+    store.applyDmMessageReactions(peerId, payload.ids, payload.emo, peerId, payload.on)
+  } else {
+    store.applyMessageReactions(roomId, payload.ids, payload.emo, peerId, payload.on)
+  }
+}
+
+/**
+ * Issue #98 phase 2 — the seam→store wiring, subscribed at module load like
+ * manualDmManager's identity-regeneration listener: reactions must mutate
+ * state whether or not a React tree is mounted. resetManagerForTests clears
+ * reactListeners (tests register disposable listeners there) and re-installs
+ * THIS subscription — it is wiring, not disposable listener state.
+ */
+onReact(applyInboundReactionToStore)
 
 // ---------------------------------------------------------------------------
 // Join / leave / reconnect
@@ -1074,6 +1164,91 @@ export function sendPing(roomId: string, peerId: string, t: number): boolean {
   return true
 }
 
+/**
+ * Issue #98 — sends emoji reactions over `roomId`'s swarm. With `to` set the
+ * batches are DIRECTED at that peer (DM reactions: they ride the room swarm
+ * but must not leak to the room — same transport discipline as `dm`/
+ * `receipt`); without it the reaction is a room-wide broadcast (every peer
+ * maintains counts). Ids are chunked into MAX_REACT_BATCH payloads like
+ * receipts (§7.1), each validated by the same canonical `parseReact` gate
+ * the receive path uses — an invalid reaction (non-whitelisted emo, empty
+ * id, missing `on`) never reaches the wire. Cosmetic class: fire-and-forget
+ * while connected, no §10.3 pending queue (losing reactions offline costs
+ * nothing; queueing them would only delay staleness), false returned when
+ * the room is unknown, disconnected, or the payload is invalid.
+ */
+export function sendReact(
+  roomId: string,
+  ids: string[],
+  emo: string,
+  on: boolean,
+  to?: string,
+): boolean {
+  const connection = connections.get(roomId)
+  if (connection === undefined || connection.status !== 'connected') return false
+  if (ids.length === 0) return false
+  // Validate EVERY batch before sending ANY: a garbage id in a later chunk
+  // must not let an earlier chunk reach the wire.
+  const payloads: ReactPayload[] = []
+  for (let i = 0; i < ids.length; i += MAX_REACT_BATCH) {
+    const payload = parseReact({
+      ids: ids.slice(i, i + MAX_REACT_BATCH),
+      emo,
+      on,
+      ...(to !== undefined ? { to } : {}),
+    })
+    if (payload === null) return false
+    payloads.push(payload)
+  }
+  for (const payload of payloads) {
+    safeSend(
+      connection.actions.react,
+      payload satisfies ReactPayload,
+      payload.to !== undefined ? { target: payload.to } : undefined,
+    )
+  }
+  return true
+}
+
+/**
+ * Issue #98 phase 2 — the UI toggle: applies the local peerId to the message
+ * OPTIMISTICALLY (the store action is the same gate remote payloads use, so
+ * caps and idempotence hold) and sends the matching `react` payload. The
+ * direction comes from current state: selfId already on the list → unreact.
+ * Composition with the wire is duplicate-free by construction — Trystero
+ * never loops own broadcasts back, and the store add is idempotent should an
+ * echo ever surface. `to` selects the DM slice (keyed by the peer) and rides
+ * the first shared room's swarm directed at the peer (the sendDmTyping
+ * discipline); without it the toggle is a room broadcast. Returns whether
+ * the send was dispatched; the local toggle stands even when it was not —
+ * cosmetic state, losing the propagation costs nothing (the same posture as
+ * sendReact skipping the §10.3 queue). False (no state change) for a
+ * non-whitelisted emoji or an unknown message id.
+ */
+export function toggleReaction(
+  roomId: string,
+  messageId: string,
+  emo: string,
+  to?: string,
+): boolean {
+  if (!(REACT_EMOJIS as readonly string[]).includes(emo)) return false
+  const store = useAppStore.getState()
+  const message =
+    to !== undefined
+      ? store.dms[to]?.messages.find((entry) => entry.id === messageId)
+      : store.rooms[roomId]?.messages.find((entry) => entry.id === messageId)
+  if (message === undefined) return false
+  const on = !(message.reactions?.[emo as ReactEmoji] ?? []).includes(trysteroSelfId)
+  if (to !== undefined) {
+    store.applyDmMessageReactions(to, [messageId], emo, trysteroSelfId, on)
+    const shared = [...connections.values()].find((entry) => entry.peerKeys.has(to))
+    if (shared === undefined) return false
+    return sendReact(shared.roomId, [messageId], emo, on, to)
+  }
+  store.applyMessageReactions(roomId, [messageId], emo, trysteroSelfId, on)
+  return sendReact(roomId, [messageId], emo, on)
+}
+
 /** RF-03 — drops typing entries older than TYPING_TTL_MS. */
 export function pruneExpiredTyping(roomId: string, now: number): void {
   const room = useAppStore.getState().rooms[roomId]
@@ -1280,6 +1455,39 @@ function createConnection(init: {
     dm: trysteroRoom.makeAction<Envelope>('dm'),
     typing: trysteroRoom.makeAction<TypingPayload>('typing'),
     receipt: trysteroRoom.makeAction<ReceiptPayload>('receipt'),
+    // Issue #98 phase 1 — SPIKE RESULT (mixed-build tolerance), by source
+    // analysis of the installed @trystero-p2p/core 0.25.4
+    // (node_modules/@trystero-p2p/core/dist/action-wire.mjs). Registering one
+    // more action is safe for old peers that never register it:
+    //
+    // 1. Actions route BY NAME, not by negotiated index. Every wire chunk
+    //    embeds the action type string itself, zero-padded to 32 bytes at
+    //    offset 0 (action-wire.mjs:66-73 build `typeBytesPadded`; :104
+    //    `chunk.set(typeBytesPadded)` per chunk). There is no handshake that
+    //    maps names to per-connection ids, so a NEW action name cannot shift
+    //    the encoding an OLD peer parses for its EXISTING actions — each
+    //    message self-describes its action.
+    // 2. On receive, handleData decodes the name and looks it up in the
+    //    LOCAL registry (`const action = actions[type]`,
+    //    action-wire.mjs:142-145). For an unregistered name the chunks are
+    //    still reassembled but then parked in `pendingActionPayloads[type]`
+    //    (:169-177) — no handler fires, nothing throws; the payload would
+    //    only be delivered if that action were registered later (:78-85).
+    //    An old build therefore ignores `react` traffic silently, and its
+    //    existing actions keep routing untouched. (Trystero's own internal
+    //    actions are `@_`-prefixed — room.mjs:8, :80-93 — so `react` cannot
+    //    collide with them either.)
+    // 3. The 16-bit `nonce` in the header is a per-(peer, type) chunk-
+    //    reassembly counter (action-wire.mjs:105, :111, :147, :156-157),
+    //    never an action id.
+    //
+    // Conclusion: the issue's feared fallback (riding reactions through the
+    // receipt channel) is NOT needed; the `react` action ships as designed.
+    // Residual note: an old peer buffers unclaimed payloads in
+    // `pendingActionPayloads` without bound (Trystero's own design); the
+    // sender-side REACT_RATE_CAP and the cosmetic payload size keep honest
+    // builds' contribution negligible.
+    react: trysteroRoom.makeAction<ReactPayload>('react'),
     ping: trysteroRoom.makeAction<PingPayload>('ping'),
     pong: trysteroRoom.makeAction<PongPayload>('pong'),
   }
@@ -1301,6 +1509,7 @@ function createConnection(init: {
     peerEphFps: new Map<string, string>(),
     announcedPeers: new Set<string>(),
     systemLineTimes: new Map<string, number[]>(),
+    reactTimes: new Map<string, number[]>(),
     pendingChats: [],
     pendingReceipts: new Map<string, string[]>(),
     receiptTimer: null,
@@ -1442,6 +1651,11 @@ function createConnection(init: {
     useAppStore.getState().markMessagesDelivered(connection.roomId, payload.ids)
     // M3 — DM messages of the same author flip to ✓✓ too (RF-04).
     useAppStore.getState().markDmMessagesDelivered(peerId, payload.ids)
+  }
+  // Issue #98 — reactions never touch the store in phase 1: the validated
+  // payload goes through the onReact seam only (phase 2 subscribes to it).
+  actions.react.onMessage = (payload, { peerId }) => {
+    handleReactPayload(connection, payload, peerId)
   }
   actions.ping.onMessage = (payload, { peerId }) => {
     if (typeof payload?.t !== 'number' || !Number.isFinite(payload.t)) return
@@ -1645,6 +1859,52 @@ function consumeSystemLineBudget(connection: RoomInternals, peerId: string): boo
   }
   recent.push(now)
   connection.systemLineTimes.set(peerId, recent)
+  return true
+}
+
+/**
+ * Issue #98 — receive path of one `react` payload. Gate order tightens cost:
+ * local mute (issue #95 parity — a muted peer's reactions never surface, the
+ * same policy as typing flags), then the pure `parseReact` validation
+ * (whitelist/caps; violations dropped whole, silently — cosmetic class, no
+ * system lines), then the foreign-directed drop (`to` addressed to another
+ * peer: DM reactions ride the swarm TARGETED at the recipient, so this only
+ * bites peers that still broadcast directed traffic — defense in depth like
+ * `filterDmForSelf`, and never relayed, §7.3), then the per-peer rate cap
+ * (before dedup, so even replay storms cannot churn the dedup window), and
+ * finally payload dedup through the connection's BoundedSeenIds (full-mesh
+ * duplicates + replay flooding). What survives is delivered to the onReact
+ * seam; phase 2 owns everything after (including silently dropping ids of
+ * unknown or FIFO-evicted messages).
+ */
+function handleReactPayload(connection: RoomInternals, data: unknown, peerId: string): void {
+  if (isMuted(connection, peerId)) return
+  const payload = parseReact(data)
+  if (payload === null) return
+  if (payload.to !== undefined && payload.to !== trysteroSelfId) return
+  if (!consumeReactBudget(connection, peerId)) return
+  if (!markSeen(connection.seenIds, reactSeenKey(payload))) return
+  for (const listener of reactListeners) {
+    listener(connection.roomId, peerId, payload)
+  }
+}
+
+/**
+ * Issue #98 — consumes one slot of `peerId`'s react budget over the rolling
+ * window: true when a payload may be processed. Mirrors
+ * `consumeSystemLineBudget`; the per-peer queue never grows beyond
+ * REACT_RATE_CAP entries and is freed with the connection.
+ */
+function consumeReactBudget(connection: RoomInternals, peerId: string): boolean {
+  const now = Date.now()
+  const windowStart = now - REACT_RATE_WINDOW_MS
+  const recent = (connection.reactTimes.get(peerId) ?? []).filter((ts) => ts > windowStart)
+  if (recent.length >= REACT_RATE_CAP) {
+    connection.reactTimes.set(peerId, recent)
+    return false
+  }
+  recent.push(now)
+  connection.reactTimes.set(peerId, recent)
   return true
 }
 
@@ -1860,6 +2120,11 @@ export function resetManagerForTests(): void {
   // window; tests must start pristine.
   expiredMessageIds.clear()
   pongListeners.clear()
+  reactListeners.clear()
+  // Issue #98 phase 2 — re-install the module-load seam→store wiring the
+  // clear above purged: tests only own disposable listeners (see the
+  // subscription comment at onReact).
+  onReact(applyInboundReactionToStore)
   dmListeners.clear()
   mentionListeners.clear()
   clearDmKeyCache()

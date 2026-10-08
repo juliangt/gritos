@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   INITIAL_APP_STATE,
+  MAX_REACTIONS_PER_EMOJI,
+  applyReactionsToMessages,
   appendMessageCapped,
   connectionStatusText,
   latencyDot,
   partitionExpired,
+  toggleMessageReaction,
   useAppStore,
   type Message,
   type Room,
 } from '../src/stores/useAppStore'
+import { REACT_EMOJIS } from '../src/lib/p2p/protocol'
 import { INVALID_ROOM_NAME_TEXT, SUGGESTED_ROOMS } from '../src/lib/rooms'
 import {
   FIFO_SEPARATOR_TEXT,
@@ -276,6 +280,130 @@ describe('TTL expiry sweep (issue #96)', () => {
     const { kept, expired } = partitionExpired(messages, T0 + 5)
     expect(kept.map((message) => message.id)).toEqual(['a', 'c'])
     expect(expired.map((message) => message.id)).toEqual(['b', 'd'])
+  })
+})
+
+describe('reaction state (issue #98 phase 2)', () => {
+  beforeEach(() => {
+    useAppStore.setState({ ...INITIAL_APP_STATE })
+  })
+
+  it('toggleMessageReaction adds, is idempotent, removes and cleans empty state', () => {
+    const base = userMessage({ id: 'm1' })
+    const added = toggleMessageReaction(base, '👍', 'peer-1', true)
+    expect(added.reactions).toEqual({ '👍': ['peer-1'] })
+
+    // Re-adding (a broadcast echo, a full-mesh duplicate) must not double-add.
+    expect(toggleMessageReaction(added, '👍', 'peer-1', true)).toBe(added)
+
+    const removed = toggleMessageReaction(added, '👍', 'peer-1', false)
+    expect(removed.reactions).toBeUndefined() // empty map → no ghost state
+
+    // Removing an absent reactor is a no-op (same object, guarded write).
+    expect(toggleMessageReaction(removed, '👍', 'peer-1', false)).toBe(removed)
+    // ...and removal from a message without any reactions at all.
+    expect(toggleMessageReaction(base, '👍', 'peer-1', false)).toBe(base)
+  })
+
+  it('keeps several emojis per message and removes only the toggled one', () => {
+    let message = userMessage({ id: 'm1' })
+    for (const emo of ['👍', '🎉']) {
+      message = toggleMessageReaction(message, emo, 'peer-1', true)
+    }
+    expect(message.reactions).toEqual({ '👍': ['peer-1'], '🎉': ['peer-1'] })
+    const removed = toggleMessageReaction(message, '👍', 'peer-1', false)
+    expect(removed.reactions).toEqual({ '🎉': ['peer-1'] })
+  })
+
+  it('refuses non-whitelist emoji (the whitelist is the single emoji gate)', () => {
+    const base = userMessage({ id: 'm1' })
+    expect(toggleMessageReaction(base, '🚀', 'peer-1', true)).toBe(base)
+  })
+
+  it('refuses the 51st peerId on one emoji (cap, never evict)', () => {
+    let message = userMessage({ id: 'm1' })
+    for (let i = 0; i < MAX_REACTIONS_PER_EMOJI; i += 1) {
+      message = toggleMessageReaction(message, '👍', `peer-${i}`, true)
+    }
+    const full = message
+    expect(full.reactions?.['👍']).toHaveLength(MAX_REACTIONS_PER_EMOJI)
+    expect(toggleMessageReaction(full, '👍', 'one-too-many', true)).toBe(full)
+    // An existing reactor can still toggle off at the cap.
+    expect(toggleMessageReaction(full, '👍', 'peer-0', false).reactions?.['👍']).toHaveLength(
+      MAX_REACTIONS_PER_EMOJI - 1,
+    )
+  })
+
+  it('refuses a new emoji key once the whole whitelist is in use', () => {
+    // The wire cannot produce this state (parseReact only admits the same
+    // REACT_EMOJIS the cap counts): it models hand-made or legacy seeds with
+    // a non-whitelist key occupying a slot, so the reactions map is built
+    // directly.
+    const seededKeys = ['🚀', ...REACT_EMOJIS.slice(0, REACT_EMOJIS.length - 1)]
+    const message = userMessage({
+      id: 'm1',
+      reactions: Object.fromEntries(seededKeys.map((emo) => [emo, ['peer-1']])),
+    })
+    expect(Object.keys(message.reactions ?? {})).toHaveLength(REACT_EMOJIS.length)
+    const lastWhitelistEmoji = REACT_EMOJIS[REACT_EMOJIS.length - 1]
+    expect(toggleMessageReaction(message, lastWhitelistEmoji, 'peer-2', true)).toBe(message)
+    // An emoji already keyed stays toggleable at the full whitelist.
+    expect(
+      toggleMessageReaction(message, REACT_EMOJIS[0], 'peer-2', true).reactions?.[REACT_EMOJIS[0]],
+    ).toEqual(['peer-1', 'peer-2'])
+  })
+
+  it('applyReactionsToMessages applies the known ids of a batch and drops unknown ones', () => {
+    const messages = [userMessage({ id: 'm1' }), userMessage({ id: 'm2' })]
+    const next = applyReactionsToMessages(messages, ['m1', 'ghost'], '👍', 'peer-1', true)
+    expect(next?.[0]?.reactions).toEqual({ '👍': ['peer-1'] })
+    expect(next?.[1]?.reactions).toBeUndefined()
+  })
+
+  it('applyReactionsToMessages returns null when nothing matched (guarded write)', () => {
+    const messages = [userMessage({ id: 'm1' })]
+    expect(applyReactionsToMessages(messages, ['ghost'], '👍', 'peer-1', true)).toBeNull()
+    expect(applyReactionsToMessages(messages, [], '👍', 'peer-1', true)).toBeNull()
+    // Idempotent re-apply: no change, null, same array object preserved.
+    const applied = applyReactionsToMessages(messages, ['m1'], '👍', 'peer-1', true)
+    expect(applyReactionsToMessages(applied ?? messages, ['m1'], '👍', 'peer-1', true)).toBeNull()
+    expect((applied ?? messages)[0]?.reactions).toEqual({ '👍': ['peer-1'] })
+  })
+
+  it('store actions mutate only their slice and never touch unread or status', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom({ unread: 2 }))
+    store.ensureDmChannel('peer-1', 'luna-cauta', null)
+    store.appendMessage('room-1', userMessage({ id: 'room-msg' }))
+    store.appendDmMessage(
+      'peer-1',
+      userMessage({ id: 'dm-msg', roomId: 'dm:peer-1', authorId: 'peer-1' }),
+    )
+    // An own 'sent' row must keep its status through every reaction write.
+    store.appendMessage('room-1', userMessage({ id: 'own', authorId: 'self', status: 'sent' }))
+
+    useAppStore
+      .getState()
+      .applyMessageReactions('room-1', ['room-msg', 'dm-msg'], '👍', 'peer-1', true)
+    useAppStore
+      .getState()
+      .applyDmMessageReactions('peer-1', ['dm-msg', 'room-msg'], '❤️', 'peer-1', true)
+
+    const room = useAppStore.getState().rooms['room-1']
+    expect(room?.messages.find((m) => m.id === 'room-msg')?.reactions).toEqual({
+      '👍': ['peer-1'],
+    })
+    expect(room?.messages.find((m) => m.id === 'own')?.status).toBe('sent')
+    // unread: 2 seeded + 1 peer arrival; the reaction adds nothing.
+    expect(room?.unread).toBe(3)
+    const channel = useAppStore.getState().dms['peer-1']
+    expect(channel?.messages.find((m) => m.id === 'dm-msg')?.reactions).toEqual({
+      '❤️': ['peer-1'],
+    })
+    // The room batch's 'dm-msg' id must NOT have leaked into the dm slice.
+    expect(channel?.messages.find((m) => m.id === 'dm-msg')?.reactions?.['👍']).toBeUndefined()
+    // The peer's DM kept its arrival unread badge: reactions never touch it.
+    expect(channel?.unread).toBe(1)
   })
 })
 
