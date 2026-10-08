@@ -467,3 +467,21 @@ export const QR_DOWNLOAD_BUTTON = 'Descargar PNG'
 
 /** Same-deployment disclosure (issue #100 Risks): a QR from another install joins nothing. */
 export const QR_SAME_INSTALL_NOTE = 'El QR enlaza a esta misma instalación.'
+
+// ---------------------------------------------------------------------------
+// Issue #104 phase 4 — the service-worker update toast (App-level, bottom
+// corner): a waiting worker means a deployed new version is ready behind
+// this page, and «Recargar» is the reload that swaps it in. Component-local
+// state only: dismissing hides the toast for the session (a NEWER waiting
+// worker notifies afresh), nothing persists, and the toast never implies
+// push — it is a local same-origin artifact (§10.9).
+// ---------------------------------------------------------------------------
+
+/** The toast text: a new version waits behind this page. */
+export const UPDATE_AVAILABLE_TEXT = 'Nueva versión disponible'
+
+/** The action: reload so the waiting worker activates (the swap). */
+export const UPDATE_RELOAD_BUTTON = 'Recargar'
+
+/** Accessible name and tooltip of the dismiss control (session-only). */
+export const UPDATE_TOAST_DISMISS_LABEL = 'Descartar el aviso'
