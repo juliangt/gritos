@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { readFile, readdir } from 'node:fs/promises'
 import { build, resolveConfig, type Plugin } from 'vite'
 import config from '../vite.config'
+import indexHtmlSource from '../index.html?raw'
 import robotsTxt from '../public/robots.txt?raw'
 import manifestSource from '../public/manifest.webmanifest?raw'
 
@@ -47,6 +48,20 @@ import manifestSource from '../public/manifest.webmanifest?raw'
  *   shell, deletes stale caches on activation, and is registered from the
  *   bundle — never from index.html. The phase-1 boundary guard ("no SW
  *   yet") is replaced by these dist/sw.js assertions.
+ * - Issue #104 (phase 3): the CSP + bootstrap interplay survives the PWA
+ *   build. The built CSP meta is byte-identical to the source one (no
+ *   plugin may touch it in a build — stripCspMetaInDev is serve-only, and
+ *   gritosSwManifest must never grow a transformIndexHtml); the SW
+ *   registration stays inside the same-origin bundle with no inline event
+ *   handlers, which is exactly what the hash-pinned `script-src` allows;
+ *   the manifest theme_color aligns with the media-scoped theme-color
+ *   metas (splash light, browser chrome per scheme); the precache list
+ *   covers every local URL the offline document references, so a cold boot
+ *   from cache needs zero non-precached resources; and the app source
+ *   makes no raw network call a CSP directive would have to govern (the
+ *   static stand-in for a console watch — jsdom cannot observe CSP
+ *   violations; the worker's own same-origin fetch gate is pinned by the
+ *   phase-2 tests above).
  *
  * Cheap checks keep all of these from shipping again:
  *  1. the shared vite config registers the Tailwind plugin and resolves a
@@ -211,6 +226,12 @@ const nodeProcess = (
 // dist build (identical build inputs must inject an identical version).
 let inMemorySwSource = ''
 
+// Shared with the issue #104 phase-3 block below: the index.html and CSS of
+// the same in-memory build, so those assertions compare the dist artifacts
+// against the exact output of the shared plugin pipeline.
+let inMemoryHtml = ''
+let inMemoryCss = ''
+
 /**
  * A quiet in-memory production build (NODE_ENV pinned exactly like the
  * blocks above) returning only the sw.js asset it emits — the harness for
@@ -276,9 +297,11 @@ describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => 
     } finally {
       if (nodeProcess != null) nodeProcess.env.NODE_ENV = previousNodeEnv
     }
-    // Shared with the phase-2 block below (see the declaration).
+    // Shared with the phase-2 and phase-3 blocks below (see the declarations).
     inMemorySwSource =
       emittedAssets(result).find((asset) => asset.fileName === 'sw.js')?.source ?? ''
+    inMemoryHtml = emittedHtml(result)
+    inMemoryCss = emittedCss(result)
   }, 120_000)
 
   it('emits expanded Tailwind utilities instead of the raw @tailwind directive', () => {
@@ -521,7 +544,8 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
     // Manifest colors are single values (unlike the media-scoped metas of
     // issue #49); light --gritos-bg is the anti-flash bootstrap's fallback,
     // so the splash and standalone chrome match the default first paint.
-    // Phase 3 of issue #104 revisits the dark scheme.
+    // Phase 3 (issue #104) kept this split — the dark browser chrome stays
+    // with the dark meta — and pins the cross-alignment below.
     expect(manifest.theme_color).toBe('#fafaf9')
     expect(manifest.background_color).toBe('#fafaf9')
   })
@@ -663,5 +687,132 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
     ).not.toContain('gritos-sw-manifest')
     const prod = await resolveConfig({ ...config, configFile: false }, 'build', 'production')
     expect(collectPluginNames(prod.plugins)).toContain('gritos-sw-manifest')
+  })
+
+  // --- Phase 3 (issue #104): CSP + bootstrap interplay ---
+
+  it('ships the CSP meta byte-identical from source into every build (issue #104, phase 3)', () => {
+    const source = indexHtmlSource.match(/<meta[^>]*Content-Security-Policy[^>]*>/)?.[0]
+    expect(source, 'the source index.html must keep the CSP meta').toBeDefined()
+    // Both the dist artifact and the in-memory build (the same plugin
+    // pipeline minus the disk write) must carry the meta untouched:
+    // stripCspMetaInDev applies to serve only, and gritosSwManifest must
+    // never grow a transformIndexHtml that mangles it in a build.
+    expect(distHtml.match(/<meta[^>]*Content-Security-Policy[^>]*>/)?.[0]).toBe(source)
+    expect(inMemoryHtml.match(/<meta[^>]*Content-Security-Policy[^>]*>/)?.[0]).toBe(source)
+  })
+
+  it('keeps the SW registration inside the same-origin bundle (issue #104, phase 3)', () => {
+    // `script-src 'self'` plus one hash-pinned inline script: anything
+    // else — an inline on*= handler or a second, injected script tag —
+    // would be blocked in production. The registration is bundled
+    // ('./sw.js' lives in the emitted chunks, per the phase-2 test above),
+    // so 'self' covers it with no CSP change.
+    expect(distHtml, 'inline event handlers trip the hash-pinned script-src').not.toMatch(
+      /\son[a-z]+\s*=/i,
+    )
+    const scripts = [...distHtml.matchAll(/<script\b[^>]*>/g)].map((tag) => tag[0])
+    expect(scripts, 'the hashed bootstrap and the bundle entry, nothing else').toHaveLength(2)
+    const withSrc = scripts.filter((tag) => /\ssrc=/.test(tag))
+    expect(withSrc).toHaveLength(1)
+    expect(withSrc[0], 'the entry must be same-origin and subpath-safe').toMatch(
+      /\ssrc="\.\/assets\//,
+    )
+    expect(
+      emittedJs(built),
+      'the worker is registered from the bundle, not the document',
+    ).toContain('./sw.js')
+  })
+
+  it('aligns manifest theme_color with the theme tokens and their metas (issue #104, phase 3)', () => {
+    // The phase-3 alignment: a manifest color cannot be media-scoped, so
+    // theme_color/background_color own the standalone splash and launcher
+    // chrome with the light surface token (--gritos-bg #fafaf9, the
+    // anti-flash fallback), while the issue-#49 metas keep the browser
+    // chrome per scheme — dark (#0c0a09) included. Both sets pinned
+    // together so neither can drift from the tokens silently.
+    expect(manifest.theme_color).toBe('#fafaf9')
+    const light = distHtml.match(
+      /<meta[^>]*name="theme-color"[^>]*prefers-color-scheme: light[^>]*>/,
+    )?.[0]
+    const dark = distHtml.match(
+      /<meta[^>]*name="theme-color"[^>]*prefers-color-scheme: dark[^>]*>/,
+    )?.[0]
+    expect(light, 'the light-scheme meta must be present').toBeDefined()
+    expect(dark, 'the dark-scheme meta must be present').toBeDefined()
+    const lightColor = light?.match(/content="([^"]+)"/)?.[1]
+    const darkColor = dark?.match(/content="([^"]+)"/)?.[1]
+    expect(lightColor, 'the splash color is the light token, same as the light meta').toBe(
+      '#fafaf9',
+    )
+    expect(darkColor, 'the dark browser chrome keeps its own token').toBe('#0c0a09')
+  })
+
+  it('precache list covers every local URL the offline shell references (issue #104, phase 3)', () => {
+    // Static proof of a cold offline boot with zero non-precached
+    // resources: the precached document ('./index.html', pinned in phase
+    // 2) plus every src/href it references must all be cache hits — a
+    // single gap is a white screen with no network.
+    const refs = [...distHtml.matchAll(/\b(?:src|href)="([^"]+)"/g)].map((match) => match[1])
+    const local = refs.filter((url) => url.startsWith('./'))
+    expect(
+      local.length,
+      'the shell must reference local assets for this check to mean anything',
+    ).toBeGreaterThan(0)
+    const precache = new Set(precacheUrls)
+    for (const url of local) {
+      expect(precache.has(url), `${url} is referenced by the offline shell but not precached`).toBe(
+        true,
+      )
+    }
+    // And the one shipped asset that can pull in further runtime loads —
+    // the stylesheet — must reference nothing but data: URIs (generated
+    // QR codes included): no font or image fetch the precache cannot answer.
+    for (const match of inMemoryCss.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/g)) {
+      expect(
+        match[2].startsWith('data:'),
+        `a non-data url() in CSS breaks the offline shell: ${match[2]}`,
+      ).toBe(true)
+    }
+  })
+
+  it('makes no raw network call a CSP directive would have to govern (issue #104, phase 3)', async () => {
+    // Static audit standing in for a console watch (CSP violations are not
+    // observable in jsdom): the app source must contain none of the
+    // primitives a CSP directive governs — fetch, XHR, WebSocket,
+    // EventSource, workers, sendBeacon, dynamic import. If one ever lands,
+    // this fails and forces a review of the CSP meta in index.html. With
+    // the audit green, everything the app reaches at boot is already
+    // covered: same-origin shell assets (default-src/script-src/style-src
+    // 'self'; offline coverage is the precache test above), the './sw.js'
+    // registration (same-origin; phase-2 test), Trystero tracker sockets —
+    // user-set URLs validated to wss: only (validateSettings.ts,
+    // NetworkTab) — allowed by connect-src wss:, WebRTC (not governed by
+    // CSP) and data: URIs for generated QR codes (img-src data:). The
+    // worker's fetch handler is same-origin-gated on top (phase-2 tests),
+    // so it never relays anything this audit does not see.
+    const srcPath = decodeURIComponent(new URL('../src/', import.meta.url).pathname).replace(
+      /\/$/,
+      '',
+    )
+    const files = (await readdir(srcPath, { recursive: true, withFileTypes: true })).filter(
+      (entry) => entry.isFile() && /\.(ts|tsx|css)$/.test(entry.name),
+    )
+    expect(files.length, 'the audit must have walked the real source tree').toBeGreaterThan(20)
+    expect(
+      files.some((entry) => entry.name === 'registerSw.ts'),
+      'the registration module — the one network touch — must be part of the walk',
+    ).toBe(true)
+    const forbidden =
+      /\bnew\s+(?:WebSocket|SharedWorker|Worker|EventSource)\b|\bXMLHttpRequest\b|\bsendBeacon\s*\(|\bfetch\s*\(|\bimport\s*\(/
+    for (const entry of files) {
+      const parent = entry.parentPath.slice(srcPath.length + 1)
+      const relative = parent === '' ? entry.name : `${parent}/${entry.name}`
+      const source = await readFile(`${srcPath}/${relative}`, 'utf8')
+      expect(
+        source,
+        `raw network primitive in src/${relative} — review the CSP meta in index.html`,
+      ).not.toMatch(forbidden)
+    }
   })
 })
