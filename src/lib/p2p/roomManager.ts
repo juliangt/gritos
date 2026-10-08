@@ -19,6 +19,7 @@ import {
   BoundedSeenIds,
   MAX_PLAINTEXT_LENGTH,
   MAX_REACT_BATCH,
+  REACT_EMOJIS,
   filterDmForSelf,
   isOversized,
   markSeen,
@@ -32,6 +33,7 @@ import {
   type PingPayload,
   type PongPayload,
   type PresencePayload,
+  type ReactEmoji,
   type ReactPayload,
   type ReceiptPayload,
   type TypingPayload,
@@ -615,6 +617,33 @@ export function onReact(listener: ReactListener): () => void {
   }
 }
 
+/**
+ * Issue #98 phase 2 — the store-side policy for one validated inbound
+ * reaction: broadcast payloads mutate ONLY the room slice, directed ones
+ * ONLY the DM slice. The channel key is the SENDER's peerId (dms[peerId],
+ * the same key appendDmMessage/markDmMessagesDelivered use) — `payload.to`
+ * is this peer (the phase-1 gate guaranteed it) and carries no routing
+ * beyond "this is a DM reaction". Unknown or FIFO/TTL-evicted message ids
+ * drop silently inside the store action (cosmetic class).
+ */
+function applyInboundReactionToStore(roomId: string, peerId: string, payload: ReactPayload): void {
+  const store = useAppStore.getState()
+  if (payload.to !== undefined) {
+    store.applyDmMessageReactions(peerId, payload.ids, payload.emo, peerId, payload.on)
+  } else {
+    store.applyMessageReactions(roomId, payload.ids, payload.emo, peerId, payload.on)
+  }
+}
+
+/**
+ * Issue #98 phase 2 — the seam→store wiring, subscribed at module load like
+ * manualDmManager's identity-regeneration listener: reactions must mutate
+ * state whether or not a React tree is mounted. resetManagerForTests clears
+ * reactListeners (tests register disposable listeners there) and re-installs
+ * THIS subscription — it is wiring, not disposable listener state.
+ */
+onReact(applyInboundReactionToStore)
+
 // ---------------------------------------------------------------------------
 // Join / leave / reconnect
 // ---------------------------------------------------------------------------
@@ -1179,6 +1208,45 @@ export function sendReact(
     )
   }
   return true
+}
+
+/**
+ * Issue #98 phase 2 — the UI toggle: applies the local peerId to the message
+ * OPTIMISTICALLY (the store action is the same gate remote payloads use, so
+ * caps and idempotence hold) and sends the matching `react` payload. The
+ * direction comes from current state: selfId already on the list → unreact.
+ * Composition with the wire is duplicate-free by construction — Trystero
+ * never loops own broadcasts back, and the store add is idempotent should an
+ * echo ever surface. `to` selects the DM slice (keyed by the peer) and rides
+ * the first shared room's swarm directed at the peer (the sendDmTyping
+ * discipline); without it the toggle is a room broadcast. Returns whether
+ * the send was dispatched; the local toggle stands even when it was not —
+ * cosmetic state, losing the propagation costs nothing (the same posture as
+ * sendReact skipping the §10.3 queue). False (no state change) for a
+ * non-whitelisted emoji or an unknown message id.
+ */
+export function toggleReaction(
+  roomId: string,
+  messageId: string,
+  emo: string,
+  to?: string,
+): boolean {
+  if (!(REACT_EMOJIS as readonly string[]).includes(emo)) return false
+  const store = useAppStore.getState()
+  const message =
+    to !== undefined
+      ? store.dms[to]?.messages.find((entry) => entry.id === messageId)
+      : store.rooms[roomId]?.messages.find((entry) => entry.id === messageId)
+  if (message === undefined) return false
+  const on = !(message.reactions?.[emo as ReactEmoji] ?? []).includes(trysteroSelfId)
+  if (to !== undefined) {
+    store.applyDmMessageReactions(to, [messageId], emo, trysteroSelfId, on)
+    const shared = [...connections.values()].find((entry) => entry.peerKeys.has(to))
+    if (shared === undefined) return false
+    return sendReact(shared.roomId, [messageId], emo, on, to)
+  }
+  store.applyMessageReactions(roomId, [messageId], emo, trysteroSelfId, on)
+  return sendReact(roomId, [messageId], emo, on)
 }
 
 /** RF-03 — drops typing entries older than TYPING_TTL_MS. */
@@ -2053,6 +2121,10 @@ export function resetManagerForTests(): void {
   expiredMessageIds.clear()
   pongListeners.clear()
   reactListeners.clear()
+  // Issue #98 phase 2 — re-install the module-load seam→store wiring the
+  // clear above purged: tests only own disposable listeners (see the
+  // subscription comment at onReact).
+  onReact(applyInboundReactionToStore)
   dmListeners.clear()
   mentionListeners.clear()
   clearDmKeyCache()

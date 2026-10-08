@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { REACT_EMOJIS, type ReactEmoji } from '../lib/p2p/protocol'
 
 /**
  * Base state types — spec.md §8.1.
@@ -96,6 +97,17 @@ export interface Message {
    * skew-tolerated ±90 s and must not be trusted for expiry.
    */
   expiresAt?: number
+  /**
+   * Issue #98 — aggregated emoji reactions, peerIds per whitelisted emoji.
+   * Cosmetic class (spec §9.5): memory-only, never persisted, never
+   * notified — the map dies with its message row (FIFO cap or TTL sweep).
+   * Capped by `applyReactionsToMessages`: at most REACT_EMOJIS.length keys
+   * (the whole whitelist — the wire cannot produce more, the cap only
+   * fences non-whitelisted seeds) and at most MAX_REACTIONS_PER_EMOJI
+   * peerIds per emoji (refused, never evicted). Applies to room and DM
+   * messages alike.
+   */
+  reactions?: Partial<Record<ReactEmoji, string[]>>
 }
 
 export type RoomStatus = 'searching' | 'connected' | 'error'
@@ -260,6 +272,89 @@ export function partitionExpired(
 }
 
 /**
+ * Issue #98 — state cap on one emoji's reactor list: the 51st peerId is
+ * refused (never evicted), the same refuse-not-evict discipline as the mute
+ * list and the receipt batch cap. Aggregation stays honest: every peer
+ * derives counts from the same payloads, so a cap overflow degrades to a
+ * missing reaction, never a wrong count.
+ */
+export const MAX_REACTIONS_PER_EMOJI = 50
+
+/**
+ * Issue #98 — one reaction toggle over one message (pure, testable like
+ * `appendMessageCapped`): `on: true` appends `reactorId` to `reactions[emoji]`
+ * (idempotent), `on: false` removes it (absent = no-op) and drops the key
+ * when its list empties (an empty map normalizes back to undefined, so no
+ * ghost state survives an unreact). Caps refuse without touching state:
+ * a NEW emoji key beyond REACT_EMOJIS.length (the whole whitelist — honest
+ * wire traffic can never reach this, the cap only fences hand-made or
+ * legacy seeds) and a 51st peerId on one list. Returns the SAME message
+ * object when nothing changed, so callers can keep their guarded write.
+ */
+export function toggleMessageReaction(
+  message: Message,
+  emo: string,
+  reactorId: string,
+  on: boolean,
+): Message {
+  // The whitelist is the single emoji gate (phase-1 parseReact upstream for
+  // wire traffic; the UI picker for local toggles): anything else is a no-op.
+  if (!(REACT_EMOJIS as readonly string[]).includes(emo)) return message
+  const emoji = emo as ReactEmoji
+  const current = message.reactions?.[emoji] ?? []
+  const has = current.includes(reactorId)
+  if (on === has) return message
+  if (on) {
+    if (current.length >= MAX_REACTIONS_PER_EMOJI) return message
+    const existing = message.reactions
+    const isNewKey = existing === undefined || !(emoji in existing)
+    if (
+      isNewKey &&
+      (existing === undefined
+        ? 0
+        : Object.values(existing).filter((list) => list.length > 0).length) >= REACT_EMOJIS.length
+    ) {
+      return message
+    }
+    return { ...message, reactions: { ...existing, [emoji]: [...current, reactorId] } }
+  }
+  const remaining = current.filter((id) => id !== reactorId)
+  const next: Partial<Record<ReactEmoji, string[]>> = { ...message.reactions, [emoji]: remaining }
+  if (remaining.length === 0) delete next[emoji]
+  return { ...message, reactions: Object.keys(next).length === 0 ? undefined : next }
+}
+
+/**
+ * Issue #98 — reaction batch over one feed (pure, testable like
+ * `partitionExpired`): applies the toggle to every message of `ids`, dropping
+ * unknown ids silently — a reaction to an unknown or FIFO/TTL-evicted message
+ * is cosmetic-class noise with no state to attach to. Returns null when NO
+ * message changed (all ids unknown, toggles idempotent or cap-refused), so
+ * callers keep their guarded write and the store reference stays untouched.
+ * Deliberately NO unread, receipt or notification side effects: reactions
+ * are cosmetic (spec §9.5).
+ */
+export function applyReactionsToMessages(
+  messages: Message[],
+  ids: readonly string[],
+  emo: string,
+  reactorId: string,
+  on: boolean,
+): Message[] | null {
+  const idSet = new Set(ids)
+  if (idSet.size === 0) return null
+  let changed = false
+  const next = messages.map((message) => {
+    if (!idSet.has(message.id)) return message
+    const toggled = toggleMessageReaction(message, emo, reactorId, on)
+    if (toggled === message) return message
+    changed = true
+    return toggled
+  })
+  return changed ? next : null
+}
+
+/**
  * spec §10.3 — exact connection status header texts, including the
  * best-effort transition state (searching with peers already discovered but
  * no DataChannel yet): "Conectando (N pares encontrados)…".
@@ -329,6 +424,27 @@ export interface AppActions {
   appendDmMessage: (peerId: string, message: Message) => void
   /** M3 — flips own DM messages to 'delivered' on the peer's receipt. */
   markDmMessagesDelivered: (peerId: string, ids: string[]) => void
+  /**
+   * Issue #98 — applies an inbound reaction batch to `rooms[roomId]`'s
+   * messages (unknown ids dropped silently, caps enforced by
+   * `applyReactionsToMessages`). Cosmetic class: never touches unread,
+   * receipts or notifications.
+   */
+  applyMessageReactions: (
+    roomId: string,
+    ids: string[],
+    emo: string,
+    reactorId: string,
+    on: boolean,
+  ) => void
+  /** Issue #98 — the DM-channel mirror over `dms[peerId]`. */
+  applyDmMessageReactions: (
+    peerId: string,
+    ids: string[],
+    emo: string,
+    reactorId: string,
+    on: boolean,
+  ) => void
   /** M3 — recomputes `available` after peer/room changes (RF-04). */
   setDmAvailable: (peerId: string, available: boolean) => void
   /** M3 — DM typing signal (ts = null clears); expires after 4 s. */
@@ -633,6 +749,29 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
         return { ...message, status: 'delivered' as const }
       })
       return changed ? { dms: { ...state.dms, [peerId]: { ...channel, messages } } } : state
+    }),
+
+  // Issue #98 — guarded reaction writes over the room and DM slices: the
+  // caps/toggle/unknown-id policy lives in the pure helper, the actions only
+  // pick the slice. No unread change (cosmetic class, spec §9.5).
+  applyMessageReactions: (roomId, ids, emo, reactorId, on) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (room === undefined) return state
+      const messages = applyReactionsToMessages(room.messages, ids, emo, reactorId, on)
+      return messages === null
+        ? state
+        : { rooms: { ...state.rooms, [roomId]: { ...room, messages } } }
+    }),
+
+  applyDmMessageReactions: (peerId, ids, emo, reactorId, on) =>
+    set((state) => {
+      const channel = state.dms[peerId]
+      if (channel === undefined) return state
+      const messages = applyReactionsToMessages(channel.messages, ids, emo, reactorId, on)
+      return messages === null
+        ? state
+        : { dms: { ...state.dms, [peerId]: { ...channel, messages } } }
     }),
 
   setDmAvailable: (peerId, available) =>

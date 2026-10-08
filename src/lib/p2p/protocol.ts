@@ -157,6 +157,9 @@ export type PongPayload = { t: number }
  */
 export const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '👎'] as const
 
+/** Issue #98 — one whitelisted reaction emoji (a key of Message.reactions). */
+export type ReactEmoji = (typeof REACT_EMOJIS)[number]
+
 /**
  * Issue #98 — an emoji reaction batch (§7.1): `ids` are the message ids the
  * reaction applies to (1..MAX_REACT_BATCH, dedup'd by `parseReact`), `emo`
