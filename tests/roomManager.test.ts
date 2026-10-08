@@ -4,7 +4,12 @@ import { useAppStore } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { deriveRoomId, sha256Hex } from '../src/lib/crypto/hashes'
 import { formatFingerprint } from '../src/lib/crypto/identity'
-import { MAX_CLOCK_SKEW_MS, MAX_ENVELOPE_AGE_MS, type Envelope } from '../src/lib/p2p/protocol'
+import {
+  MAX_CLOCK_SKEW_MS,
+  MAX_ENVELOPE_AGE_MS,
+  parseEnvelope,
+  type Envelope,
+} from '../src/lib/p2p/protocol'
 import { NICKNAME_MAX_LENGTH } from '../src/lib/nickname'
 import {
   PENDING_CHATS_CAP,
@@ -299,9 +304,7 @@ describe('setNickname validation (issue #28, RF-01)', () => {
 
     const rejected = 'a'.repeat(NICKNAME_MAX_LENGTH + 1)
     expect(() => manager.setNickname(rejected)).toThrowError(manager.NicknameError)
-    expect(() => manager.setNickname(rejected)).toThrowError(
-      `Apodo no válido: «${rejected}»`,
-    )
+    expect(() => manager.setNickname(rejected)).toThrowError(`Apodo no válido: «${rejected}»`)
     expect(manager.getSessionIdentity()?.identity.nickname).toBe(identityBefore)
     expect(useAppStore.getState().identity?.nickname).toBe(identityBefore)
     await flushMicrotasks()
@@ -625,6 +628,27 @@ describe('M2 outgoing chat (RF-03, §10.3)', () => {
     const envelope = manager.sendChat(roomId, 'hola')
     expect(envelope).not.toBeNull()
     expect(room.lastSend('chat').data).toEqual(envelope)
+  })
+
+  it('attaches an optional ttl to the outgoing envelope (issue #96)', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const envelope = manager.sendChat(roomId, 'se autodestruye', 300)
+    expect(envelope?.ttl).toBe(300)
+    // Test guard: ttl rides the CURRENT chat version — no v bump — and the
+    // receiving parser (every peer's gate) accepts it.
+    const wire = room.lastSend('chat').data as Envelope
+    expect(wire.v).toBe(1)
+    expect(wire.ttl).toBe(300)
+    expect(parseEnvelope(wire)?.ttl).toBe(300)
+  })
+
+  it('keeps the no-ttl wire form byte-identical to pre-TTL builds (issue #96)', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const envelope = manager.sendChat(roomId, 'hola')
+    expect(Object.keys(envelope as object)).not.toContain('ttl')
+    expect(Object.keys(room.lastSend('chat').data as object)).not.toContain('ttl')
   })
 
   it('emits typing signals via sendTyping', async () => {

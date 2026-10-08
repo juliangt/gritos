@@ -14,6 +14,7 @@ import {
   DM_PROTOCOL_VERSION,
   MAX_CLOCK_SKEW_MS,
   MAX_ENVELOPE_AGE_MS,
+  parseEnvelope,
   type Envelope,
 } from '../src/lib/p2p/protocol'
 import {
@@ -84,9 +85,7 @@ beforeEach(async () => {
 
 /** Joins the manager into a room and introduces remote peer A into it as a
  * v2-capable peer (join + presence + `keys` + `ephkeys`). */
-async function joinWithPeerA(
-  name = 'lobby',
-): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
+async function joinWithPeerA(name = 'lobby'): Promise<{ roomId: string; room: FakeTrysteroRoom }> {
   const connection = await manager.joinRoom(name)
   const room = fake.rooms[fake.rooms.length - 1]
   await fakePeerJoins(room, A, { nick: 'zorro-bravo' })
@@ -419,6 +418,22 @@ describe('outgoing DM (RF-04, §9.2, §12.1 v2)', () => {
       text: 'hola desde B',
       status: 'sent',
     })
+  })
+
+  it('sendDm attaches an optional ttl to the v2 envelope (issue #96)', async () => {
+    await manager.ensureSessionIdentity()
+    const { room } = await joinWithPeerA()
+    manager.openDmChannel(A.id)
+
+    const envelope = await manager.sendDm(A.id, 'secreto efímero', 60)
+    expect(envelope).not.toBeNull()
+    // Test guard: ttl rides the CURRENT dm version (v2) — no v bump — and
+    // the receiving parser accepts the wire form whole.
+    const wire = envelope as Envelope
+    expect(wire.ttl).toBe(60)
+    expect(wire.v).toBe(DM_PROTOCOL_VERSION)
+    expect(room.lastSend('dm').data).toEqual(envelope)
+    expect(parseEnvelope(wire)?.ttl).toBe(60)
   })
 
   it('flips own DM messages to delivered when the peer receipts them', async () => {

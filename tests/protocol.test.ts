@@ -6,9 +6,11 @@ import {
   MAX_CLOCK_SKEW_MS,
   MAX_ENCRYPTED_BODY_CHARS,
   MAX_ENVELOPE_AGE_MS,
+  MAX_MESSAGE_TTL_S,
   MAX_PAYLOAD_BYTES,
   MAX_PLAINTEXT_LENGTH,
   MAX_RECEIPT_BATCH,
+  MIN_MESSAGE_TTL_S,
   PROTOCOL_VERSION,
   SEEN_IDS_CAP,
   createEnvelope,
@@ -96,9 +98,7 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
   })
 
   it('rejects unknown kinds and enforces to iff kind dm', () => {
-    expect(
-      parseEnvelope(validChat({ kind: 'system' as unknown as 'chat' })),
-    ).toBeNull()
+    expect(parseEnvelope(validChat({ kind: 'system' as unknown as 'chat' }))).toBeNull()
 
     // Since phase 4 (issue #93) a dm must carry v2.
     const dm = {
@@ -121,9 +121,7 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
   })
 
   it('enforces the 4000-char plaintext cap on unencrypted bodies', () => {
-    expect(parseEnvelope(validChat({ body: 'a'.repeat(4000) }))?.body).toHaveLength(
-      4000,
-    )
+    expect(parseEnvelope(validChat({ body: 'a'.repeat(4000) }))?.body).toHaveLength(4000)
     expect(parseEnvelope(validChat({ body: 'a'.repeat(MAX_PLAINTEXT_LENGTH + 1) }))).toBeNull()
   })
 
@@ -214,6 +212,88 @@ describe('per-action envelope versions (issue #93, spec §12.1 — final rule)',
     })
     expect(v2.v).toBe(DM_PROTOCOL_VERSION)
     expect(parseEnvelope(v2)).toEqual(v2)
+  })
+})
+
+describe('message TTL (issue #96: additive field, NO version bump)', () => {
+  function dmV2(overrides: Partial<Envelope> = {}): Envelope {
+    return {
+      ...validChat(),
+      v: DM_PROTOCOL_VERSION,
+      kind: 'dm',
+      to: 'peer-b',
+      body: 'secreto',
+      ...overrides,
+    }
+  }
+
+  it('keeps an envelope without ttl untouched (session-lived default)', () => {
+    const parsed = parseEnvelope(validChat())
+    expect(parsed?.ttl).toBeUndefined()
+    // "Absent stays absent": the field never enters the normalized copy.
+    expect(Object.keys(parsed as object)).not.toContain('ttl')
+  })
+
+  it('accepts and preserves integer ttls inside the inclusive bounds', () => {
+    expect(MIN_MESSAGE_TTL_S).toBe(30)
+    expect(MAX_MESSAGE_TTL_S).toBe(3600)
+    expect(parseEnvelope(validChat({ ttl: MIN_MESSAGE_TTL_S }))?.ttl).toBe(30)
+    expect(parseEnvelope(validChat({ ttl: 300 }))?.ttl).toBe(300)
+    expect(parseEnvelope(validChat({ ttl: MAX_MESSAGE_TTL_S }))?.ttl).toBe(3600)
+
+    // A valid ttl survives the normalized copy (only known fields), like
+    // every other known field.
+    const parsed = parseEnvelope({ ...validChat({ ttl: 45 }), unexpected: 'x' })
+    expect(parsed).toEqual(validChat({ ttl: 45 }))
+    expect(Object.keys(parsed as object)).not.toContain('unexpected')
+  })
+
+  it('drops the WHOLE envelope on an out-of-range, non-integer or non-number ttl', () => {
+    expect(parseEnvelope(validChat({ ttl: 0 }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: -30 }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: MIN_MESSAGE_TTL_S - 1 }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: MAX_MESSAGE_TTL_S + 1 }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: 30.5 }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: Number.NaN }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: Number.POSITIVE_INFINITY }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: '30' as unknown as number }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: null as unknown as number }))).toBeNull()
+    expect(parseEnvelope(validChat({ ttl: true as unknown as number }))).toBeNull()
+  })
+
+  it('test guard — TTL messages ship at the CURRENT per-kind version', () => {
+    // No v bump: a ttl-bearing chat is v1 and a ttl-bearing dm is v2. Old
+    // builds drop the unknown field silently and keep the message for the
+    // session — the documented mixed-version degradation (§7.3).
+    expect(parseEnvelope(validChat({ ttl: 30 }))?.v).toBe(PROTOCOL_VERSION)
+    const dm = parseEnvelope(dmV2({ ttl: 60 }))
+    expect(dm?.v).toBe(DM_PROTOCOL_VERSION)
+    expect(dm?.ttl).toBe(60)
+  })
+
+  it('mixed-version simulation — old-shape parse keeps working, new-shape keeps ttl', () => {
+    // An OLD build's envelope object (no ttl field): the current parser
+    // accepts it exactly as before, no ttl in the copy.
+    const parsedOld = parseEnvelope(validChat())
+    expect(parsedOld).toEqual(validChat())
+    expect(parsedOld?.ttl).toBeUndefined()
+
+    // The same message from a NEW build: ttl survives and `v` stays
+    // per-kind (1 for chat).
+    const newShape = validChat({ ttl: 300 })
+    const parsedNew = parseEnvelope(newShape)
+    expect(parsedNew).toEqual(newShape)
+    expect(parsedNew?.v).toBe(1)
+  })
+
+  it('createEnvelope leaves ttl off unless asked, and round-trips it when set', () => {
+    const plain = createEnvelope({ from: 'x', nick: 'n', kind: 'chat', body: 'b' })
+    // Default wire form byte-identical to pre-TTL builds: no ttl key.
+    expect(Object.keys(plain)).not.toContain('ttl')
+
+    const timed = createEnvelope({ from: 'x', nick: 'n', kind: 'chat', body: 'b', ttl: 120 })
+    expect(timed.ttl).toBe(120)
+    expect(parseEnvelope(timed)).toEqual(timed)
   })
 })
 
@@ -388,7 +468,10 @@ describe('freshness window (issue #19: replay protection)', () => {
     it('keeps boundary envelopes just inside both edges', () => {
       expect(shouldProcess(validChat({ ts: NOW - MAX_ENVELOPE_AGE_MS }), new Set())).toBe(true)
       expect(
-        shouldProcess(validChat({ id: '22222222-2222-4222-8222-222222222222', ts: NOW + MAX_CLOCK_SKEW_MS }), new Set()),
+        shouldProcess(
+          validChat({ id: '22222222-2222-4222-8222-222222222222', ts: NOW + MAX_CLOCK_SKEW_MS }),
+          new Set(),
+        ),
       ).toBe(true)
     })
   })

@@ -33,10 +33,10 @@ export interface RoomManagerApi {
     password?: string,
   ) => Promise<{ roomId: string | null; error: string | null }>
   leaveRoom: (roomId: string) => void
-  sendChat: (roomId: string, text: string) => void
+  sendChat: (roomId: string, text: string, ttl?: number) => void
   sendTyping: (roomId: string, on: boolean) => void
   /** M3 (RF-04) — encrypts and broadcasts a DM; null when it cannot send. */
-  sendDm: (peerId: string, text: string) => Promise<boolean>
+  sendDm: (peerId: string, text: string, ttl?: number) => Promise<boolean>
   /** M3 — directed DM typing signal. */
   sendDmTyping: (peerId: string, on: boolean) => void
   /** M3 — opens the DM channel with a peer and focuses it. */
@@ -110,8 +110,10 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     void leaveRoom(roomId)
   }, [])
 
-  const chat = useCallback((roomId: string, text: string) => {
-    sendChat(roomId, text)
+  // Issue #96 — the optional ttl (seconds) threads through to the envelope;
+  // Phase 3 wires the composer selector to it.
+  const chat = useCallback((roomId: string, text: string, ttl?: number) => {
+    sendChat(roomId, text, ttl)
   }, [])
 
   const typing = useCallback((roomId: string, on: boolean) => {
@@ -119,7 +121,8 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
   }, [])
 
   const dm = useCallback(
-    (peerId: string, text: string) => sendDm(peerId, text).then((envelope) => envelope !== null),
+    (peerId: string, text: string, ttl?: number) =>
+      sendDm(peerId, text, ttl).then((envelope) => envelope !== null),
     [],
   )
 

@@ -697,8 +697,14 @@ function safeSend<T>(
  * sends run through a per-connection chain that preserves send order; the
  * local feed echo stays plaintext with `encrypted: false` (the author holds
  * the key). Returns the logical (plaintext) envelope.
+ *
+ * Issue #96 — `ttl` (whole seconds, 30–3600) rides the envelope unchanged;
+ * undefined keeps the wire form byte-identical to pre-TTL builds (no ttl
+ * key). Deliberately pass-through, like `v`: the receiving parser is the
+ * single gate, so an out-of-bounds ttl would get the message dropped by
+ * every peer — senders pass UI-produced values only.
  */
-export function sendChat(roomId: string, text: string): Envelope | null {
+export function sendChat(roomId: string, text: string, ttl?: number): Envelope | null {
   const connection = connections.get(roomId)
   const identity = sessionIdentity
   if (connection === undefined || identity === null) return null
@@ -708,6 +714,7 @@ export function sendChat(roomId: string, text: string): Envelope | null {
     nick: identity.identity.nickname,
     kind: 'chat',
     body: text.slice(0, MAX_PLAINTEXT_LENGTH),
+    ...(ttl !== undefined ? { ttl } : {}),
   })
 
   const deliver = (wire: Envelope): void => {
@@ -870,14 +877,16 @@ export function openDmChannel(peerId: string): boolean {
  * `ephkeys` key (`getCachedDmKeyV2`), with both fingerprint pairs — identity
  * and ephemeral — bound into the HKDF salt; the identity key no longer
  * derives anything, it stays the TOFU/salt anchor. Envelopes carry
- * `v: DM_PROTOCOL_VERSION`. Returns the envelope, or null when there is no
+ * `v: DM_PROTOCOL_VERSION`. Issue #96 — an optional `ttl` (whole seconds)
+ * rides the envelope unchanged; undefined keeps the wire form byte-identical
+ * to pre-TTL builds. Returns the envelope, or null when there is no
  * identity, the peer is unavailable (no shared room), its key is unknown,
  * it never announced an ephemeral key (a v1 build: DM unavailable — the
  * channel's `legacyPeer` state makes this visible instead of losing
  * messages silently), or the text exceeds the 4000-char protocol limit
  * (§7.3).
  */
-export async function sendDm(peerId: string, text: string): Promise<Envelope | null> {
+export async function sendDm(peerId: string, text: string, ttl?: number): Promise<Envelope | null> {
   const identity = sessionIdentity
   const state = useAppStore.getState()
   const channel = state.dms[peerId]
@@ -920,6 +929,7 @@ export async function sendDm(peerId: string, text: string): Promise<Envelope | n
       iv: sealed.iv,
       body: sealed.payload,
       v: DM_PROTOCOL_VERSION,
+      ...(ttl !== undefined ? { ttl } : {}),
     })
     // Directed send (issue #18): only the recipient gets the ciphertext.
     safeSend(shared.actions.dm, envelope, { target: peerId })
