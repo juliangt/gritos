@@ -13,6 +13,14 @@ import { sanitizeRemoteNick } from '../nickname'
 
 export const PROTOCOL_VERSION = 1
 
+/**
+ * Issue #93 (spec §12.1) — envelope version of DMs sealed with
+ * session-ephemeral ECDH keys. v1 envelopes cover chat, every control-plane
+ * action and the legacy static-identity `dm`; v2 envelopes only ever carry
+ * `kind: 'dm'`.
+ */
+export const DM_PROTOCOL_VERSION = 2
+
 /** Max plaintext body length in characters (RF-03). */
 export const MAX_PLAINTEXT_LENGTH = 4000
 /** Binary payloads above this size are discarded (§7.3). */
@@ -76,7 +84,11 @@ export type EnvelopeKind = 'chat' | 'dm'
  * only `v` is discriminating (§7.3).
  */
 export type Envelope = {
-  /** Protocol version; anything other than 1 is silently ignored. */
+  /**
+   * Protocol version: 1 (chat, control plane and legacy static-identity
+   * `dm`) or 2 (session-ephemeral `dm`, issue #93 / spec §12.1); anything
+   * else is silently ignored.
+   */
   v: number
   /** crypto.randomUUID() — dedup key (§7.3). */
   id: string
@@ -180,7 +192,16 @@ export class BoundedSeenIds {
  * copy containing only the known fields; null when the payload must be
  * silently discarded.
  *
- * Rules: `v` must be exactly 1; `id`, `from`, `nick`, `body` are non-empty
+ * Rules: `v` ∈ {1, 2} (anything else is silently discarded) with a
+ * per-action gate — `kind: 'chat'` requires v1 (control-plane actions are
+ * Envelope-less payloads, so chat is the only broadcast kind), while
+ * `kind: 'dm'` accepts BOTH v1 and v2. The dm rule is TRANSITIONAL (issue
+ * #93 phase 3, spec §12.1): the current build still sends v1 DMs, phase 4
+ * flips the sender to v2 (`DM_PROTOCOL_VERSION`) and tightens this gate to
+ * v2-only. A v2 dm accepted here is only structurally valid — the v2
+ * session-ephemeral crypto semantics arrive with phase 4.
+ *
+ * Further rules: `id`, `from`, `nick`, `body` are non-empty
  * strings; `ts` a finite number; `kind` ∈ {chat, dm};
  * `to` required (non-empty) iff kind is 'dm'; `enc` defaults to false, and
  * the body is capped before any decode work: plaintext bodies at
@@ -193,7 +214,8 @@ export class BoundedSeenIds {
  */
 export function parseEnvelope(raw: unknown): Envelope | null {
   if (!isPlainObject(raw)) return null
-  if (raw.v !== PROTOCOL_VERSION) return null
+  const version = raw.v
+  if (version !== PROTOCOL_VERSION && version !== DM_PROTOCOL_VERSION) return null
   if (typeof raw.id !== 'string' || raw.id.length === 0) return null
   if (typeof raw.ts !== 'number' || !Number.isFinite(raw.ts)) return null
   if (typeof raw.from !== 'string' || raw.from.length === 0) return null
@@ -204,6 +226,10 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   if (raw.kind !== 'chat' && raw.kind !== 'dm') return null
 
   const kind: EnvelopeKind = raw.kind
+  // Per-action version gate: v2 is dm-only (issue #93, spec §12.1). The dm
+  // branch keeps accepting v1 too — TRANSITIONAL until phase 4 flips the
+  // sender to DM_PROTOCOL_VERSION and this becomes v2-only.
+  if (kind === 'chat' && version !== PROTOCOL_VERSION) return null
   const isDm = kind === 'dm'
   let to: string | undefined
   if (isDm) {
@@ -224,7 +250,10 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   }
 
   const envelope: Envelope = {
-    v: PROTOCOL_VERSION,
+    // The normalized envelope carries the ACTUAL accepted version (1 or 2),
+    // not a hardcoded 1: the receive paths key off it once phase 4 wires the
+    // v2 crypto (issue #93).
+    v: version,
     id: raw.id,
     ts: raw.ts,
     from: raw.from,
@@ -238,13 +267,20 @@ export function parseEnvelope(raw: unknown): Envelope | null {
   return envelope
 }
 
-/** Builds a valid outgoing envelope with fresh id/timestamp (§7.2). */
+/**
+ * Builds a valid outgoing envelope with fresh id/timestamp (§7.2). The
+ * version defaults to PROTOCOL_VERSION; DM senders pass
+ * DM_PROTOCOL_VERSION once phase 4 flips the sender (issue #93, spec
+ * §12.1). Deliberately NO kind-vs-version validation here — the parser is
+ * the single gate (§7.3); a mis-versioned envelope would simply be ignored
+ * by every receiving peer.
+ */
 export function createEnvelope(
   fields: Pick<Envelope, 'from' | 'nick' | 'kind' | 'body'> &
-    Partial<Pick<Envelope, 'to' | 'enc' | 'iv'>>,
+    Partial<Pick<Envelope, 'to' | 'enc' | 'iv' | 'v'>>,
 ): Envelope {
   return {
-    v: PROTOCOL_VERSION,
+    v: fields.v ?? PROTOCOL_VERSION,
     id: newMessageId(),
     ts: Date.now(),
     from: fields.from,

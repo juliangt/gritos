@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NICKNAME_MAX_LENGTH } from '../src/lib/nickname'
 import {
   BoundedSeenIds,
+  DM_PROTOCOL_VERSION,
   MAX_CLOCK_SKEW_MS,
   MAX_ENCRYPTED_BODY_CHARS,
   MAX_ENVELOPE_AGE_MS,
@@ -46,12 +47,12 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
     expect(Object.keys(parsed as object)).not.toContain('unexpected')
   })
 
-  it('ignores silently anything with v ≠ 1', () => {
+  it('ignores silently versions outside {1, 2} and malformed v values', () => {
     expect(parseEnvelope(validChat({ v: 0 }))).toBeNull()
-    expect(parseEnvelope(validChat({ v: 2 }))).toBeNull()
     expect(parseEnvelope(validChat({ v: '1' as unknown as number }))).toBeNull()
     expect(parseEnvelope(validChat({ v: null as unknown as number }))).toBeNull()
     expect(PROTOCOL_VERSION).toBe(1)
+    expect(DM_PROTOCOL_VERSION).toBe(2)
   })
 
   it('rejects bad ids', () => {
@@ -160,6 +161,51 @@ describe('parseEnvelope (spec §7.2/§7.3)', () => {
     expect(parseEnvelope(42)).toBeNull()
     expect(parseEnvelope([validChat()])).toBeNull()
     expect(parseEnvelope(undefined)).toBeNull()
+  })
+})
+
+describe('per-action envelope versions (issue #93, spec §12.1 — phase 3)', () => {
+  it('accepts a v1 chat and rejects a v2 chat (v2 is dm-only)', () => {
+    expect(parseEnvelope(validChat())?.v).toBe(1)
+    expect(parseEnvelope(validChat({ v: DM_PROTOCOL_VERSION }))).toBeNull()
+  })
+
+  it('accepts a v1 dm (TRANSITIONAL) and a v2 dm', () => {
+    const dmV1 = { ...validChat(), kind: 'dm' as const, to: 'peer-b', body: 'legacy' }
+    const dmV2 = { ...dmV1, v: DM_PROTOCOL_VERSION, id: '22222222-2222-4222-8222-222222222222' }
+    // TRANSITIONAL (issue #93 phase 3): the current build still SENDS v1
+    // dms; phase 4 flips the sender to DM_PROTOCOL_VERSION and tightens
+    // this gate to v2-only.
+    expect(parseEnvelope(dmV1)).toEqual(dmV1)
+    expect(parseEnvelope(dmV2)).toEqual(dmV2)
+    expect(parseEnvelope(dmV2)?.v).toBe(2)
+  })
+
+  it('rejects a v3 dm (silence per §7.3)', () => {
+    const dmV3 = { ...validChat(), kind: 'dm' as const, to: 'peer-b', v: 3 }
+    expect(parseEnvelope(dmV3)).toBeNull()
+  })
+
+  it('the normalized envelope preserves the ACTUAL accepted version', () => {
+    const dmV2 = { ...validChat(), kind: 'dm' as const, to: 'peer-b', v: 2 }
+    expect(parseEnvelope(dmV2)?.v).toBe(2)
+    expect(parseEnvelope(validChat({ v: 1 }))?.v).toBe(1)
+  })
+
+  it('createEnvelope defaults to v1 and passes an explicit v through', () => {
+    const legacy = createEnvelope({ from: 'x', nick: 'n', kind: 'dm', to: 'p', body: 'b' })
+    expect(legacy.v).toBe(PROTOCOL_VERSION)
+
+    const v2 = createEnvelope({
+      from: 'x',
+      nick: 'n',
+      kind: 'dm',
+      to: 'p',
+      body: 'b',
+      v: DM_PROTOCOL_VERSION,
+    })
+    expect(v2.v).toBe(DM_PROTOCOL_VERSION)
+    expect(parseEnvelope(v2)).toEqual(v2)
   })
 })
 
