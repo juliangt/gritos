@@ -487,7 +487,7 @@ Estética: minimalista, rápida, limpia. Densidad de información moderada, tipo
   - Sección _Sugeridas_ y _Recientes_ (si `rememberRooms`).
   - Botón **[+ Unirse]**: popover con nombre (y contraseña opcional).
   - Sección _Pares_ de la vista activa: apodo, punto de latencia, clic → menú (Mensaje directo / Copiar fingerprint / Silenciar).
-- **Área principal**: encabezado (nombre con `#`, 🔒 si aplica, estado, nº de pares, ajustes), feed, barra de entrada.
+- **Área principal**: encabezado (nombre con `#`, 🔒 si aplica, estado, nº de pares, compartir y QR de invitación (sección 10.8), ajustes), feed, barra de entrada.
 - **Modal de ajustes** con las pestañas Red / Privacidad / Apariencia (RF-07).
 
 ### 10.2 Onboarding (primera visita)
@@ -542,6 +542,12 @@ Garantías transversales:
 - **Verbo desconocido jamás se envía**: `/foo …` produce solo la línea local «Comando desconocido — /ayuda» — ningún texto literal con `/` alcanza la red por accidente. Para enviar un mensaje que empiece por `/` existe el escape documentado en `/ayuda`: `\/hola` envía «/hola» (la barra invertida se elimina al enviar).
 - **Autocompletado por teclado (RNF-05)**: al teclear `/` el compositor abre un popup de candidatos con el patrón ARIA combobox — el textarea es `role="combobox"`, la lista `role="listbox"` con `aria-activedescendant`, opciones nunca focusables: el foco no abandona jamás el textarea; `↑ ↓ Enter Esc` gobiernan la lista, y un verbo sin candidatos no abre popup.
 - **Todo comando es operable solo con teclado**, de la apertura del popup a la ejecución.
+
+### 10.8 Compartir sala y código QR (issues #41 y #100)
+
+El botón «⤴» del encabezado comparte el enlace profundo de la sala — `origen + ruta + #sala=<nombre>` (construido por `buildRoomLink`, consumido por el enrutado `#sala=` del onboarding y de `ChatLayout`) — vía `navigator.share` con respaldo de portapapeles («Enlace copiado»). El enlace lleva **solo el nombre, jamás la contraseña** (RF-05).
+
+El botón «QR» (issue #100) abre un popover que codifica **exactamente ese mismo enlace** en un código QR: escanearlo con la cámara nativa de otro dispositivo aterriza en el flujo de unión con el nombre prellenado. El QR **nunca contiene la contraseña** — en una sala cifrada el enlace solo abre el flujo de unión y el alta sigue pidiéndola (RF-05). La superficie de escaneo es **fija**: módulos casi negros sobre blanco con su zona de silencio, en claro Y en oscuro — la escaneabilidad manda sobre el tema (los tokens AA garantizan contraste a ojos humanos, no a decodificadores). «Descargar PNG» exporta el mismo símbolo en alta resolución (`gritos-sala-<nombre>.png`), con el enlace en texto copiable debajo como respaldo. Límite documentado en el propio popover («El QR enlaza a esta misma instalación.»): el enlace solo sirve dentro de esta misma instalación — mismo origen y mismo `VITE_TRYSTERO_APP_ID` (issue #90); un QR de otra instalación no une a nada.
 
 ## 11. Limitaciones conocidas (visibles o documentadas en la UI)
 
