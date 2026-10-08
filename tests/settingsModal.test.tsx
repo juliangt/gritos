@@ -381,7 +381,10 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     expect(persisted.fingerprint).toBe(useAppStore.getState().identity?.fingerprint)
     expect(persisted.nickname).toBe('zorro-bravo')
     expect(fake.rooms[0].action('presence').sends.length).toBeGreaterThan(presenceBefore)
-    expect(fake.rooms[0].action('keys').sends.length).toBe(keysBefore + 1)
+    // The `keys` re-announce happens after an awaited ephemeral-keygen inside
+    // regenerateSessionIdentity, so it can land after the fingerprint swap
+    // this test already waited for — wait for it explicitly.
+    await waitFor(() => expect(fake.rooms[0].action('keys').sends.length).toBe(keysBefore + 1))
     // The dialog is gone afterwards.
     expect(screen.queryByRole('dialog', { name: 'Regenerar identidad' })).not.toBeInTheDocument()
   })
