@@ -14,7 +14,7 @@ import {
   type RoomStatus,
 } from '../../stores/useAppStore'
 import { DEFAULT_SETTINGS, getMutedNickname, useSettingsStore } from '../../stores/useSettingsStore'
-import { createEnvelope, DM_PROTOCOL_VERSION } from './protocol'
+import { createEnvelope, DM_PROTOCOL_VERSION, PROTOCOL_VERSION } from './protocol'
 import {
   BoundedSeenIds,
   MAX_HISTORY_REQUEST,
@@ -152,11 +152,15 @@ import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } fro
  * also makes a later LIVE resend of the same id dedup). Survivors are
  * delivered through the `onHistRequest`/`onRecovered` seams ONLY — no store
  * append, no unread, no mention, no receipt, no typing (✓✓ means live
- * delivery); the consent policy, the recovered-state wiring and the
- * append-time filtering of third-party-muted authors are phases 2/3.
+ * delivery); the recovered-state wiring and the append-time filtering of
+ * third-party-muted authors are phase 3's — `onRecovered` stays unwired.
  * Sender side, `sendHistory` sanitizes (chat-only, ≤ 50, re-validated,
- * chunked) and re-seals bodies with the room key in password rooms; nothing
- * calls it yet (consent is phase 2).
+ * chunked) and re-seals bodies with the room key in password rooms. Phase 2
+ * wires the CONSENT side at module level (`respondToHistoryRequest`): a
+ * delivered hist-req is honored ONLY while `gritos:settings`.shareHistory
+ * is on (default silence), with at most the last `n` chat rows of the
+ * in-memory feed — never system lines, encrypted placeholders or
+ * already-expired rows.
  *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
@@ -743,6 +747,80 @@ export function onRecovered(listener: RecoveredListener): () => void {
     recoveredListeners.delete(listener)
   }
 }
+
+/**
+ * Issue #102 phase 2 — the shareable slice of one room's in-memory feed,
+ * rebuilt as chat envelopes for `sendHistory`. The store keeps Message rows
+ * (plaintext, arrival order, oldest → newest), so this maps the LAST
+ * `limit` shareable rows back to their wire form:
+ *
+ * - chat rows only: `kind: 'system'` lines are local feed furniture (join/
+ *   leave, moderation lines, cap separators) and are never gossiped — DMs,
+ *   by construction, never enter a room feed (they live in the `dms` slice),
+ *   and `sendHistory` re-enforces chat-only anyway.
+ * - never the encrypted placeholder rows (`encrypted: true`): the store
+ *   holds neither their plaintext nor the original ciphertext (issue #21),
+ *   so there is nothing honest to forward.
+ * - never already-expired rows: the sweep runs on a 1 s tick, so a row
+ *   whose `expiresAt` is due can still sit in the feed between ticks.
+ *
+ * Own messages rebuild with the real local peerId (`authorId === 'self'`
+ * is the store's echo convention); received ones with their transport
+ * peerId. `ts` is the author timestamp (the ±90 s future-skew bound is the
+ * only freshness check the replay path keeps, and live-received rows were
+ * already skew-checked on arrival); the body is the stored plaintext —
+ * `sendHistory` re-validates and re-seals it for password rooms. TTL rows
+ * share as session-lived: the author's original `ttl` seconds are not
+ * recoverable from the store (only the absolute receiver-clock `expiresAt`
+ * is kept), so nothing is fabricated.
+ */
+function shareableFeedEnvelopes(roomId: string, limit: number): Envelope[] {
+  const feed = useAppStore.getState().rooms[roomId]?.messages ?? []
+  const now = Date.now()
+  const shareable = feed.filter(
+    (message) =>
+      message.kind !== 'system' &&
+      !message.encrypted &&
+      (message.expiresAt === undefined || message.expiresAt > now),
+  )
+  return shareable.slice(-Math.min(limit, MAX_HISTORY_REQUEST)).map((message) => ({
+    v: PROTOCOL_VERSION,
+    id: message.id,
+    ts: message.ts,
+    from: message.authorId === 'self' ? trysteroSelfId : message.authorId,
+    nick: message.authorNick,
+    kind: 'chat' as const,
+    enc: false,
+    iv: null,
+    body: message.text,
+  }))
+}
+
+/**
+ * Issue #102 phase 2 — the consent policy for one validated `hist-req`,
+ * subscribed at module level like the onReact wiring (no UI needed for the
+ * loop to work; tests re-install it in resetManagerForTests). The consent
+ * flag gates FIRST, so the default — and any mid-session toggle-off — is
+ * enforced silence: no `hist` leaves this module for any trigger while
+ * `shareHistory` is off. With consent, the requester's `n` bounds the slice
+ * (protocol-capped at MAX_HISTORY_REQUEST) and `sendHistory` answers it:
+ * fire-and-forget, broadcast room-wide (the phase-1 sender contract; a
+ * share that races a disconnect is simply lost and the peer may ask again).
+ * The recovered-envelope append path stays unwired — `onRecovered` is
+ * phase 3's.
+ */
+function respondToHistoryRequest(roomId: string, _peerId: string, n: number): void {
+  if (!useSettingsStore.getState().settings.shareHistory) return
+  void sendHistory(roomId, shareableFeedEnvelopes(roomId, n))
+}
+
+/**
+ * Issue #102 phase 2 — the seam→consent wiring, installed at module load
+ * exactly like onReact's: resetManagerForTests clears histRequestListeners
+ * (tests register disposable listeners there) and re-installs THIS
+ * subscription — it is wiring, not disposable listener state.
+ */
+onHistRequest(respondToHistoryRequest)
 
 // ---------------------------------------------------------------------------
 // Join / leave / reconnect
@@ -2406,11 +2484,11 @@ export function resetManagerForTests(): void {
   // clear above purged: tests only own disposable listeners (see the
   // subscription comment at onReact).
   onReact(applyInboundReactionToStore)
-  // Issue #102 phase 1 — the history-gossip seams have NO module-load store
-  // wiring yet (phase 1 delivers only; phase 2 installs its seam→store
-  // subscription here the way onReact does above). Tests register
-  // disposable listeners on both.
+  // Issue #102 phase 2 — same for the consent layer: the honoring of
+  // hist-req is module-load wiring, not disposable listener state; the
+  // onRecovered seam stays unwired (the append path is phase 3's).
   histRequestListeners.clear()
+  onHistRequest(respondToHistoryRequest)
   recoveredListeners.clear()
   dmListeners.clear()
   mentionListeners.clear()

@@ -83,6 +83,21 @@ export function unmutePeerAction(identifier: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Issue #102 — opt-in history gossip: the Privacidad-tab consent toggle.
+// The label is the issue's exact string; the hint discloses what a
+// consented share covers (only on an explicit request, at most the last 50
+// chat messages held in memory, nothing persisted, password-room bodies
+// re-sealed so only peers with the same password can read them).
+// ---------------------------------------------------------------------------
+
+/** Privacidad tab — the history-gossip consent toggle (exact issue string). */
+export const SHARE_HISTORY_LABEL = 'Compartir mi historial reciente con quien entra tarde'
+
+/** Privacidad tab — what the consent covers, and what never leaves the tab. */
+export const SHARE_HISTORY_HINT =
+  'Solo si lo activas, quien se incorpore tarde a una sala y lo pida expresamente podrá recibir hasta los últimos 50 mensajes de chat que esta pestaña tenga en memoria. Nada se guarda ni se envía sin petición; en salas con contraseña los cuerpos viajan re-cifrados con la clave de la sala, así que solo quien la conozca puede leerlos.'
+
+// ---------------------------------------------------------------------------
 // Issue #98 — message reactions (MessageItem quick-pick bar and aggregated
 // chips row). All Spanish wording lives here so components and tests share
 // the exact texts, like the mute affordance above.

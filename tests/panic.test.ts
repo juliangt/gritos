@@ -63,8 +63,10 @@ async function seedActiveSession(): Promise<void> {
   // gritos:tofu map under the reserved `manual:` prefix; no sixth key.
   pinTofuFingerprint('manual:A31F09BC77D24E5A51C0FFEE12345678', 'A31F 09BC 77D2 4E5A')
 
-  // A changed setting and a collapsed sidebar.
-  useSettingsStore.getState().setSettings({ theme: 'dark', maxActiveRooms: 6 })
+  // A changed setting and a collapsed sidebar. Issue #102 — the
+  // history-gossip consent rides `gritos:settings`, so the panic wipes it
+  // with the rest of the record.
+  useSettingsStore.getState().setSettings({ theme: 'dark', maxActiveRooms: 6, shareHistory: true })
   useUiStore.getState().setSidebarCollapsed(true)
 
   // Every documented key exists at this point.
@@ -100,7 +102,13 @@ describe('panicWipe (RF-08)', () => {
       }),
     )
     expect(useSettingsStore.getState().settings).toEqual(
-      expect.objectContaining({ theme: 'system', maxActiveRooms: 4, notifications: false }),
+      expect.objectContaining({
+        theme: 'system',
+        maxActiveRooms: 4,
+        notifications: false,
+        // Issue #102 — the consent flag is back to silence after the wipe.
+        shareHistory: false,
+      }),
     )
     expect(useUiStore.getState().sidebarCollapsed).toBe(false)
 

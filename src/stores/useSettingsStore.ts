@@ -26,6 +26,10 @@ export const DEFAULT_SETTINGS: Settings = {
   // Issue #95: the mute list persists inside this same record (spec §8.2,
   // no sixth `gritos:*` key) and is therefore wiped by the panic button.
   mutedFingerprints: [],
+  // Issue #102: history gossip is strictly opt-in — the default is silence;
+  // only an explicit peer request can ever pull history, and only while
+  // this consent flag is on.
+  shareHistory: false,
 }
 
 export interface SettingsStore {

@@ -32,6 +32,9 @@ describe('settings store defaults (spec §8.1)', () => {
       rememberRooms: true,
       rememberTurnCredentials: true,
       mutedFingerprints: [],
+      // Issue #102 — history gossip is strictly opt-in: the default is
+      // silence.
+      shareHistory: false,
     })
   })
 

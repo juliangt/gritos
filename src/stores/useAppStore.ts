@@ -41,6 +41,16 @@ export interface Settings {
    * entries; the cap refuses, it never evicts. Default: [].
    */
   mutedFingerprints: string[]
+  /**
+   * Issue #102 — opt-in history gossip: when true, an explicit peer
+   * `hist-req` may be answered with at most the last 50 chat messages of
+   * that room's in-memory feed (never DMs, never system lines). Gossip
+   * itself is memory-only — it can only share what a live tab holds — but
+   * the consent flag rides inside `gritos:settings` (spec §8.2: no sixth
+   * localStorage key) and is wiped by the panic button like everything else.
+   * Default: false — the default is silence.
+   */
+  shareHistory: boolean
 }
 
 export interface Identity {

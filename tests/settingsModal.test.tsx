@@ -10,6 +10,8 @@ import {
   ICE_ERROR_TEXT,
   MAX_ROOMS_ERROR_TEXT,
   P2P_IP_EXPOSURE_NOTE,
+  SHARE_HISTORY_HINT,
+  SHARE_HISTORY_LABEL,
   TRACKER_ERROR_TEXT,
   TURN_CREDENTIAL_MEMORY_HINT,
   TURN_CREDENTIAL_STORAGE_HINT,
@@ -319,6 +321,27 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Recordar salas recientes' }))
     expect(useSettingsStore.getState().settings.rememberRooms).toBe(false)
     expect(rawSettings().rememberRooms).toBe(false)
+  })
+
+  it('renders the history-gossip consent off by default with its disclosure (issue #102)', () => {
+    renderModal()
+    openTab('Privacidad')
+
+    // The exact issue string, with the explanatory hint next to it.
+    expect(screen.getByText(SHARE_HISTORY_LABEL)).toBeInTheDocument()
+    expect(screen.getByText(SHARE_HISTORY_HINT)).toBeInTheDocument()
+
+    // Default silence, and flipping the toggle writes the store and the
+    // persisted `gritos:settings` record instantly.
+    const toggle = screen.getByRole('checkbox', { name: SHARE_HISTORY_LABEL })
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    expect(useSettingsStore.getState().settings.shareHistory).toBe(true)
+    expect(rawSettings().shareHistory).toBe(true)
+
+    fireEvent.click(toggle)
+    expect(useSettingsStore.getState().settings.shareHistory).toBe(false)
+    expect(rawSettings().shareHistory).toBe(false)
   })
 
   it('discloses that TURN credentials are stored unencrypted (issue #30)', () => {

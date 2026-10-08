@@ -1297,7 +1297,7 @@ describe('issue #102 — hist-req receive path (validation + rate cap + seam)', 
     expect(requests).toHaveLength(0)
   })
 
-  it('never answers a request in phase 1 (consent is phase 2)', async () => {
+  it('the transport still never answers by itself (the consent layer owns all sends)', async () => {
     const { room } = await join('lobby')
     room.peerJoin('peer-1')
     collectHistDeliveries()
@@ -1576,6 +1576,215 @@ describe('issue #102 — sendHistory (sanitize, chat-only, chunking, sealing)', 
     // ciphertext decrypts for free.
     const key = await deriveRoomKey('clave-secreta', 'privada')
     const text = await decryptRoomMessage(key, { iv: sealed.iv ?? '', payload: sealed.body })
+    expect(text).toBe('mensaje secreto')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #102 phase 2 — the consent layer. The module-level
+// respondToHistoryRequest wiring answers a DELIVERED hist-req only while
+// `gritos:settings`.shareHistory is on; the default (and any mid-session
+// toggle-off) is enforced silence, so no hist ever leaves for any trigger.
+// With consent the share is the last n ≤ 50 chat rows of the in-memory
+// feed — never system lines, encrypted placeholders or already-expired
+// rows — handed to the phase-1 sendHistory (which re-validates and
+// re-seals). The onRecovered append path stays unwired (phase 3).
+// ---------------------------------------------------------------------------
+
+/** All envelopes the fake room has gossiped so far, across batches. */
+function gossipedEnvelopes(
+  room: ReturnType<typeof installFakeTrystero>['rooms'][number],
+): Envelope[] {
+  return room.action('hist').sends.flatMap((send) => (send.data as { batch: Envelope[] }).batch)
+}
+
+describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
+  it('toggle off (default): no hist is ever sent, fresh request or repeat', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    // A non-empty feed changes nothing: the consent gate fires first.
+    manager.sendChat(roomId, 'visible')
+    expect(useSettingsStore.getState().settings.shareHistory).toBe(false)
+
+    // Trigger 1: a fresh, valid request.
+    room.receive('hist-req', { n: 10 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(room.action('hist').sends).toHaveLength(0)
+
+    // Trigger 2: a repeat ask once the rate window rolled off (it reaches
+    // the honoring layer fresh): still silence.
+    await vi.advanceTimersByTimeAsync(HISTORY_REQ_RATE_WINDOW_MS + 1)
+    room.receive('hist-req', { n: 10 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(room.action('hist').sends).toHaveLength(0)
+  })
+
+  it('toggling off mid-session stops answering immediately', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    manager.sendChat(roomId, 'hola')
+    useSettingsStore.getState().setSettings({ shareHistory: true })
+    room.receive('hist-req', { n: 5 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(room.action('hist').sends).toHaveLength(1)
+
+    useSettingsStore.getState().setSettings({ shareHistory: false })
+    await vi.advanceTimersByTimeAsync(HISTORY_REQ_RATE_WINDOW_MS + 1)
+    room.receive('hist-req', { n: 5 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(room.action('hist').sends).toHaveLength(1) // no new batch
+  })
+
+  it('with consent: answers with the last ≤50 chat messages, in feed order', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    useSettingsStore.getState().setSettings({ shareHistory: true })
+    for (let i = 0; i < MAX_HISTORY_REQUEST + 5; i++) {
+      manager.sendChat(roomId, `m-${i}`)
+    }
+
+    room.receive('hist-req', { n: MAX_HISTORY_REQUEST }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    const delivered = gossipedEnvelopes(room)
+    // The 50-cap is enforced even though the feed could only ever offer
+    // 500 (the FIFO cap): exactly the LAST 50 rows go out.
+    expect(delivered).toHaveLength(MAX_HISTORY_REQUEST)
+    expect(delivered.map((envelope) => envelope.body)).toEqual(
+      Array.from({ length: MAX_HISTORY_REQUEST }, (_, i) => `m-${i + 5}`),
+    )
+    // Rebuilt chat wire forms: plaintext v1, room scope.
+    for (const envelope of delivered) {
+      expect(envelope.kind).toBe('chat')
+      expect(envelope.enc).toBe(false)
+      expect(envelope.v).toBe(1)
+    }
+  })
+
+  it('honors the requested n instead of always sending the full 50', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    useSettingsStore.getState().setSettings({ shareHistory: true })
+    for (let i = 0; i < 10; i++) {
+      manager.sendChat(roomId, `m-${i}`)
+    }
+
+    room.receive('hist-req', { n: 3 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(gossipedEnvelopes(room).map((envelope) => envelope.body)).toEqual(['m-7', 'm-8', 'm-9'])
+  })
+
+  it('filters system lines, encrypted placeholders and already-expired rows', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    useSettingsStore.getState().setSettings({ shareHistory: true })
+
+    const first = manager.sendChat(roomId, 'primero')
+    // Local feed furniture: a system line never gossips.
+    useAppStore.getState().appendMessage(roomId, {
+      id: 'sys-1',
+      roomId,
+      authorId: 'system',
+      authorNick: '',
+      text: 'peer-1 se ha unido',
+      ts: Date.now(),
+      encrypted: false,
+      status: 'delivered',
+      kind: 'system',
+    })
+    // Undecryptable placeholder row: neither its plaintext nor the original
+    // ciphertext is held, so there is nothing honest to forward.
+    useAppStore.getState().appendMessage(roomId, {
+      id: 'enc-1',
+      roomId,
+      authorId: 'peer-1',
+      authorNick: 'x',
+      text: '🔒 mensaje cifrado',
+      ts: Date.now(),
+      encrypted: true,
+      status: 'delivered',
+      kind: 'user',
+    })
+    // Already-expired row still sitting in the feed between sweep ticks.
+    useAppStore.getState().appendMessage(roomId, {
+      id: 'exp-1',
+      roomId,
+      authorId: 'self',
+      authorNick: 'yo',
+      text: 'caducado',
+      ts: Date.now(),
+      encrypted: false,
+      status: 'sent',
+      expiresAt: Date.now() - 1,
+    })
+    // A live TTL row is NOT expired: it shares (as session-lived — the
+    // author's ttl seconds are not recoverable from the store).
+    useAppStore.getState().appendMessage(roomId, {
+      id: 'ttl-1',
+      roomId,
+      authorId: 'self',
+      authorNick: 'yo',
+      text: 'efimero',
+      ts: Date.now(),
+      encrypted: false,
+      status: 'sent',
+      expiresAt: Date.now() + 60_000,
+    })
+    const last = manager.sendChat(roomId, 'ultimo')
+
+    room.receive('hist-req', { n: 50 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(gossipedEnvelopes(room).map((envelope) => envelope.id)).toEqual([
+      first?.id,
+      'ttl-1',
+      last?.id,
+    ])
+  })
+
+  it('an empty (or foreign) feed stays silent: the share is scoped to the requesting room', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const other = await join('dev')
+    useSettingsStore.getState().setSettings({ shareHistory: true })
+    // Only lobby holds rows; DMs never enter a room feed at all.
+    manager.sendChat(roomId, 'de lobby')
+
+    // A request in the empty room shares nothing.
+    other.room.peerJoin('peer-2')
+    other.room.receive('hist-req', { n: 50 }, 'peer-2')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(other.room.action('hist').sends).toHaveLength(0)
+
+    // The lobby request shares only lobby rows.
+    room.receive('hist-req', { n: 50 }, 'peer-1')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(gossipedEnvelopes(room).map((envelope) => envelope.body)).toEqual(['de lobby'])
+  })
+
+  it('password rooms: the honored share re-seals bodies with the room key', async () => {
+    const { room, roomId } = await join('privada', 'clave-secreta')
+    room.peerJoin('peer-1')
+    useSettingsStore.getState().setSettings({ shareHistory: true })
+    const first = manager.sendChat(roomId, 'mensaje secreto')
+    manager.sendChat(roomId, 'segundo')
+
+    room.receive('hist-req', { n: 10 }, 'peer-1')
+    // The PBKDF2 key derivation and the re-sealing are real async work on a
+    // fire-and-forget promise: wait for the batches to land on the wire.
+    await vi.waitFor(() => expect(room.action('hist').sends).toHaveLength(1))
+
+    const delivered = gossipedEnvelopes(room)
+    expect(delivered).toHaveLength(2)
+    // The stored plaintext left re-sealed (fresh IVs), never as plaintext.
+    expect(delivered[0]?.id).toBe(first?.id)
+    expect(delivered[0]?.enc).toBe(true)
+    expect(delivered[0]?.body).not.toBe('mensaje secreto')
+    // Only a same-password peer can read it back.
+    const key = await deriveRoomKey('clave-secreta', 'privada')
+    const text = await decryptRoomMessage(key, {
+      iv: delivered[0]?.iv ?? '',
+      payload: delivered[0]?.body ?? '',
+    })
     expect(text).toBe('mensaje secreto')
   })
 })
