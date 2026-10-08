@@ -41,6 +41,12 @@ export interface DmComposerContext {
    * blocked with an explicit hint (it could never open a v2 dm).
    */
   legacyPeer?: boolean
+  /**
+   * Issue #97 (spec §12.2): true for trackerless manual channels (key
+   * `manual:<fp>`) — sends route through the manualDmManager instead of the
+   * room paths.
+   */
+  manual?: boolean
 }
 
 /**
@@ -66,7 +72,8 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   const typingActiveRef = useRef(false)
   const lastTypingSentAtRef = useRef(0)
   const idleTimerRef = useRef<number | null>(null)
-  const { sendChat, sendTyping, sendDm, sendDmTyping } = useRoomManager()
+  const { sendChat, sendTyping, sendDm, sendDmTyping, sendManualDm, sendManualDmTyping } =
+    useRoomManager()
 
   const room = props.room
   const dm = props.dm
@@ -96,14 +103,16 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
     if (typingActiveRef.current) {
       typingActiveRef.current = false
       if (room !== undefined) sendTyping(room.id, false)
+      else if (dm !== undefined && dm.manual === true) sendManualDmTyping(dm.peerId, false)
       else if (dm !== undefined) sendDmTyping(dm.peerId, false)
     }
-  }, [dm, room, sendDmTyping, sendTyping])
+  }, [dm, room, sendDmTyping, sendManualDmTyping, sendTyping])
 
   const signalTyping = useCallback(() => {
     const now = Date.now()
     const signal = (on: boolean) => {
       if (room !== undefined) sendTyping(room.id, on)
+      else if (dm !== undefined && dm.manual === true) sendManualDmTyping(dm.peerId, on)
       else if (dm !== undefined) sendDmTyping(dm.peerId, on)
     }
     if (!typingActiveRef.current) {
@@ -116,7 +125,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
     }
     if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current)
     idleTimerRef.current = window.setTimeout(stopTypingSignal, TYPING_IDLE_STOP_MS)
-  }, [dm, room, sendDmTyping, sendTyping, stopTypingSignal])
+  }, [dm, room, sendDmTyping, sendManualDmTyping, sendTyping, stopTypingSignal])
 
   // Clean up any pending idle timer when leaving the room/unmounting.
   useEffect(() => stopTypingSignal, [stopTypingSignal])
@@ -130,6 +139,10 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
     if (room !== undefined) {
       if (ttl === undefined) sendChat(room.id, value)
       else sendChat(room.id, value, ttl)
+    } else if (dm !== undefined && dm.manual === true) {
+      // Issue #97 — manual channels route through the manual manager.
+      if (ttl === undefined) void sendManualDm(dm.peerId, value)
+      else void sendManualDm(dm.peerId, value, ttl)
     } else if (dm !== undefined) {
       if (ttl === undefined) void sendDm(dm.peerId, value)
       else void sendDm(dm.peerId, value, ttl)

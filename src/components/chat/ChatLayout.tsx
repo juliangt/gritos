@@ -7,6 +7,7 @@ import { ChatInput } from './ChatInput'
 import { NetworkErrorBanner } from './NetworkErrorBanner'
 import { JoinRoomPopover } from '../sidebar/JoinRoomPopover'
 import { DmHeader } from '../dm/DmHeader'
+import { ManualDmWizard } from '../dm/ManualDmWizard'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useUiStore } from '../../stores/useUiStore'
@@ -43,7 +44,12 @@ export function ChatLayout() {
   const activeView = useAppStore((state) => state.activeView)
   const rooms = useAppStore((state) => state.rooms)
   const dms = useAppStore((state) => state.dms)
+  const manualDms = useAppStore((state) => state.manualDms)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Issue #97 — the manual-DM wizard is layout-level state: both entry
+  // points (sidebar «+ invitación», tracker-error banner shortcut) flip it
+  // and the modal renders once, over everything.
+  const [manualWizardOpen, setManualWizardOpen] = useState(false)
   // Issue #41 — name of the room this session entered through a '#sala'
   // deep link, kept only to offer the password join form when that room
   // cannot find peers (linked password rooms are indistinguishable from
@@ -134,7 +140,12 @@ export function ChatLayout() {
   useFocusTrap({ open: drawerVisible, panelRef: drawerPanelRef })
 
   const activeRoom = activeView?.kind === 'room' ? (rooms[activeView.id] ?? null) : null
-  const activeDm = activeView?.kind === 'dm' ? (dms[activeView.peerId] ?? null) : null
+  // Issue #97 — a manual channel key (`manual:<fp>`) resolves from its own
+  // slice; room-backed channels are looked up first (the maps are disjoint).
+  const activeDm =
+    activeView?.kind === 'dm'
+      ? (dms[activeView.peerId] ?? manualDms[activeView.peerId] ?? null)
+      : null
 
   // The DM feed reuses the room components: the remote peer rides in as a
   // one-entry peer list (mention candidates, typing bar, author colors).
@@ -154,7 +165,12 @@ export function ChatLayout() {
     [activeDm],
   )
 
-  const sidebar = <Sidebar onRoomOpened={() => setDrawerOpen(false)} />
+  const sidebar = (
+    <Sidebar
+      onRoomOpened={() => setDrawerOpen(false)}
+      onOpenManualDm={() => setManualWizardOpen(true)}
+    />
+  )
 
   const desktopAsideVisible = !isMobile && !sidebarCollapsed
 
@@ -191,7 +207,7 @@ export function ChatLayout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <NetworkErrorBanner />
+        <NetworkErrorBanner onOpenManualDm={() => setManualWizardOpen(true)} />
         {/* Issue #41 — a room entered through a share link that exhausted
             the not-found heuristic may simply need its password (RF-05:
             indistinguishable from a nonexistent room): offer the regular
@@ -250,6 +266,9 @@ export function ChatLayout() {
                 peerId: activeDm.peerId,
                 available: activeDm.available,
                 legacyPeer: activeDm.legacyPeer,
+                // Issue #97 — trackerless manual channels route the composer
+                // through the manualDmManager, not the room DM paths.
+                manual: activeDm.manual === true,
               }}
             />
           </>
@@ -276,6 +295,10 @@ export function ChatLayout() {
           </>
         )}
       </div>
+
+      {/* Issue #97 — one wizard instance for both entry points; Esc and the
+          backdrop cancel the pending flow (engine dispose, no traces). */}
+      <ManualDmWizard open={manualWizardOpen} onClose={() => setManualWizardOpen(false)} />
     </div>
   )
 }

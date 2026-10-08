@@ -14,9 +14,10 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * (RF-04). Visibility/collapse is owned by the layout (desktop persistence
  * under `gritos:ui`; mobile drawer), this component renders the content.
  */
-export function Sidebar(props: { onRoomOpened?: () => void }) {
+export function Sidebar(props: { onRoomOpened?: () => void; onOpenManualDm?: () => void }) {
   const rooms = useAppStore((state) => state.rooms)
   const dms = useAppStore((state) => state.dms)
+  const manualDms = useAppStore((state) => state.manualDms)
   const recentRooms = useAppStore((state) => state.recentRooms)
   const activeView = useAppStore((state) => state.activeView)
   const rememberRooms = useSettingsStore((state) => state.settings.rememberRooms)
@@ -28,7 +29,9 @@ export function Sidebar(props: { onRoomOpened?: () => void }) {
   const [joinError, setJoinError] = useState<string | null>(null)
 
   const roomList = Object.values(rooms)
-  const dmList = Object.values(dms)
+  // Issue #97 — room-backed and manual channels render as one list; manual
+  // channels are marked «(sin sala)» inside DmList.
+  const dmList = [...Object.values(dms), ...Object.values(manualDms)]
   const activeRoomId =
     activeView?.kind === 'room' && rooms[activeView.id] !== undefined ? activeView.id : null
   const activeRoom = activeRoomId !== null ? rooms[activeRoomId] : null
@@ -98,7 +101,12 @@ export function Sidebar(props: { onRoomOpened?: () => void }) {
 
       <PeerList room={activeRoom} />
 
-      <DmList channels={dmList} activePeerId={activeDmPeerId} onOpenDm={openDm} />
+      <DmList
+        channels={dmList}
+        activePeerId={activeDmPeerId}
+        onOpenDm={openDm}
+        onOpenInvite={props.onOpenManualDm}
+      />
     </div>
   )
 }

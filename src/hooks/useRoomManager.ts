@@ -15,6 +15,15 @@ import {
   joinRoom,
   unmuteFromUi,
 } from '../lib/p2p/roomManager'
+import {
+  cancelManualDm,
+  pasteManualAnswer,
+  pasteManualInvite,
+  sendManualDm,
+  sendManualDmTyping,
+  startManualDmAnswer,
+  startManualDmInvite,
+} from '../lib/p2p/manualDmManager'
 import { createSessionIdentity, exportIdentityJwks, persistIdentity } from '../lib/crypto/identity'
 import { useAppStore } from '../stores/useAppStore'
 
@@ -62,6 +71,19 @@ export interface RoomManagerApi {
    * `gritos:identity` and installs it in the manager/store.
    */
   enterWithNickname: (nickname: string) => Promise<void>
+  /**
+   * Issue #97 (spec §12.2) — the manual-DM surface, one thin wrapper per
+   * manager function: the wizard drives the flow (start per role, paste,
+   * cancel) and the composer sends over a connected manual channel. Errors
+   * propagate as rejections so the wizard can show the exact inline message.
+   */
+  startManualDmInvite: typeof startManualDmInvite
+  startManualDmAnswer: typeof startManualDmAnswer
+  pasteManualInvite: typeof pasteManualInvite
+  pasteManualAnswer: typeof pasteManualAnswer
+  cancelManualDm: typeof cancelManualDm
+  sendManualDm: typeof sendManualDm
+  sendManualDmTyping: typeof sendManualDmTyping
 }
 
 export interface UseRoomManagerOptions {
@@ -176,5 +198,13 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     reconnectAll: reconnect,
     regenerateIdentity: regenerate,
     enterWithNickname,
+    // Issue #97 — same stability rule for the manual-DM surface.
+    startManualDmInvite,
+    startManualDmAnswer,
+    pasteManualInvite,
+    pasteManualAnswer,
+    cancelManualDm,
+    sendManualDm,
+    sendManualDmTyping,
   }
 }

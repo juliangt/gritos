@@ -59,6 +59,9 @@ async function seedActiveSession(): Promise<void> {
   fake.rooms[0]?.peerJoin('peer-1')
   // Issue #22 — a fingerprint pinned in a previous encounter (TOFU).
   pinTofuFingerprint('peer-1', 'A31F 09BC 77D2 4E5A')
+  // Issue #97 (spec §12.2) — a manual peer pin rides the SAME flat
+  // gritos:tofu map under the reserved `manual:` prefix; no sixth key.
+  pinTofuFingerprint('manual:A31F09BC77D24E5A51C0FFEE12345678', 'A31F 09BC 77D2 4E5A')
 
   // A changed setting and a collapsed sidebar.
   useSettingsStore.getState().setSettings({ theme: 'dark', maxActiveRooms: 6 })
@@ -90,6 +93,8 @@ describe('panicWipe (RF-08)', () => {
         identity: null,
         rooms: {},
         dms: {},
+        // Issue #97 — manual channels are memory-only: the panic leaves none.
+        manualDms: {},
         recentRooms: [],
         activeView: null,
       }),
@@ -121,7 +126,8 @@ describe('panicWipe (RF-08)', () => {
     expect(localStorage.getItem(ROOMS_STORAGE_KEY)).toBeNull()
     expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toBeNull()
     expect(localStorage.getItem(UI_STORAGE_KEY)).toBeNull()
-    // Issue #22 — the TOFU pins die with the rest of the session.
+    // Issue #22 — the TOFU pins die with the rest of the session (the
+    // issue #97 `manual:` pins ride inside the same map: same wipe).
     expect(localStorage.getItem(TOFU_STORAGE_KEY)).toBeNull()
   })
 

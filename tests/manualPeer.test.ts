@@ -125,12 +125,41 @@ function makeEngine(
  * the harvest. The PC arrives through a getter: the factory creates it when
  * the engine starts, i.e. inside the helper call itself.
  */
+/**
+ * One real event-loop turn that fake timers NEVER intercept: the fake-timer
+ * suites only ever `toFake` the four timer functions, never setImmediate or
+ * Date. Unlike MessageChannel ticks (which burn thousands of iterations in
+ * microseconds without letting starved Web Crypto completions land) each of
+ * these turns is a libuv check-phase yield, and the Date deadline bounds the
+ * wait in honest wall-clock time — a plain sleep() would deadlock the
+ * fake-timer suites.
+ */
+function yieldRealTurn(): Promise<void> {
+  // Off globalThis: the DOM lib does not declare setImmediate.
+  const immediate = (globalThis as { setImmediate?: (callback: () => void) => void }).setImmediate
+  if (typeof immediate === 'function') {
+    return new Promise((resolve) => immediate(resolve))
+  }
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 async function pumpUntilParked(getPc: () => FakeRTCPeerConnection): Promise<void> {
-  for (let i = 0; i < 100; i += 1) {
+  // Cheap turns first (crypto usually lands within a few event-loop turns),
+  // then real-turn yields bounded by a 5 s wall-clock deadline: under the
+  // full parallel suite the Web Crypto threadpool is starved across workers
+  // and short tick loops give up before the hash lands.
+  for (let i = 0; i < 20; i += 1) {
     await tick()
     if (getPc().localDescription !== null) return
   }
-  throw new Error('fake pc never reached setLocalDescription')
+  const deadline = Date.now() + 5_000
+  for (;;) {
+    await yieldRealTurn()
+    if (getPc().localDescription !== null) return
+    if (Date.now() >= deadline) {
+      throw new Error('fake pc never reached setLocalDescription')
+    }
+  }
 }
 
 /** Same pump for A's createInvite (offer out). */
@@ -908,11 +937,16 @@ describe('connection drop and dispose', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     const handshake = await connectedPair()
 
-    // One dm in flight: B's debounced receipt timer is the pending timer.
+    // One dm in flight: B's debounced receipt timer is the pending timer —
+    // but its arming waits out B's AES-GCM decrypt on the Web Crypto
+    // threadpool, which no fixed number of turns can bound under a loaded
+    // parallel suite: poll with real (never faked) event-loop turns up to a
+    // wall-clock deadline (Date is not in the toFake list either).
     void (await handshake.a.sendDm('hola'))
-    await tick()
-    await tick()
-    await tick()
+    const receiptTimerDeadline = Date.now() + 5_000
+    while (vi.getTimerCount() < 1 && Date.now() < receiptTimerDeadline) {
+      await yieldRealTurn()
+    }
     expect(vi.getTimerCount()).toBe(1)
 
     handshake.a.dispose()

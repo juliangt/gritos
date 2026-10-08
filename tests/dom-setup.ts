@@ -1,5 +1,7 @@
 // jsdom does not implement window.matchMedia; provide a minimal stub so the
 // theme hook can subscribe to prefers-color-scheme in DOM tests.
+import { configure } from '@testing-library/react'
+
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   window.matchMedia = (query: string): MediaQueryList => ({
     matches: false,
@@ -23,4 +25,13 @@ if (typeof window !== 'undefined' && typeof window.isSecureContext === 'undefine
     configurable: true,
     writable: true,
   })
+}
+
+// Testing Library's waitFor default (1 s) is too tight for a full parallel
+// suite: the crypto-heavy files (identity, DM, manual peers — issue #97)
+// starve the Web Crypto threadpool across workers and real-time waits
+// stretch, so timing-sensitive assertions flaked under load (e.g. the
+// shareDeepLinks onboarding landing). 4 s only matters on the failure path.
+if (typeof window !== 'undefined') {
+  configure({ asyncUtilTimeout: 4_000 })
 }

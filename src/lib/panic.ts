@@ -1,7 +1,5 @@
-import {
-  abortAllRooms,
-  resetSessionIdentity,
-} from './p2p/roomManager'
+import { abortAllRooms, resetSessionIdentity } from './p2p/roomManager'
+import { abortAllManualDms } from './p2p/manualDmManager'
 import { clearDmKeyCache } from './crypto/dm'
 import { IDENTITY_STORAGE_KEY } from './crypto/identity'
 import { wipeKeyVault } from './crypto/keyVault'
@@ -72,6 +70,9 @@ export interface PanicWipeOptions {
 export function panicWipe(options: PanicWipeOptions = {}): void {
   // 1. Abort every WebRTC connection and drop the session identity.
   abortAllRooms()
+  // Issue #97 (spec §12.2) — manual engines die in the same stroke: the
+  // wizard flow and every live trackerless channel are ephemeral state.
+  abortAllManualDms()
   resetSessionIdentity()
   clearDmKeyCache()
 
