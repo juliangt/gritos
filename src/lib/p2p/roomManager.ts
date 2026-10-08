@@ -13,7 +13,7 @@ import {
   type Peer,
   type RoomStatus,
 } from '../../stores/useAppStore'
-import { DEFAULT_SETTINGS, useSettingsStore } from '../../stores/useSettingsStore'
+import { DEFAULT_SETTINGS, getMutedNickname, useSettingsStore } from '../../stores/useSettingsStore'
 import { createEnvelope, DM_PROTOCOL_VERSION } from './protocol'
 import {
   BoundedSeenIds,
@@ -55,7 +55,7 @@ import { decryptRoomMessage, deriveRoomKey, encryptRoomMessage } from '../crypto
 import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
 import { dropRecentRoom, pushRecentRoom, removeRecentRoom, saveRecentRooms } from '../recentRooms'
 import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '../tofu'
-import { joinSystemLine, leaveSystemLine } from '../feed'
+import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } from '../feed'
 
 /**
  * The single Trystero surface of the app (plan.md §3 architecture rules:
@@ -1052,6 +1052,50 @@ function mutedFingerprint(fingerprint: string): boolean {
 function isMuted(connection: RoomInternals, peerId: string): boolean {
   const fingerprint = connection.peerKeyFps.get(peerId)
   return fingerprint !== undefined && mutedFingerprint(fingerprint)
+}
+
+/**
+ * Issue #95 — local-only feedback line for a UI mute/unmute, appended to the
+ * ACTIVE room feed (same RF-06 local-line path as join/leave). Skipped
+ * silently when the active view is not a room (a DM view or no view at all:
+ * there is no room feed to show it in). Deliberately NOT subject to
+ * SYSTEM_LINE_RATE_CAP — the cap throttles peer-controlled join/leave
+ * floods; this line only ever follows a local user action.
+ */
+function appendMuteLineToActiveRoom(text: string): void {
+  const { activeView, rooms } = useAppStore.getState()
+  if (activeView?.kind !== 'room') return
+  if (rooms[activeView.id] === undefined) return
+  appendSystemMessage(activeView.id, text)
+}
+
+/**
+ * Issue #95 — mutes a fingerprint from the UI (PeerList menu, MessageItem
+ * author affordance): stores it via the settings helper and, when this is a
+ * fresh mute (an idempotent re-mute only refreshes the last-seen nickname),
+ * appends '@nick fue silenciado' to the active room. False when the
+ * fingerprint is malformed or the mute list is full.
+ */
+export function muteFromUi(fingerprint: string, nickname: string): boolean {
+  const store = useSettingsStore.getState()
+  const fresh = !store.settings.mutedFingerprints.includes(canonicalFingerprint(fingerprint))
+  if (!store.muteFingerprint(fingerprint, nickname)) return false
+  if (fresh) appendMuteLineToActiveRoom(muteSystemLine(nickname))
+  return true
+}
+
+/**
+ * Issue #95 — lifts a mute from the UI (PeerList menu, Privacidad mute
+ * list): removes it via the settings helper and, when a last-seen nickname
+ * is still known (it rides memory-only and dies with the session), appends
+ * '@nick ya no está silenciado' to the active room. False when the
+ * fingerprint is malformed or was not muted.
+ */
+export function unmuteFromUi(fingerprint: string): boolean {
+  const nickname = getMutedNickname(fingerprint)
+  if (!useSettingsStore.getState().unmuteFingerprint(fingerprint)) return false
+  if (nickname !== null) appendMuteLineToActiveRoom(unmuteSystemLine(nickname))
+  return true
 }
 
 // ---------------------------------------------------------------------------

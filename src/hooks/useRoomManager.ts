@@ -3,6 +3,7 @@ import {
   adoptSessionIdentity,
   ensureSessionIdentity,
   leaveRoom,
+  muteFromUi,
   openDmChannel,
   reconnectAll,
   regenerateSessionIdentity,
@@ -12,12 +13,9 @@ import {
   sendTyping,
   setNickname,
   joinRoom,
+  unmuteFromUi,
 } from '../lib/p2p/roomManager'
-import {
-  createSessionIdentity,
-  exportIdentityJwks,
-  persistIdentity,
-} from '../lib/crypto/identity'
+import { createSessionIdentity, exportIdentityJwks, persistIdentity } from '../lib/crypto/identity'
 import { useAppStore } from '../stores/useAppStore'
 
 /**
@@ -43,6 +41,14 @@ export interface RoomManagerApi {
   sendDmTyping: (peerId: string, on: boolean) => void
   /** M3 — opens the DM channel with a peer and focuses it. */
   openDm: (peerId: string) => boolean
+  /**
+   * Issue #95 — mutes a fingerprint from the UI (mute list + local
+   * system line on the active room); false on a malformed fingerprint
+   * or a full list.
+   */
+  muteFromUi: (fingerprint: string, nickname: string) => boolean
+  /** Issue #95 — lifts a mute from the UI; false when it was not muted. */
+  unmuteFromUi: (fingerprint: string) => boolean
   changeNickname: (nickname: string) => void
   reconnectAll: () => void
   /**
@@ -160,6 +166,9 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     sendDm: dm,
     sendDmTyping: dmTyping,
     openDm,
+    // Module functions with stable identities: returned as-is (memo-friendly).
+    muteFromUi,
+    unmuteFromUi,
     changeNickname: changeNickname,
     reconnectAll: reconnect,
     regenerateIdentity: regenerate,

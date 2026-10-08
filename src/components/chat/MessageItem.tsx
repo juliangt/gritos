@@ -3,6 +3,8 @@ import { MarkdownRenderer } from '../../lib/markdown/render'
 import { authorColor } from '../../lib/color'
 import { disambiguatedNickname } from '../../lib/nickname'
 import { formatTimeHHMM } from '../../lib/feed'
+import { muteFromUi } from '../../lib/p2p/roomManager'
+import { muteAuthorAction } from '../settings/messages'
 import type { Message, Peer } from '../../stores/useAppStore'
 
 /**
@@ -11,6 +13,13 @@ import type { Message, Peer } from '../../stores/useAppStore'
  * mention highlighting. Own messages align right and carry the dimmed
  * ✓/✓✓ receipt marker. System lines ('— nick se ha unido —', FIFO
  * separator) render centered and muted.
+ *
+ * Issue #95 — another peer's message row carries a discreet inline mute
+ * affordance (accessible name 'Silenciar a @nick') whenever the author is a
+ * peer with a known fingerprint: it keys the local mute list on the
+ * identity fingerprint, never the spoofable nickname. It imports the
+ * manager helper directly (the same seam ChatLayout uses for joinRoom) so
+ * no callback prop destabilizes the memo contract below.
  *
  * Wrapped in React.memo (M6, RNF-03): every prop is stable while the
  * message is unchanged — `message` is immutable, `peers`/`mentionCandidates`
@@ -33,6 +42,16 @@ export const MessageItem = memo(function MessageItem(props: {
   const displayName = own
     ? props.ownNickname
     : disambiguatedNickname(props.message.authorNick, props.message.authorId, props.peers as Peer[])
+  // Issue #95 — the author affordance needs the author's entry (its live
+  // fingerprint): unknown or fingerprint-less authors offer nothing to key
+  // the mute on, so no affordance renders.
+  const authorFingerprint = own
+    ? null
+    : (props.peers.find((peer) => peer.id === props.message.authorId)?.fingerprint ?? null)
+  const muteAuthor =
+    authorFingerprint === null
+      ? null
+      : () => muteFromUi(authorFingerprint, props.message.authorNick)
 
   return (
     <div className={`flex flex-col ${own ? 'items-end' : 'items-start'}`}>
@@ -43,6 +62,17 @@ export const MessageItem = memo(function MessageItem(props: {
         <time dateTime={new Date(props.message.ts).toISOString()} className="text-muted">
           {formatTimeHHMM(props.message.ts)}
         </time>
+        {muteAuthor !== null && (
+          <button
+            type="button"
+            aria-label={muteAuthorAction(props.message.authorNick)}
+            title={muteAuthorAction(props.message.authorNick)}
+            onClick={muteAuthor}
+            className="rounded px-0.5 text-muted hover:text-text"
+          >
+            🔇
+          </button>
+        )}
       </div>
       <div className="max-w-[85%] break-words text-sm leading-relaxed">
         <MarkdownRenderer text={props.message.text} mentions={props.mentionCandidates} />
