@@ -14,6 +14,8 @@ import {
   MUTED_PEERS_HEADING,
   MUTED_PEERS_HINT,
   P2P_IP_EXPOSURE_NOTE,
+  SHARE_HISTORY_HINT,
+  SHARE_HISTORY_LABEL,
   TURN_CREDENTIAL_STORAGE_HINT,
   UNMUTE_PEER_ACTION,
   unmutePeerAction,
@@ -21,11 +23,12 @@ import {
 
 /**
  * Privacidad tab (RF-07/RF-08): the notifications toggle with its
- * permission request flow, remember-recents, the local mute list with
- * per-row unmute (issue #95), the P2P exposure disclosure (issue #35), an
- * at-rest storage note for the wrapped identity key (issue #24) and for the
- * TURN credentials (issue #30), identity regeneration behind a confirming
- * dialog, and the panic button behind a double confirmation.
+ * permission request flow, remember-recents, the opt-in history-gossip
+ * consent (issue #102), the local mute list with per-row unmute (issue
+ * #95), the P2P exposure disclosure (issue #35), an at-rest storage note
+ * for the wrapped identity key (issue #24) and for the TURN credentials
+ * (issue #30), identity regeneration behind a confirming dialog, and the
+ * panic button behind a double confirmation.
  */
 
 const PERMISSION_GRANTED_TEXT = 'Permiso concedido.'
@@ -117,6 +120,16 @@ export function PrivacyTab() {
         label="Recordar salas recientes"
         checked={settings.rememberRooms}
         onChange={(rememberRooms) => setSettings({ rememberRooms })}
+      />
+
+      {/* Issue #102 — opt-in history gossip: default silence. The flag rides
+          `gritos:settings`; only an explicit peer request can ever pull
+          history, and only while the consent is on. */}
+      <Toggle
+        label={SHARE_HISTORY_LABEL}
+        checked={settings.shareHistory}
+        hint={SHARE_HISTORY_HINT}
+        onChange={(shareHistory) => setSettings({ shareHistory })}
       />
 
       {/* Issue #95 — the local mute list: fingerprints persisted in

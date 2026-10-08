@@ -83,6 +83,19 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
     expect(normalizeSettings({}, FALLBACK).rememberTurnCredentials).toBe(true)
   })
 
+  it('defaults shareHistory to silence and coerces it by type only (issue #102)', () => {
+    // Absent or hostile → the documented default: false (the default is
+    // silence — no history ever leaves without explicit consent).
+    expect(DEFAULT_SETTINGS.shareHistory).toBe(false)
+    expect(normalizeSettings({}, FALLBACK).shareHistory).toBe(false)
+    expect(normalizeSettings({ shareHistory: 1 }, FALLBACK).shareHistory).toBe(false)
+    expect(normalizeSettings({ shareHistory: 'yes' }, FALLBACK).shareHistory).toBe(false)
+    expect(normalizeSettings({ shareHistory: null }, FALLBACK).shareHistory).toBe(false)
+    // Only a real boolean survives, in either direction.
+    expect(normalizeSettings({ shareHistory: true }, FALLBACK).shareHistory).toBe(true)
+    expect(normalizeSettings({ shareHistory: false }, FALLBACK).shareHistory).toBe(false)
+  })
+
   it('allows only the real theme enum', () => {
     expect(normalizeSettings({ theme: 'purple' }, FALLBACK).theme).toBe('system')
     expect(normalizeSettings({ theme: 42 }, FALLBACK).theme).toBe('system')
@@ -196,6 +209,7 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
       rememberRooms: false,
       rememberTurnCredentials: true,
       mutedFingerprints: [FP_CANONICAL],
+      shareHistory: true,
     }
     expect(normalizeSettings(valid, FALLBACK)).toEqual(valid)
   })
@@ -363,5 +377,17 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
     )
     const { settings } = await rehydrate()
     expect(settings.mutedFingerprints).toEqual([])
+  })
+
+  it('loads a persisted consent flag and falls back to silence when it is junk (issue #102)', async () => {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ shareHistory: true }))
+    expect((await rehydrate()).settings.shareHistory).toBe(true)
+
+    // A record written before the toggle existed (or by hand) stays silent.
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ theme: 'dark' }))
+    expect((await rehydrate()).settings.shareHistory).toBe(false)
+
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ shareHistory: 'on' }))
+    expect((await rehydrate()).settings.shareHistory).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import './dom-setup'
 import '@testing-library/jest-dom/vitest'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MessageFeed } from '../src/components/chat/MessageFeed'
 import { getSelfPeerId } from '../src/lib/p2p/roomManager'
@@ -57,6 +57,7 @@ describe('MessageFeed smart scroll past the FIFO cap (RF-03)', () => {
       peers: [],
       fifoTrimmed: true,
       expiredCount: 0,
+      recoveredCount: 0,
       ariaLabel: 'feed',
     }
     const base = makeMessages(MESSAGE_CAP)
@@ -73,6 +74,7 @@ describe('MessageFeed smart scroll past the FIFO cap (RF-03)', () => {
       peers: [],
       fifoTrimmed: true,
       expiredCount: 0,
+      recoveredCount: 0,
       ariaLabel: 'feed',
     }
     const base = makeMessages(MESSAGE_CAP)
@@ -100,6 +102,7 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
         peers={[]}
         fifoTrimmed={false}
         expiredCount={2}
+        recoveredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -118,6 +121,7 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
         peers={[]}
         fifoTrimmed={false}
         expiredCount={1}
+        recoveredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -131,6 +135,7 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
         peers={[]}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -144,6 +149,7 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
         peers={[]}
         fifoTrimmed={true}
         expiredCount={5}
+        recoveredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -174,6 +180,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         peers={authorPeer(PEER_FP)}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -194,6 +201,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         peers={authorPeer(PEER_FP)}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -209,6 +217,7 @@ describe('MessageItem mute affordance (issue #95)', () => {
         peers={authorPeer(null)}
         fifoTrimmed={false}
         expiredCount={0}
+        recoveredCount={0}
         ariaLabel="feed"
       />,
     )
@@ -222,7 +231,13 @@ describe('MessageItem reactions through the real manager toggle (issue #98)', ()
   const FEED_PEERS: Peer[] = [
     { id: 'peer-1', nickname: 'luna-cauta', fingerprint: null, latencyMs: 42, degraded: false },
   ]
-  const FEED_PROPS = { peers: FEED_PEERS, fifoTrimmed: false, expiredCount: 0, ariaLabel: 'feed' }
+  const FEED_PROPS = {
+    peers: FEED_PEERS,
+    fifoTrimmed: false,
+    expiredCount: 0,
+    recoveredCount: 0,
+    ariaLabel: 'feed',
+  }
 
   beforeEach(() => {
     localStorage.clear()
@@ -247,6 +262,8 @@ describe('MessageItem reactions through the real manager toggle (issue #98)', ()
       unread: 0,
       fifoTrimmed: false,
       expiredCount: 0,
+      recoveredCount: 0,
+      historyAskDismissed: false,
     })
   }
 
@@ -284,5 +301,145 @@ describe('MessageItem reactions through the real manager toggle (issue #98)', ()
     expect(storedMessages()[0]!.reactions?.['🎉']).toEqual([selfId])
     rerender(<MessageFeed {...FEED_PROPS} messages={storedMessages()} />)
     expect(screen.getByRole('button', { name: '🎉 1' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #102 phase 3 — the recovered separator, the dimmed recovered rows
+// and the inline history-request card. The separator mirrors the #96
+// latched lines; the card is one explicit tap ([Pedir] asks, [No]
+// declines) and disappears on either choice.
+// ---------------------------------------------------------------------------
+
+describe('MessageFeed recovered separator + dimming (issue #102)', () => {
+  afterEach(cleanup)
+
+  it('renders the recovered separator above the history while recoveredCount > 0', () => {
+    const { container } = render(
+      <MessageFeed
+        messages={makeMessages(2)}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        recoveredCount={3}
+        ariaLabel="feed"
+      />,
+    )
+    const line = screen.getByText('— mensajes recuperados de pares —')
+    expect(line).toBeInTheDocument()
+    // Same rendering path as the FIFO/expired separators: a muted centered
+    // line at the top of the log.
+    expect(line.className).toBe('my-1 text-center text-xs text-muted')
+    expect(container.querySelector('[role="log"]')?.firstElementChild).toBe(line)
+  })
+
+  it('renders nothing when no rows were recovered', () => {
+    render(
+      <MessageFeed
+        messages={makeMessages(1)}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        recoveredCount={0}
+        ariaLabel="feed"
+      />,
+    )
+    expect(screen.queryByText(/recuperados/)).not.toBeInTheDocument()
+  })
+
+  it('coexists with the FIFO and expiry separators above the history', () => {
+    render(
+      <MessageFeed
+        messages={makeMessages(1)}
+        peers={[]}
+        fifoTrimmed={true}
+        expiredCount={2}
+        recoveredCount={5}
+        ariaLabel="feed"
+      />,
+    )
+    expect(screen.getByText('— mensajes anteriores descartados —')).toBeInTheDocument()
+    expect(screen.getByText('— 2 mensajes expirados —')).toBeInTheDocument()
+    expect(screen.getByText('— mensajes recuperados de pares —')).toBeInTheDocument()
+  })
+
+  it('renders recovered rows slightly dimmed and normal rows untouched', () => {
+    const recovered = { ...makeMessages(1)[0]!, id: 'rec', recovered: true }
+    render(
+      <MessageFeed
+        messages={[...makeMessages(1), recovered]}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        recoveredCount={1}
+        ariaLabel="feed"
+      />,
+    )
+    const log = screen.getByRole('log')
+    const rows = [...log.children].filter((child) => child.tagName === 'DIV')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.className).not.toContain('opacity-70')
+    expect(rows[1]?.className).toContain('opacity-70')
+  })
+})
+
+describe('MessageFeed history-request card (issue #102 phase 3)', () => {
+  afterEach(cleanup)
+
+  it('renders the offer with both buttons only while the caller passes historyAsk', () => {
+    const { rerender } = render(
+      <MessageFeed
+        messages={[]}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        recoveredCount={0}
+        ariaLabel="feed"
+        emptyStateText="Comparte el nombre de la sala para que otros se unan."
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Pedir' })).not.toBeInTheDocument()
+
+    rerender(
+      <MessageFeed
+        messages={[]}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        recoveredCount={0}
+        ariaLabel="feed"
+        emptyStateText="Comparte el nombre de la sala para que otros se unan."
+        historyAsk={{ onAsk: () => {}, onDismiss: () => {} }}
+      />,
+    )
+    // The card lives inside the log, next to the empty-state invitation.
+    expect(screen.getByRole('region', { name: 'Pedir mensajes recientes' })).toBeInTheDocument()
+    expect(screen.getByText('¿Pedir los últimos mensajes a la sala?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pedir' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'No' })).toBeInTheDocument()
+  })
+
+  it('routes [Pedir] to onAsk and [No] to onDismiss', () => {
+    const onAsk = vi.fn()
+    const onDismiss = vi.fn()
+    render(
+      <MessageFeed
+        messages={[]}
+        peers={[]}
+        fifoTrimmed={false}
+        expiredCount={0}
+        recoveredCount={0}
+        ariaLabel="feed"
+        historyAsk={{ onAsk, onDismiss }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pedir' }))
+    expect(onAsk).toHaveBeenCalledTimes(1)
+    expect(onDismiss).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'No' }))
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    expect(onAsk).toHaveBeenCalledTimes(1) // the tap already happened
   })
 })

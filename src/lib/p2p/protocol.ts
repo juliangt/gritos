@@ -48,6 +48,38 @@ export const MAX_RECEIPT_BATCH = 50
 export const MAX_REACT_BATCH = 50
 
 /**
+ * Issue #102 — history gossip (§7.1): `hist-req` asks for at most this many
+ * recent messages (the same 50-message bound as the sharer's in-memory feed
+ * slice) and `sendHistory` shares at most this many input envelopes per
+ * call. Anything beyond is truncated/dropped sender-side.
+ */
+export const MAX_HISTORY_REQUEST = 50
+
+/**
+ * Issue #102 — max envelopes per `hist` batch (count bound). The count cap
+ * ALONE cannot guarantee the transport fit: 20 envelopes of the honest
+ * maximum (a 4000-char plaintext body plus ~250 B of envelope overhead)
+ * encode to ~84 KB, over MAX_PAYLOAD_BYTES — and an `enc` body may legally
+ * reach MAX_ENCRYPTED_BODY_CHARS (16 384 base64 chars), ~330 KB for 20.
+ * Senders therefore also chunk by MEASURED encoded size (chunkHistBatches);
+ * this cap bounds per-batch validation work and, with the receive-path
+ * rate cap of 6 batches/min/peer (roomManager), total gossip ingestion at
+ * 120 messages/min/peer.
+ */
+export const MAX_HISTORY_BATCH = 20
+
+/**
+ * Issue #102 — sender-side encoded-size margin for one `hist` batch: the
+ * UTF-8 byte length of JSON.stringify({batch}) must stay at or below this
+ * BEFORE the wire. 48 KiB leaves 16 KiB (~25%) of headroom under
+ * MAX_PAYLOAD_BYTES (64 KiB) for Trystero's action-wire framing (a 32-byte
+ * padded action name plus per-chunk headers on every ~16 KiB chunk) and
+ * any serialization drift, so an at-margin batch can never trip the
+ * receiver's `isOversized` discard after chunk reassembly.
+ */
+export const MAX_HISTORY_BATCH_BYTES = 48 * 1024
+
+/**
  * Issue #96 — inclusive bounds of the optional per-message `ttl`, in whole
  * seconds. Below 30 s the message would effectively self-destruct on mesh
  * latency alone (peers regularly take seconds to relay); above 1 h it stops
@@ -180,6 +212,21 @@ export type ReactPayload = {
   /** Recipient peerId — only for directed (DM) reactions; absent = broadcast. */
   to?: string
 }
+
+/**
+ * Issue #102 — a history-gossip request (§7.1): the asking peer wants the
+ * last `n` chat messages of the room, `n` bounded by parseHistReq to
+ * 1..MAX_HISTORY_REQUEST.
+ */
+export type HistReqPayload = { n: number }
+
+/**
+ * Issue #102 — one batch of replayed chat envelopes (§7.1). Senders chunk
+ * with chunkHistBatches so the payload never approaches MAX_PAYLOAD_BYTES;
+ * receivers validate the whole batch with parseHistBatch. Room scope only:
+ * DMs are never gossiped.
+ */
+export type HistPayload = { batch: Envelope[] }
 
 // ---------------------------------------------------------------------------
 // Validation / dedup helpers (§7.3)
@@ -403,6 +450,19 @@ export function isWithinFreshnessWindow(ts: number, now: number = Date.now()): b
 }
 
 /**
+ * Issue #102 — the ONE freshness bound the history-replay path keeps: `ts`
+ * may sit at most MAX_CLOCK_SKEW_MS in the future relative to the local
+ * clock. The age bound (MAX_ENVELOPE_AGE_MS) is deliberately absent —
+ * recovered messages are older than five minutes by definition, and
+ * bypassing that window is the whole point of gossip — but a far-future
+ * stamp must still die here, or it would stay "fresh" (and sortable at the
+ * top of the recovered block) for hours.
+ */
+export function isWithinFutureSkew(ts: number, now: number = Date.now()): boolean {
+  return now - ts >= -MAX_CLOCK_SKEW_MS
+}
+
+/**
  * Validation first (freshness, issue #19 — `parseEnvelope` did the
  * structural part), then dedup: true only for first-seen, in-window
  * envelopes. Freshness runs BEFORE `markSeen` so a stale or future-dated
@@ -483,4 +543,86 @@ export function parseReact(raw: unknown): ReactPayload | null {
  */
 export function reactSeenKey(payload: ReactPayload): string {
   return `react:${JSON.stringify([payload.to ?? null, payload.on, payload.emo, payload.ids])}`
+}
+
+/**
+ * Issue #102 — `hist-req` validation (§7.1): `n` must be an integer within
+ * [1, MAX_HISTORY_REQUEST]. Any other shape or value — 0, over-cap,
+ * fractional, non-number, missing — drops the payload silently (§7.3),
+ * like receipts and reactions: no feedback line, no state change.
+ */
+export function parseHistReq(raw: unknown): HistReqPayload | null {
+  if (!isPlainObject(raw)) return null
+  const n = raw.n
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_HISTORY_REQUEST) {
+    return null
+  }
+  return { n }
+}
+
+/**
+ * Issue #102 — `hist` batch validation (§7.1): `batch` is an array of
+ * 1..MAX_HISTORY_BATCH envelopes, each of which must pass the FULL
+ * parseEnvelope shape validation — version gates, field shapes, body caps,
+ * the works — AND be `kind: 'chat'` (DMs are never gossiped). Honest
+ * senders never emit anything else (sendHistory sanitizes before the
+ * wire), so any violation is attacker input and drops the WHOLE batch: the
+ * react/receipt drop-whole discipline, so a half-valid batch cannot
+ * deliver a fraction of what the sender claimed. Envelopes come back
+ * parseEnvelope-normalized (unknown fields gone, nick sanitized, only
+ * known fields kept). The freshness AGE window is deliberately NOT checked
+ * here — replayed history is older than MAX_ENVELOPE_AGE_MS by definition;
+ * the replay path (roomManager) keeps only the ±90 s future-skew bound,
+ * per envelope, via isWithinFutureSkew.
+ */
+export function parseHistBatch(raw: unknown): Envelope[] | null {
+  if (!isPlainObject(raw)) return null
+  const batch = raw.batch
+  if (!Array.isArray(batch) || batch.length === 0 || batch.length > MAX_HISTORY_BATCH) {
+    return null
+  }
+  const envelopes: Envelope[] = []
+  for (const item of batch) {
+    const envelope = parseEnvelope(item)
+    if (envelope === null || envelope.kind !== 'chat') return null
+    envelopes.push(envelope)
+  }
+  return envelopes
+}
+
+/**
+ * Issue #102 — sender-side chunking for `hist`: packs chat envelopes (in
+ * input order) into batches of at most MAX_HISTORY_BATCH envelopes whose
+ * JSON-encoded `{batch}` payload measures at most MAX_HISTORY_BATCH_BYTES
+ * UTF-8 bytes. The count cap alone cannot guarantee the MAX_PAYLOAD_BYTES
+ * fit (see the constant), so the size is MEASURED per candidate batch.
+ * An envelope whose own encoding already exceeds the margin can never ship
+ * and is dropped — unreachable for parseEnvelope-valid input (bodies are
+ * capped at 4000 plaintext / 16 384 enc chars, well under the margin);
+ * kept as defense against future cap drift. Pure: no validation here —
+ * callers pass parseEnvelope-clean chat envelopes (sendHistory). Note that
+ * callers must chunk the WIRE forms (post-sealing in password rooms):
+ * sealing grows a body by ~34%, so pre-seal sizes would under-measure.
+ */
+export function chunkHistBatches(envelopes: Envelope[]): Envelope[][] {
+  const encoder = new TextEncoder()
+  const encodedBytes = (batch: Envelope[]): number =>
+    encoder.encode(JSON.stringify({ batch } satisfies HistPayload)).byteLength
+  const batches: Envelope[][] = []
+  let current: Envelope[] = []
+  for (const envelope of envelopes) {
+    if (
+      current.length > 0 &&
+      (current.length >= MAX_HISTORY_BATCH ||
+        encodedBytes([...current, envelope]) > MAX_HISTORY_BATCH_BYTES)
+    ) {
+      batches.push(current)
+      current = []
+    }
+    if (encodedBytes([envelope]) <= MAX_HISTORY_BATCH_BYTES) {
+      current.push(envelope)
+    }
+  }
+  if (current.length > 0) batches.push(current)
+  return batches
 }

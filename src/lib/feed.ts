@@ -18,6 +18,15 @@ export function expiredSeparatorText(count: number): string {
   return `— ${count} ${noun} —`
 }
 
+/**
+ * Issue #102 — local separator above history recovered through opt-in
+ * history gossip. Exact issue string, no count: it labels PROVENANCE (these
+ * rows are a peer's replay, not live arrivals), not a quantity. Latched per
+ * feed like the FIFO/expired lines (rendered while `recoveredCount > 0`),
+ * memory-only, and never sent over the wire.
+ */
+export const RECOVERED_SEPARATOR_TEXT = '— mensajes recuperados de pares —'
+
 // ---------------------------------------------------------------------------
 // Empty states (M6, spec §10.4 — discrete, Spanish)
 // ---------------------------------------------------------------------------

@@ -41,6 +41,16 @@ export interface Settings {
    * entries; the cap refuses, it never evicts. Default: [].
    */
   mutedFingerprints: string[]
+  /**
+   * Issue #102 — opt-in history gossip: when true, an explicit peer
+   * `hist-req` may be answered with at most the last 50 chat messages of
+   * that room's in-memory feed (never DMs, never system lines). Gossip
+   * itself is memory-only — it can only share what a live tab holds — but
+   * the consent flag rides inside `gritos:settings` (spec §8.2: no sixth
+   * localStorage key) and is wiped by the panic button like everything else.
+   * Default: false — the default is silence.
+   */
+  shareHistory: boolean
 }
 
 export interface Identity {
@@ -117,6 +127,15 @@ export interface Message {
    * sendChat's local echo when the composer forwards a /me directive.
    */
   isAction?: boolean
+  /**
+   * Issue #102 — provenance marker: the row was recovered through opt-in
+   * history gossip, not received live. Rendered slightly dimmed under the
+   * "mensajes recuperados" separator (MessageItem/MessageFeed). Purely
+   * presentational: recovered rows never badge, never notify and never
+   * receipt (the recovered append path guarantees it), and the marker is
+   * memory-only like every feed field.
+   */
+  recovered?: boolean
 }
 
 export type RoomStatus = 'searching' | 'connected' | 'error'
@@ -144,6 +163,23 @@ export interface Room {
    * (a leave/rejoin starts a fresh room at 0), memory-only.
    */
   expiredCount: number
+  /**
+   * Issue #102 — how many chat rows this feed accepted through the opt-in
+   * history-gossip recovery path (drives the local
+   * "— mensajes recuperados de pares —" separator). Same latched semantics
+   * as `expiredCount`: per-feed, never decrements (FIFO or TTL may later
+   * remove rows — the separator records what already happened), and a
+   * leave/rejoin starts a fresh room at 0.
+   */
+  recoveredCount: number
+  /**
+   * Issue #102 — per-join dismissal of the inline history-request card
+   * (memory-only, like every Room field): set by either card button. The
+   * row is recreated on every join, so the offer naturally returns on the
+   * next join of the same room — the per-room ask budget in the manager
+   * rate-limits the actual sends.
+   */
+  historyAskDismissed: boolean
 }
 
 export interface DmChannel {
@@ -258,6 +294,23 @@ export function appendMessageCapped(
     }
   }
   const next = [...messages.slice(0, index), message, ...messages.slice(index)]
+  return next.length > cap ? next.slice(next.length - cap) : next
+}
+
+/**
+ * Issue #102 — pure recovered-history append (testable in isolation, like
+ * `appendMessageCapped`): strict batch-order TAIL append under the FIFO cap.
+ * The §7.3 arrival-order rule (the 2 s ts-window walk-back) deliberately
+ * does NOT apply to replayed messages — a gossip batch replays feed history
+ * whose author timestamps are long past any arrival window, so reordering
+ * by ts would shuffle the block; arrival (batch) order is kept instead.
+ */
+export function appendRecoveredCapped(
+  messages: Message[],
+  message: Message,
+  cap: number = MESSAGE_CAP,
+): Message[] {
+  const next = [...messages, message]
   return next.length > cap ? next.slice(next.length - cap) : next
 }
 
@@ -403,6 +456,25 @@ export interface AppActions {
   updatePeer: (roomId: string, peerId: string, patch: Partial<Peer>) => void
   removePeer: (roomId: string, peerId: string) => void
   appendMessage: (roomId: string, message: Message) => void
+  /**
+   * Issue #102 — appends one RECOVERED chat row (opt-in history gossip) to
+   * the room feed: strict batch-order tail append (`appendRecoveredCapped`,
+   * the §7.3 2 s window does not apply to replayed messages), latches
+   * `fifoTrimmed` like any cap-trimming append and bumps the latched
+   * `recoveredCount` separator counter. Deliberately ZERO arrival side
+   * effects — no unread badge (recovery is not an arrival: the rows are at
+   * most the room's recent past), no receipts (✓✓ means LIVE delivery), no
+   * mention emission (gating lives in the manager's wiring). Unknown roomId
+   * no-ops.
+   */
+  appendRecoveredMessage: (roomId: string, message: Message) => void
+  /**
+   * Issue #102 — per-join dismissal of the inline history-request card
+   * (either card button). Memory-only Room state: the flag dies with the
+   * feed on leave, so a fresh join may offer the ask again. Unknown roomId
+   * no-ops.
+   */
+  dismissHistoryAsk: (roomId: string) => void
   /**
    * Issue #99 — wipes one room's local feed (the /limpiar command, behind
    * its confirmation): messages: [] and unread: 0, while the room keeps its
@@ -585,6 +657,36 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
         return { ...message, status: 'delivered' as const }
       })
       return changed ? { rooms: { ...state.rooms, [roomId]: { ...room, messages } } } : state
+    }),
+
+  // Issue #102 — the recovered append: same FIFO-cap discipline as the live
+  // path, but arrival-silent (no unread) and latching the recovered
+  // separator counter instead. `fifoTrimmed` latches when the append had to
+  // trim (same formula as appendMessage).
+  appendRecoveredMessage: (roomId, message) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room) return state
+      const messages = appendRecoveredCapped(room.messages, message)
+      const fifoTrimmed = room.fifoTrimmed || messages.length < room.messages.length + 1
+      return {
+        rooms: {
+          ...state.rooms,
+          [roomId]: {
+            ...room,
+            messages,
+            fifoTrimmed,
+            recoveredCount: room.recoveredCount + 1,
+          },
+        },
+      }
+    }),
+
+  dismissHistoryAsk: (roomId) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room || room.historyAskDismissed) return state
+      return { rooms: { ...state.rooms, [roomId]: { ...room, historyAskDismissed: true } } }
     }),
 
   clearRoomFeed: (roomId) =>

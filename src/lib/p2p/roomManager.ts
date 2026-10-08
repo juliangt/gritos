@@ -10,26 +10,34 @@ import { deriveRoomId } from '../crypto/hashes'
 import {
   INITIAL_APP_STATE,
   useAppStore,
+  type Message,
   type Peer,
   type RoomStatus,
 } from '../../stores/useAppStore'
 import { DEFAULT_SETTINGS, getMutedNickname, useSettingsStore } from '../../stores/useSettingsStore'
-import { createEnvelope, DM_PROTOCOL_VERSION } from './protocol'
+import { createEnvelope, DM_PROTOCOL_VERSION, PROTOCOL_VERSION } from './protocol'
 import {
   BoundedSeenIds,
+  MAX_HISTORY_REQUEST,
   MAX_PLAINTEXT_LENGTH,
   MAX_REACT_BATCH,
   REACT_EMOJIS,
+  chunkHistBatches,
   filterDmForSelf,
   isOversized,
+  isWithinFutureSkew,
   markSeen,
   parseEnvelope,
+  parseHistBatch,
+  parseHistReq,
   parseReact,
   reactSeenKey,
   shouldProcess,
   validateReceipt,
   MAX_RECEIPT_BATCH,
   type Envelope,
+  type HistPayload,
+  type HistReqPayload,
   type PingPayload,
   type PongPayload,
   type PresencePayload,
@@ -68,7 +76,7 @@ import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } fro
  * The single Trystero surface of the app (plan.md §3 architecture rules:
  * only this module may import trystero). Multi-room core — spec §6.3/§6.5:
  * a Map<roomId, RoomConnection>; each connection encapsulates its Trystero
- * room, its 10 registered actions (§7.1) and its status heuristic, and feeds
+ * room, its 12 registered actions (§7.1) and its status heuristic, and feeds
  * the Zustand store (§8.1).
  *
  * M3 adds the E2EE DM path (RF-04, §9.2): received raw public keys are kept
@@ -131,6 +139,32 @@ import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } fro
  * subscribes to that seam to maintain state (dropping unknown message ids
  * there, silently); nothing persists and nothing notifies, ever.
  *
+ * Issue #102 — opt-in history gossip, phase 1 (protocol): two more actions,
+ * `hist-req {n}` (a peer asks for the last n ≤ 50 messages) and
+ * `hist {batch}` (replayed chat envelopes, ≤ 20 per batch, sender-chunked
+ * by encoded size under the 64 KB payload cap via `chunkHistBatches`).
+ * Receive path of both: mute gate (a muted sharer drops before any parse,
+ * the same pre-process gate as every action) → pure validation
+ * (`parseHistReq`/`parseHistBatch`) → per-peer rolling rate caps (1
+ * hist-req/min, 6 hist batches/min) → for `hist` per envelope: the
+ * future-skew bound (the ONE freshness check the replay path keeps — the
+ * MAX_ENVELOPE_AGE_MS age window is BYPASSED, the whole point of gossip)
+ * and the connection's BoundedSeenIds dedup (replay flood prevention that
+ * also makes a later LIVE resend of the same id dedup). Survivors are
+ * delivered through the `onHistRequest`/`onRecovered` seams ONLY — no store
+ * append at the transport level, no unread, no mention, no receipt, no
+ * typing (✓✓ means live delivery). Phase 2 wired the CONSENT side at module
+ * level (`respondToHistoryRequest`): a delivered hist-req is honored ONLY
+ * while `gritos:settings`.shareHistory is on (default silence), with at
+ * most the last `n` chat rows of the in-memory feed — never system lines,
+ * encrypted placeholders or already-expired rows. Phase 3 wires the
+ * recovered-state append at module level (`appendRecoveredToStore`: the
+ * 50-per-join recipient cap, the muted-AUTHOR gate, receiver-clock TTL and
+ * the `recovered: true` rows under the "mensajes recuperados" separator)
+ * plus the request side the UI card drives (`requestHistory`, the
+ * per-room HISTORY_ASK_RATE_CAP budget with the §10.3 park-while-searching
+ * flush).
+ *
  * Testability: the Trystero `joinRoom` function sits behind an injectable
  * factory (`setJoinRoomFactory`) so tests drive the manager with a fake.
  */
@@ -171,6 +205,43 @@ export const REACT_RATE_CAP = 30
 
 /** Rolling window over which REACT_RATE_CAP applies. */
 export const REACT_RATE_WINDOW_MS = 60_000
+
+/**
+ * Issue #102 — history-gossip receive-path rate caps (per peer, rolling
+ * windows, the same trustless-mesh posture as REACT_RATE_CAP). A peer may
+ * ask at most HISTORY_REQ_RATE_CAP times per rolling
+ * HISTORY_REQ_RATE_WINDOW_MS via `hist-req` (one explicit ask per minute;
+ * the phase-3 request UX rate-limits its own side too), and may deliver at
+ * most HISTORY_RATE_CAP `hist` batches per rolling HISTORY_RATE_WINDOW_MS —
+ * with the MAX_HISTORY_BATCH count cap that bounds gossip ingestion at
+ * 6 × 20 = 120 messages/min/peer.
+ */
+export const HISTORY_REQ_RATE_CAP = 1
+export const HISTORY_REQ_RATE_WINDOW_MS = 60_000
+export const HISTORY_RATE_CAP = 6
+export const HISTORY_RATE_WINDOW_MS = 60_000
+
+/**
+ * Issue #102 phase 3 — the REQUEST side's own politeness cap (per room
+ * connection, rolling window): this tab may dispatch at most one `hist-req`
+ * per room per minute through `requestHistory`, whether it sent live or
+ * parked it while the room was still hunting for peers (§10.3). It bounds
+ * the card flow ("repeated asks rate-limited") on top of the receivers'
+ * per-peer HISTORY_REQ_RATE_CAP — a rejoin gets a fresh connection and thus
+ * a fresh local budget, but every receiving peer still caps the wire rate.
+ */
+export const HISTORY_ASK_RATE_CAP = 1
+export const HISTORY_ASK_RATE_WINDOW_MS = 60_000
+
+/**
+ * Issue #102 phase 3 — the RECIPIENT-side recovery cap: at most this many
+ * recovered messages are appended per join session per room (a counter on
+ * the connection, freed with it). Excess envelopes of later batches are
+ * dropped silently — gossip must not be able to stuff a feed beyond what a
+ * live session could have held, and the sharer's own slice is already
+ * bounded by the same 50-message figure (MAX_HISTORY_REQUEST).
+ */
+export const MAX_RECOVERED_PER_JOIN = MAX_HISTORY_REQUEST
 
 /**
  * Issue #20 — the §10.3 local chat queue (envelopes typed while the room has
@@ -240,6 +311,9 @@ interface RoomActions {
   receipt: MessageAction<ReceiptPayload>
   /** Issue #98 — emoji reactions; broadcast, or directed via payload.to. */
   react: MessageAction<ReactPayload>
+  /** Issue #102 — history gossip: the request {n ≤ 50} and the batches. */
+  'hist-req': MessageAction<HistReqPayload>
+  hist: MessageAction<HistPayload>
   ping: MessageAction<PingPayload>
   pong: MessageAction<PongPayload>
 }
@@ -299,6 +373,44 @@ interface RoomInternals extends RoomConnection {
    * — and freed with the connection itself (memory-only).
    */
   readonly reactTimes: Map<string, number[]>
+  /**
+   * Issue #102 — timestamps of the `hist-req` / `hist` payloads already
+   * accepted per peer (each queue holds at most HISTORY_*_RATE_CAP entries),
+   * the same rolling-window discipline as reactTimes: kept across peer
+   * leaves — clearing on leave would let rejoin churn reset the cap — and
+   * freed with the connection (memory-only).
+   */
+  readonly histReqTimes: Map<string, number[]>
+  readonly histTimes: Map<string, number[]>
+  /**
+   * Issue #102 phase 3 — timestamps of this tab's own `hist-req` sends via
+   * `requestHistory` (keyed by the own peerId, reusing the rolling-budget
+   * helper), the HISTORY_ASK_RATE_CAP politeness cap of the card flow. Kept
+   * on the connection like every budget here: a rejoin starts a fresh one
+   * (the receivers' caps are the durable defense).
+   */
+  readonly historyAskTimes: Map<string, number[]>
+  /**
+   * Issue #102 phase 3 — a history request tapped while the room had no
+   * DataChannel yet (§10.3): parked fire-and-forget like sendChat's
+   * pendingChats and flushed on the first peer join. At most one (the last
+   * tap wins — the ask budget already bounds repeats); dies with the
+   * connection.
+   */
+  pendingHistReq: HistReqPayload | null
+  /**
+   * Issue #102 phase 3 — recovered rows accepted so far in THIS join
+   * session, the MAX_RECOVERED_PER_JOIN recipient cap. Freed with the
+   * connection: a leave/rejoin starts a fresh budget.
+   */
+  recoveredAccepted: number
+  /**
+   * Issue #102 phase 3 — serializes the async recovered-append tails
+   * (password-room decryption) so batches append in wire order even when
+   * their decrypt promises settle out of order (the sendChain discipline,
+   * receive direction).
+   */
+  recoveredChain: Promise<void>
   /**
    * Chat envelopes awaiting the first DataChannel (§10.3 local queue).
    * Issue #20 — capped at PENDING_CHATS_CAP, oldest dropped on overflow:
@@ -645,6 +757,305 @@ function applyInboundReactionToStore(roomId: string, peerId: string, payload: Re
 onReact(applyInboundReactionToStore)
 
 // ---------------------------------------------------------------------------
+// History gossip (issue #102, phase 1 seams — phases 2/3 subscribe here)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validated, rate-capped inbound `hist-req`: `peerId` asks for the last `n`
+ * chat messages of `roomId` (n integer, 1..50). Phase 1 only gates and
+ * delivers; the CONSENT policy — whether to answer at all (default
+ * silence), and what slice of the in-memory feed to share — is phase 2,
+ * which subscribes here and calls `sendHistory`.
+ */
+export type HistRequestListener = (roomId: string, peerId: string, n: number) => void
+
+const histRequestListeners = new Set<HistRequestListener>()
+
+/** Subscribes to validated history requests; returns the unsubscribe function. */
+export function onHistRequest(listener: HistRequestListener): () => void {
+  histRequestListeners.add(listener)
+  return () => {
+    histRequestListeners.delete(listener)
+  }
+}
+
+/**
+ * Validated replayed chat envelopes for `roomId` — shape-checked by
+ * parseEnvelope (the ±90 s future-skew bound kept), the freshness AGE window
+ * bypassed, dedup'd against the delivering connection's BoundedSeenIds.
+ * Zero transport side effects by contract: the replay path never appends to
+ * the store here, never badges, never notifies, never receipts (✓✓ means
+ * LIVE delivery), never touches typing. Phases 2/3 own the state wiring —
+ * the append under the "recovered" separator, the 50-per-join recipient
+ * cap, and dropping envelopes authored by locally-muted third parties at
+ * append time (the transport only ever gates the SHARER).
+ */
+export type RecoveredListener = (roomId: string, envelopes: Envelope[]) => void
+
+const recoveredListeners = new Set<RecoveredListener>()
+
+/** Subscribes to recovered-history deliveries; returns the unsubscribe function. */
+export function onRecovered(listener: RecoveredListener): () => void {
+  recoveredListeners.add(listener)
+  return () => {
+    recoveredListeners.delete(listener)
+  }
+}
+
+/**
+ * Issue #102 phase 2 — the shareable slice of one room's in-memory feed,
+ * rebuilt as chat envelopes for `sendHistory`. The store keeps Message rows
+ * (plaintext, arrival order, oldest → newest), so this maps the LAST
+ * `limit` shareable rows back to their wire form:
+ *
+ * - chat rows only: `kind: 'system'` lines are local feed furniture (join/
+ *   leave, moderation lines, cap separators) and are never gossiped — DMs,
+ *   by construction, never enter a room feed (they live in the `dms` slice),
+ *   and `sendHistory` re-enforces chat-only anyway.
+ * - never the encrypted placeholder rows (`encrypted: true`): the store
+ *   holds neither their plaintext nor the original ciphertext (issue #21),
+ *   so there is nothing honest to forward.
+ * - never already-expired rows: the sweep runs on a 1 s tick, so a row
+ *   whose `expiresAt` is due can still sit in the feed between ticks.
+ *
+ * Own messages rebuild with the real local peerId (`authorId === 'self'`
+ * is the store's echo convention); received ones with their transport
+ * peerId. `ts` is the author timestamp (the ±90 s future-skew bound is the
+ * only freshness check the replay path keeps, and live-received rows were
+ * already skew-checked on arrival); the body is the stored plaintext —
+ * `sendHistory` re-validates and re-seals it for password rooms. TTL rows
+ * share as session-lived: the author's original `ttl` seconds are not
+ * recoverable from the store (only the absolute receiver-clock `expiresAt`
+ * is kept), so nothing is fabricated.
+ */
+function shareableFeedEnvelopes(roomId: string, limit: number): Envelope[] {
+  const feed = useAppStore.getState().rooms[roomId]?.messages ?? []
+  const now = Date.now()
+  const shareable = feed.filter(
+    (message) =>
+      message.kind !== 'system' &&
+      !message.encrypted &&
+      (message.expiresAt === undefined || message.expiresAt > now),
+  )
+  return shareable.slice(-Math.min(limit, MAX_HISTORY_REQUEST)).map((message) => ({
+    v: PROTOCOL_VERSION,
+    id: message.id,
+    ts: message.ts,
+    from: message.authorId === 'self' ? trysteroSelfId : message.authorId,
+    nick: message.authorNick,
+    kind: 'chat' as const,
+    enc: false,
+    iv: null,
+    body: message.text,
+  }))
+}
+
+/**
+ * Issue #102 phase 2 — the consent policy for one validated `hist-req`,
+ * subscribed at module level like the onReact wiring (no UI needed for the
+ * loop to work; tests re-install it in resetManagerForTests). The consent
+ * flag gates FIRST, so the default — and any mid-session toggle-off — is
+ * enforced silence: no `hist` leaves this module for any trigger while
+ * `shareHistory` is off. With consent, the requester's `n` bounds the slice
+ * (protocol-capped at MAX_HISTORY_REQUEST) and `sendHistory` answers it:
+ * fire-and-forget, broadcast room-wide (the phase-1 sender contract; a
+ * share that races a disconnect is simply lost and the peer may ask again).
+ * The recovered-envelope append wiring is phase 3's (`appendRecoveredToStore`).
+ */
+function respondToHistoryRequest(roomId: string, _peerId: string, n: number): void {
+  if (!useSettingsStore.getState().settings.shareHistory) return
+  void sendHistory(roomId, shareableFeedEnvelopes(roomId, n))
+}
+
+/**
+ * Issue #102 phase 2 — the seam→consent wiring, installed at module load
+ * exactly like onReact's: resetManagerForTests clears histRequestListeners
+ * (tests register disposable listeners there) and re-installs THIS
+ * subscription — it is wiring, not disposable listener state.
+ */
+onHistRequest(respondToHistoryRequest)
+
+// ---------------------------------------------------------------------------
+// History gossip phase 3 (issue #102) — the request UX's transport seam and
+// the recovered-state append wiring
+// ---------------------------------------------------------------------------
+
+/**
+ * Issue #102 phase 3 — the asking side of gossip, the `[Pedir]` button's
+ * transport: broadcasts a `hist-req {n ≤ 50}` on `roomId`'s swarm (room
+ * scope, no target — every consenting peer may answer). Fire-and-forget
+ * with the HISTORY_ASK_RATE_CAP per-room politeness budget (1/min): the
+ * card dismisses on tap, so this budget is what rate-limits repeat joins.
+ *
+ * While the room has no DataChannel yet (`searching`/`error`, §10.3) the
+ * payload is PARKED (pendingHistReq) and flushed on the first peer join —
+ * the sendChat local-queue discipline: a joiner reading the card right
+ * after joining must not lose the ask to a race with the handshake. The
+ * budget is consumed when the ask is ACCEPTED (sent or parked), not at
+ * flush time, so one tap is one ask however the handshake plays out; the
+ * parked payload dies with the connection (leave before any peer joins =
+ * the ask is simply lost, the user may ask again next join).
+ *
+ * Returns whether the ask was accepted (dispatched or parked) — false for
+ * an unknown room, an out-of-bounds `n` (parseHistReq is the single gate,
+ * and a rejected ask consumes no budget) or an exhausted budget. Never
+ * throws.
+ */
+export function requestHistory(roomId: string, n: number = MAX_HISTORY_REQUEST): boolean {
+  const connection = connections.get(roomId)
+  if (connection === undefined) return false
+  const payload = parseHistReq({ n })
+  if (payload === null) return false
+  if (
+    !consumeRollingBudget(
+      connection.historyAskTimes,
+      trysteroSelfId,
+      HISTORY_ASK_RATE_CAP,
+      HISTORY_ASK_RATE_WINDOW_MS,
+    )
+  ) {
+    return false
+  }
+  if (connection.status === 'connected') {
+    safeSend(connection.actions['hist-req'], payload)
+  } else {
+    connection.pendingHistReq = payload
+  }
+  return true
+}
+
+/**
+ * Issue #102 phase 3 — one recovered envelope becomes a Message row through
+ * the SAME shape the live path appends (author peerId, author nick, author
+ * ts preserved for display), flagged `recovered: true`. `encrypted` mirrors
+ * the live convention: the stored row is plaintext when it could be opened,
+ * the ENCRYPTED_MESSAGE_PLACEHOLDER with `encrypted: true` when it could
+ * not (the placeholder is never re-gossiped — shareableFeedEnvelopes drops
+ * encrypted rows). `expiresAt` is computed by the caller on the RECEIVER
+ * clock (issue #96 parity): recovery must not resurrect a zombie TTL
+ * message with the author's clock.
+ */
+function buildRecoveredRow(
+  roomId: string,
+  envelope: Envelope,
+  text: string,
+  encrypted: boolean,
+  expiresAt: number | undefined,
+): Message {
+  return {
+    id: envelope.id,
+    roomId,
+    authorId: envelope.from,
+    authorNick: envelope.nick,
+    text,
+    ts: envelope.ts,
+    encrypted,
+    status: 'delivered',
+    kind: 'user',
+    recovered: true,
+    ...(expiresAt !== undefined ? { expiresAt } : {}),
+  }
+}
+
+/**
+ * Issue #102 phase 3 — the append-time policy for one recovered batch, run
+ * INSIDE the connection's recoveredChain (strict batch order even when
+ * password-room decryptions settle out of order). Per envelope, in wire
+ * order:
+ *
+ * 1. the MAX_RECOVERED_PER_JOIN recipient cap — once the join session has
+ *    accepted its 50, the rest of every later batch is dropped silently
+ *    (ids were already marked seen by the transport, so re-sends of the
+ *    excess dedup too: the documented cost of the cap);
+ * 2. no resurrection (issue #96): an id this session already expired is
+ *    dropped, so gossip cannot bring a swept TTL message back;
+ * 3. the muted-AUTHOR gate (issue #95 append-time parity): the fingerprint
+ *    is resolved through the delivering connection's peerKeyFps keyed by
+ *    the envelope's `from` — the AUTHOR's peerId carried by the replayed
+ *    envelope, not the sharer's — and an author whose keys never landed
+ *    here fails OPEN like the live path (a sharer can only gossip rows its
+ *    own connection saw live, where the same fail-open already applied);
+ * 4. TTL on the receiver clock: expiresAt = Date.now() + ttl·1000 at
+ *    append, never derived from the author ts (the ±90 s skew bound is the
+ *    only freshness the replay path keeps);
+ * 5. password rooms: enc envelopes are opened with the room key (plaintext
+ *    row) or stored as the encrypted placeholder on failure — raw
+ *    ciphertext NEVER lands in the feed as text; an enc envelope reaching a
+ *    keyless (public) room is undecryptable and is dropped (§7.3).
+ *
+ * Zero arrival side effects: the store's appendRecoveredMessage never
+ * badges, the mention seam never fires and no receipt is ever queued (✓✓
+ * means LIVE delivery — transport-level guarantees from phase 1).
+ */
+async function acceptRecoveredEnvelopes(
+  connection: RoomInternals,
+  envelopes: readonly Envelope[],
+): Promise<void> {
+  for (const envelope of envelopes) {
+    if (connection.recoveredAccepted >= MAX_RECOVERED_PER_JOIN) return
+    if (expiredMessageIds.has(envelope.id)) continue
+    if (isMuted(connection, envelope.from)) continue
+    const expiresAt = expiresAtFor(envelope.ttl, Date.now())
+    if (envelope.enc) {
+      const roomKey = connection.roomKey
+      if (roomKey === null) continue // keyless room: undecryptable (§7.3)
+      try {
+        const key = await roomKey
+        const text = await decryptRoomMessage(key, {
+          iv: envelope.iv ?? '',
+          payload: envelope.body,
+        })
+        // Issue #21 parity — the seal may open into an over-limit plaintext
+        // only by tampering: discard like the live path.
+        if (text.length > MAX_PLAINTEXT_LENGTH) continue
+        appendRecoveredRow(connection, envelope, text, false, expiresAt)
+      } catch {
+        appendRecoveredRow(connection, envelope, ENCRYPTED_MESSAGE_PLACEHOLDER, true, expiresAt)
+      }
+    } else {
+      appendRecoveredRow(connection, envelope, envelope.body, false, expiresAt)
+    }
+  }
+}
+
+/** Appends one accepted recovered row and counts it against the join cap. */
+function appendRecoveredRow(
+  connection: RoomInternals,
+  envelope: Envelope,
+  text: string,
+  encrypted: boolean,
+  expiresAt: number | undefined,
+): void {
+  connection.recoveredAccepted += 1
+  useAppStore
+    .getState()
+    .appendRecoveredMessage(
+      connection.roomId,
+      buildRecoveredRow(connection.roomId, envelope, text, encrypted, expiresAt),
+    )
+}
+
+/**
+ * Issue #102 phase 3 — the seam→store wiring for recovered history,
+ * installed at module load like the onReact/onHistRequest wiring (no UI
+ * needed for the loop to work; tests re-install it in
+ * resetManagerForTests). Phase 1 delivered only shape-valid, skew-checked,
+ * dedup'd envelopes per batch; everything after this point is the
+ * recipient-side policy above.
+ */
+function appendRecoveredToStore(roomId: string, envelopes: Envelope[]): void {
+  const connection = connections.get(roomId)
+  if (connection === undefined) return
+  connection.recoveredChain = connection.recoveredChain
+    .then(() => acceptRecoveredEnvelopes(connection, envelopes))
+    .catch(() => {
+      // A failed decrypt tail must never reject the chain (§7.3 silence).
+    })
+}
+
+onRecovered(appendRecoveredToStore)
+
+// ---------------------------------------------------------------------------
 // Join / leave / reconnect
 // ---------------------------------------------------------------------------
 
@@ -750,6 +1161,8 @@ async function doJoinRoom(normalized: string, password?: string): Promise<RoomCo
     unread: 0,
     fifoTrimmed: false,
     expiredCount: 0,
+    recoveredCount: 0,
+    historyAskDismissed: false,
   })
 
   // Issue #31 — a password room's name stays session-only: never recorded
@@ -1225,6 +1638,77 @@ export function sendReact(
 }
 
 /**
+ * Issue #102 — shares history as `hist` batches on `roomId`'s swarm: the
+ * SENDER side of gossip, callable now but wired only in phase 2 (the
+ * consent layer subscribes to onHistRequest and calls this; nothing calls
+ * it yet, and the default is silence). The input is a generic envelope
+ * list (phase 2 feeds it from the in-memory store) and is SANITIZED before
+ * anything reaches the wire: at most the first MAX_HISTORY_REQUEST (50)
+ * envelopes are considered, only `kind: 'chat'` survives — DMs are NEVER
+ * gossiped (room scope only; receipts/typing have no envelopes) — and each
+ * survivor is re-validated with parseEnvelope, dropping malformed entries.
+ * The wire forms are then chunked by MEASURED encoded size
+ * (chunkHistBatches: ≤ 20 envelopes AND ≤ 48 KiB of JSON per batch — the
+ * count cap alone cannot guarantee the 64 KB transport fit, and sealing
+ * grows a body by ~34%, so chunking must see the POST-seal forms).
+ *
+ * Password rooms keep confidentiality: enc:false bodies are re-sealed with
+ * the room key (fresh IVs; the store holds plaintext, so there is no
+ * original ciphertext to forward), while enc:true envelopes are treated as
+ * already-wire-form and pass through untouched. Any sealing failure aborts
+ * the whole share with nothing sent — the sendReact no-partial-send
+ * discipline. Batches are broadcast room-wide (no target): the content is
+ * room-scope chat every peer could already see live, receivers dedup it
+ * silently, and Trystero keeps per-action wire order, so batches arrive in
+ * order. Fire-and-forget like sendReact — no §10.3 pending queue (a share
+ * that races a disconnect is simply lost; the asking peer can ask again) —
+ * and 0 is returned for an unknown or not-connected room (or when nothing
+ * survives sanitization), otherwise the number of batches dispatched.
+ */
+export async function sendHistory(roomId: string, envelopes: Envelope[]): Promise<number> {
+  const connection = connections.get(roomId)
+  if (connection === undefined || connection.status !== 'connected') return 0
+
+  // Sanitize: cap, chat-only, re-validate. Order preserved (phase 3 renders
+  // recovered oldest → newest by author ts regardless).
+  const clean: Envelope[] = []
+  for (const envelope of envelopes.slice(0, MAX_HISTORY_REQUEST)) {
+    if (envelope.kind !== 'chat') continue
+    const validated = parseEnvelope(envelope)
+    if (validated === null) continue
+    clean.push(validated)
+  }
+  if (clean.length === 0) return 0
+
+  // Wire forms: seal plaintext bodies when this room has a key; enc
+  // envelopes are already wire-form and pass through.
+  let wireForms = clean
+  const roomKey = connection.roomKey
+  if (roomKey !== null) {
+    try {
+      const key = await roomKey
+      wireForms = []
+      for (const envelope of clean) {
+        if (envelope.enc) {
+          wireForms.push(envelope)
+          continue
+        }
+        const sealed = await encryptRoomMessage(key, envelope.body)
+        wireForms.push({ ...envelope, enc: true, iv: sealed.iv, body: sealed.payload })
+      }
+    } catch {
+      return 0 // sealing failure (not expected for string passwords): §7.3 silence
+    }
+  }
+
+  const batches = chunkHistBatches(wireForms)
+  for (const batch of batches) {
+    safeSend(connection.actions.hist, { batch } satisfies HistPayload)
+  }
+  return batches.length
+}
+
+/**
  * Issue #98 phase 2 — the UI toggle: applies the local peerId to the message
  * OPTIMISTICALLY (the store action is the same gate remote payloads use, so
  * caps and idempotence hold) and sends the matching `react` payload. The
@@ -1502,6 +1986,12 @@ function createConnection(init: {
     // sender-side REACT_RATE_CAP and the cosmetic payload size keep honest
     // builds' contribution negligible.
     react: trysteroRoom.makeAction<ReactPayload>('react'),
+    // Issue #102 phase 1 — history gossip rides the same mixed-build
+    // tolerance analyzed for `react` above (actions route by name; old
+    // builds park unclaimed payloads without firing a handler), so
+    // `hist-req`/`hist` register as their own actions.
+    'hist-req': trysteroRoom.makeAction<HistReqPayload>('hist-req'),
+    hist: trysteroRoom.makeAction<HistPayload>('hist'),
     ping: trysteroRoom.makeAction<PingPayload>('ping'),
     pong: trysteroRoom.makeAction<PongPayload>('pong'),
   }
@@ -1524,6 +2014,12 @@ function createConnection(init: {
     announcedPeers: new Set<string>(),
     systemLineTimes: new Map<string, number[]>(),
     reactTimes: new Map<string, number[]>(),
+    histReqTimes: new Map<string, number[]>(),
+    histTimes: new Map<string, number[]>(),
+    historyAskTimes: new Map<string, number[]>(),
+    pendingHistReq: null,
+    recoveredAccepted: 0,
+    recoveredChain: Promise.resolve(),
     pendingChats: [],
     pendingReceipts: new Map<string, string[]>(),
     receiptTimer: null,
@@ -1671,6 +2167,15 @@ function createConnection(init: {
   actions.react.onMessage = (payload, { peerId }) => {
     handleReactPayload(connection, payload, peerId)
   }
+  // Issue #102 — history gossip never touches the store in phase 1 either:
+  // validated traffic goes through the onHistRequest/onRecovered seams only
+  // (phase 2 consent + state subscribe there).
+  actions['hist-req'].onMessage = (payload, { peerId }) => {
+    handleHistRequest(connection, payload, peerId)
+  }
+  actions.hist.onMessage = (payload, { peerId }) => {
+    handleHistBatch(connection, payload, peerId)
+  }
   actions.ping.onMessage = (payload, { peerId }) => {
     if (typeof payload?.t !== 'number' || !Number.isFinite(payload.t)) return
     safeSend(connection.actions.pong, { t: payload.t } satisfies PongPayload, { target: peerId })
@@ -1694,6 +2199,15 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
   // First peer activity disproves the tracker-dead heuristic (§10.3).
   disarmErrorHeuristic(connection)
   setConnectionStatus(connection, 'connected')
+  // Issue #102 phase 3 — a history ask tapped while the room was still
+  // hunting goes out now that a DataChannel exists (budget already paid at
+  // accept time; the payload dies with the connection if no peer ever
+  // joined).
+  const parkedAsk = connection.pendingHistReq
+  if (parkedAsk !== null) {
+    connection.pendingHistReq = null
+    safeSend(connection.actions['hist-req'], parkedAsk)
+  }
   // §10.3 — messages typed while searching go out now that a DataChannel
   // exists.
   flushPendingChats(connection)
@@ -1858,22 +2372,42 @@ async function decryptChatEnvelope(
 }
 
 /**
- * Issue #36 — consumes one slot of `peerId`'s join/leave system-line budget
- * over the rolling window: true when a line may be emitted. The per-peer
- * queue never grows beyond SYSTEM_LINE_RATE_CAP entries (bounded memory);
- * queues of peers that never return are freed with the connection.
+ * Rolling per-peer budget shared by every rate-capped receive path (join/
+ * leave lines, reactions, history gossip): true when one more payload from
+ * `peerId` fits under `cap` within the last `windowMs`. The per-peer queue
+ * never grows beyond `cap` entries; queues are kept across peer leaves
+ * (clearing them there would let rejoin churn reset the cap) and freed
+ * with the connection.
  */
-function consumeSystemLineBudget(connection: RoomInternals, peerId: string): boolean {
+function consumeRollingBudget(
+  times: Map<string, number[]>,
+  peerId: string,
+  cap: number,
+  windowMs: number,
+): boolean {
   const now = Date.now()
-  const windowStart = now - SYSTEM_LINE_RATE_WINDOW_MS
-  const recent = (connection.systemLineTimes.get(peerId) ?? []).filter((ts) => ts > windowStart)
-  if (recent.length >= SYSTEM_LINE_RATE_CAP) {
-    connection.systemLineTimes.set(peerId, recent)
+  const windowStart = now - windowMs
+  const recent = (times.get(peerId) ?? []).filter((ts) => ts > windowStart)
+  if (recent.length >= cap) {
+    times.set(peerId, recent)
     return false
   }
   recent.push(now)
-  connection.systemLineTimes.set(peerId, recent)
+  times.set(peerId, recent)
   return true
+}
+
+/**
+ * Issue #36 — consumes one slot of `peerId`'s join/leave system-line budget
+ * over the rolling window: true when a line may be emitted.
+ */
+function consumeSystemLineBudget(connection: RoomInternals, peerId: string): boolean {
+  return consumeRollingBudget(
+    connection.systemLineTimes,
+    peerId,
+    SYSTEM_LINE_RATE_CAP,
+    SYSTEM_LINE_RATE_WINDOW_MS,
+  )
 }
 
 /**
@@ -1905,21 +2439,80 @@ function handleReactPayload(connection: RoomInternals, data: unknown, peerId: st
 
 /**
  * Issue #98 — consumes one slot of `peerId`'s react budget over the rolling
- * window: true when a payload may be processed. Mirrors
- * `consumeSystemLineBudget`; the per-peer queue never grows beyond
- * REACT_RATE_CAP entries and is freed with the connection.
+ * window: true when a payload may be processed.
  */
 function consumeReactBudget(connection: RoomInternals, peerId: string): boolean {
-  const now = Date.now()
-  const windowStart = now - REACT_RATE_WINDOW_MS
-  const recent = (connection.reactTimes.get(peerId) ?? []).filter((ts) => ts > windowStart)
-  if (recent.length >= REACT_RATE_CAP) {
-    connection.reactTimes.set(peerId, recent)
-    return false
+  return consumeRollingBudget(connection.reactTimes, peerId, REACT_RATE_CAP, REACT_RATE_WINDOW_MS)
+}
+
+/**
+ * Issue #102 — receive path of one `hist-req` payload. Gate order tightens
+ * cost, the react pattern: local mute (a muted peer's requests never even
+ * reach the rate cap — pre-process parity with every other action), then
+ * the pure `parseHistReq` bounds (integer 1..50; violations dropped
+ * silently), then the per-peer rate cap (1/min). What survives is delivered
+ * to the onHistRequest seam ONLY: phase 1 never answers a request — whether
+ * to share, and what, is the phase-2 consent layer's decision (default
+ * silence), so no `hist` may leave this path.
+ */
+function handleHistRequest(connection: RoomInternals, data: unknown, peerId: string): void {
+  if (isMuted(connection, peerId)) return
+  const payload = parseHistReq(data)
+  if (payload === null) return
+  if (
+    !consumeRollingBudget(
+      connection.histReqTimes,
+      peerId,
+      HISTORY_REQ_RATE_CAP,
+      HISTORY_REQ_RATE_WINDOW_MS,
+    )
+  ) {
+    return
   }
-  recent.push(now)
-  connection.reactTimes.set(peerId, recent)
-  return true
+  for (const listener of histRequestListeners) {
+    listener(connection.roomId, peerId, payload.n)
+  }
+}
+
+/**
+ * Issue #102 — receive path of one `hist` batch (the REPLAY path). Gate
+ * order tightens cost: local mute (a muted SHARER's gossip drops before any
+ * parse — the same pre-decrypt/pre-process gate as every other action;
+ * envelopes authored by locally-muted THIRD parties are phases 2/3's
+ * append-time concern, not the transport's), then the pure
+ * `parseHistBatch` validation (batch cap + full per-envelope shape checks
+ * incl. the version gates, chat-only; any violation drops the WHOLE batch),
+ * then the per-peer rate cap (6 batches/min → ≤ 120 msgs/min/peer, before
+ * dedup so replay storms cannot churn the dedup window), then per envelope:
+ * the future-skew bound — the ONE freshness check the replay path keeps
+ * (isWithinFutureSkew); the MAX_ENVELOPE_AGE_MS age window is BYPASSED, the
+ * whole point of gossip — and the connection's BoundedSeenIds dedup:
+ * batched ids are marked seen on receipt, so a replay flood collapses AND a
+ * later LIVE resend of the same id dedups through shouldProcess. A rejected
+ * envelope consumes no dedup id and triggers zero side effects. Survivors
+ * go to the onRecovered seam only — no store append, no unread, no mention,
+ * no receipt, no typing (✓✓ means LIVE delivery); a fully-deduped batch
+ * calls no listener at all.
+ */
+function handleHistBatch(connection: RoomInternals, data: unknown, peerId: string): void {
+  if (isMuted(connection, peerId)) return
+  const batch = parseHistBatch(data)
+  if (batch === null) return
+  if (
+    !consumeRollingBudget(connection.histTimes, peerId, HISTORY_RATE_CAP, HISTORY_RATE_WINDOW_MS)
+  ) {
+    return
+  }
+  const recovered: Envelope[] = []
+  for (const envelope of batch) {
+    if (!isWithinFutureSkew(envelope.ts)) continue
+    if (!markSeen(connection.seenIds, envelope.id)) continue
+    recovered.push(envelope)
+  }
+  if (recovered.length === 0) return
+  for (const listener of recoveredListeners) {
+    listener(connection.roomId, recovered)
+  }
 }
 
 /** Local-only feed line (RF-06): never sent over the wire, no dedup needed. */
@@ -2106,6 +2699,10 @@ function teardownConnection(connection: RoomInternals): void {
   }
   connection.pendingReceipts.clear()
   connection.pendingChats = []
+  // Issue #102 phase 3 — an unflushed history ask dies with the connection
+  // (a leave before any peer joined simply loses the ask; the next join may
+  // ask again, budget fresh).
+  connection.pendingHistReq = null
   if (connection.typingTimer !== null) {
     clearInterval(connection.typingTimer)
     connection.typingTimer = null
@@ -2139,6 +2736,12 @@ export function resetManagerForTests(): void {
   // clear above purged: tests only own disposable listeners (see the
   // subscription comment at onReact).
   onReact(applyInboundReactionToStore)
+  // Issue #102 phases 2+3 — same for the consent layer and the recovered-
+  // state append wiring: module-load wiring, not disposable listener state.
+  histRequestListeners.clear()
+  onHistRequest(respondToHistoryRequest)
+  recoveredListeners.clear()
+  onRecovered(appendRecoveredToStore)
   dmListeners.clear()
   mentionListeners.clear()
   clearDmKeyCache()

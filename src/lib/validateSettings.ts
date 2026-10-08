@@ -15,7 +15,9 @@
  * rehydration once remembering is off. Issue #95: the local-moderation mute
  * list rides in the same record (spec §8.2: no sixth `gritos:*` key); its
  * entries must match the canonical fingerprint form and a list over the cap
- * is rejected wholesale instead of silently truncated.
+ * is rejected wholesale instead of silently truncated. Issue #102: the
+ * history-gossip consent flag joins the boolean pass — type-checked like
+ * `notifications`/`rememberRooms`, defaulting to silence.
  */
 
 import { canonicalFingerprint } from './crypto/dm'
@@ -172,5 +174,7 @@ export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
       typeof record.rememberRooms === 'boolean' ? record.rememberRooms : fallback.rememberRooms,
     rememberTurnCredentials,
     mutedFingerprints: normalizeMutedFingerprints(record.mutedFingerprints),
+    shareHistory:
+      typeof record.shareHistory === 'boolean' ? record.shareHistory : fallback.shareHistory,
   }
 }

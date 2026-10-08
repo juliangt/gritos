@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  SETTINGS_STORAGE_KEY,
-  useSettingsStore,
-} from '../src/stores/useSettingsStore'
+import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
 
 describe('settings persistence (spec §8.2)', () => {
   beforeEach(() => {
@@ -25,15 +22,10 @@ describe('settings persistence (spec §8.2)', () => {
   })
 
   it('rehydrates persisted values on store creation', async () => {
-    localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({ theme: 'dark', maxActiveRooms: 6 }),
-    )
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ theme: 'dark', maxActiveRooms: 6 }))
 
     vi.resetModules()
-    const { useSettingsStore: freshStore } = await import(
-      '../src/stores/useSettingsStore'
-    )
+    const { useSettingsStore: freshStore } = await import('../src/stores/useSettingsStore')
 
     expect(freshStore.getState().settings.theme).toBe('dark')
     expect(freshStore.getState().settings.maxActiveRooms).toBe(6)
@@ -43,9 +35,7 @@ describe('settings persistence (spec §8.2)', () => {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ theme: 'dark' }))
 
     vi.resetModules()
-    const { useSettingsStore: freshStore } = await import(
-      '../src/stores/useSettingsStore'
-    )
+    const { useSettingsStore: freshStore } = await import('../src/stores/useSettingsStore')
 
     expect(freshStore.getState().settings.theme).toBe('dark')
     expect(freshStore.getState().settings.autoJoinLobby).toBe(true)
@@ -56,9 +46,7 @@ describe('settings persistence (spec §8.2)', () => {
     localStorage.setItem(SETTINGS_STORAGE_KEY, '{not json')
 
     vi.resetModules()
-    const { useSettingsStore: freshStore } = await import(
-      '../src/stores/useSettingsStore'
-    )
+    const { useSettingsStore: freshStore } = await import('../src/stores/useSettingsStore')
 
     expect(freshStore.getState().settings).toEqual(
       expect.objectContaining({ theme: 'system', maxActiveRooms: 4 }),
@@ -111,5 +99,32 @@ describe('settings persistence (spec §8.2)', () => {
     useSettingsStore.getState().setSettings({ rememberTurnCredentials: false })
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY) as string
     expect(raw).not.toContain('"credential"')
+  })
+
+  it('persists and rehydrates the history-gossip consent flag (issue #102)', async () => {
+    // Off by default; the persisted record carries the field either way
+    // (it rides `gritos:settings` — no sixth `gritos:*` key).
+    expect(useSettingsStore.getState().settings.shareHistory).toBe(false)
+    expect(
+      (
+        JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string) as {
+          shareHistory: boolean
+        }
+      ).shareHistory,
+    ).toBe(false)
+
+    useSettingsStore.getState().setSettings({ shareHistory: true })
+    expect(
+      (
+        JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string) as {
+          shareHistory: boolean
+        }
+      ).shareHistory,
+    ).toBe(true)
+
+    // A reload restores the consent.
+    vi.resetModules()
+    const { useSettingsStore: freshStore } = await import('../src/stores/useSettingsStore')
+    expect(freshStore.getState().settings.shareHistory).toBe(true)
   })
 })

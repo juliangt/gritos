@@ -81,13 +81,16 @@ describe('spec §8.2 — only the documented gritos:* keys', () => {
     await new Promise((resolve) => setTimeout(resolve, 60))
     manager.setNickname('luna-cauta')
 
-    // Settings + UI changes through the stores.
+    // Settings + UI changes through the stores. Issue #102 — the
+    // history-gossip consent rides inside `gritos:settings` too: setting it
+    // must not create a sixth `gritos:*` key either.
     useSettingsStore.getState().setSettings({
       theme: 'dark',
       trackers: ['wss://tracker.example'],
       maxActiveRooms: 6,
       notifications: true,
       rememberRooms: false,
+      shareHistory: true,
     })
     useUiStore.getState().setSidebarCollapsed(true)
     // Issue #95 — the mute list rides inside `gritos:settings`: muting a
@@ -105,12 +108,14 @@ describe('spec §8.2 — only the documented gritos:* keys', () => {
         TOFU_STORAGE_KEY,
       ].sort(),
     )
-    // The mute list persists in canonical form inside the settings record.
+    // The mute list persists in canonical form inside the settings record,
+    // and so does the history-gossip consent (issue #102).
     const settings = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string) as Record<
       string,
       unknown
     >
     expect(settings.mutedFingerprints).toEqual(['A31F09BC77D24E5A51C0FFEE12345678'])
+    expect(settings.shareHistory).toBe(true)
 
     // Key contents stay within the documented shapes — the room password
     // surface is empty for public rooms and no message text is persisted.

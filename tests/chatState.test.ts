@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   INITIAL_APP_STATE,
   MAX_REACTIONS_PER_EMOJI,
+  MESSAGE_CAP,
   applyReactionsToMessages,
   appendMessageCapped,
+  appendRecoveredCapped,
   connectionStatusText,
   latencyDot,
   partitionExpired,
@@ -16,6 +18,7 @@ import { REACT_EMOJIS } from '../src/lib/p2p/protocol'
 import { INVALID_ROOM_NAME_TEXT, SUGGESTED_ROOMS } from '../src/lib/rooms'
 import {
   FIFO_SEPARATOR_TEXT,
+  RECOVERED_SEPARATOR_TEXT,
   expiredSeparatorText,
   formatTimeHHMM,
   joinSystemLine,
@@ -37,6 +40,8 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     unread: 0,
     fifoTrimmed: false,
     expiredCount: 0,
+    recoveredCount: 0,
+    historyAskDismissed: false,
     ...overrides,
   }
 }
@@ -518,5 +523,111 @@ describe('feed presentation helpers', () => {
   it('builds the expiry separator line (issue #96, FIFO-separator wording)', () => {
     expect(expiredSeparatorText(1)).toBe('— 1 mensaje expirado —')
     expect(expiredSeparatorText(3)).toBe('— 3 mensajes expirados —')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #102 phase 3 — recovered append + the per-join history-ask
+// dismissal. The recovered append mirrors the live FIFO discipline but is
+// arrival-silent (no unread) and latches the `recoveredCount` separator
+// counter; the §7.3 2 s ts-window deliberately does not apply to replayed
+// rows.
+// ---------------------------------------------------------------------------
+
+describe('recovered append + history-ask dismissal (issue #102 phase 3)', () => {
+  const T0 = 1_760_000_000_000
+
+  beforeEach(() => {
+    useAppStore.setState({ ...INITIAL_APP_STATE })
+  })
+
+  it('appendRecoveredCapped appends in strict batch order (no 2 s ts-window)', () => {
+    const a = userMessage({ id: 'a', ts: T0 })
+    const b = userMessage({ id: 'b', ts: T0 + 1_500 })
+    let acc = appendRecoveredCapped([], a)
+    acc = appendRecoveredCapped(acc, b)
+
+    // A replayed row authored BEFORE both arrives: it stays at the tail —
+    // unlike appendMessageCapped, which would walk it back by ts.
+    acc = appendRecoveredCapped(acc, userMessage({ id: 'recovered-old', ts: T0 - 9_000 }))
+    expect(acc.map((message) => message.id)).toEqual(['a', 'b', 'recovered-old'])
+
+    // The live-path contrast, pinned: same order walks the straggler back.
+    const live = appendMessageCapped(appendMessageCapped([], a), b)
+    expect(
+      appendMessageCapped(live, userMessage({ id: 'straggler', ts: T0 + 200 })).map((m) => m.id),
+    ).toEqual(['a', 'straggler', 'b'])
+  })
+
+  it('appendRecoveredCapped enforces the same 500-row FIFO cap', () => {
+    let acc: Message[] = []
+    for (let i = 0; i < MESSAGE_CAP + 3; i += 1) {
+      acc = appendRecoveredCapped(acc, userMessage({ id: `m${i}` }))
+    }
+    expect(acc).toHaveLength(MESSAGE_CAP)
+    expect(acc[0]?.id).toBe('m3')
+  })
+
+  it('appendRecoveredMessage latches recoveredCount and never badges unread', () => {
+    const store = useAppStore.getState()
+    // NOT the active view: the strongest unread condition, still silent.
+    store.upsertRoom(makeRoom({ unread: 2 }))
+    store.appendRecoveredMessage(
+      'room-1',
+      userMessage({ id: 'rec-1', recovered: true, ts: T0 - 9_000 }),
+    )
+    store.appendRecoveredMessage(
+      'room-1',
+      userMessage({ id: 'rec-2', recovered: true, ts: T0 - 8_000 }),
+    )
+
+    const room = useAppStore.getState().rooms['room-1']
+    expect(room?.messages.map((message) => message.id)).toEqual(['rec-1', 'rec-2'])
+    expect(room?.unread).toBe(2) // untouched: recovery is not an arrival
+    expect(room?.recoveredCount).toBe(2)
+  })
+
+  it('appendRecoveredMessage latches fifoTrimmed when the cap trims', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    for (let i = 0; i < MESSAGE_CAP; i += 1) {
+      store.appendMessage('room-1', userMessage({ id: `m${i}` }))
+    }
+    store.appendRecoveredMessage('room-1', userMessage({ id: 'rec-over', recovered: true }))
+
+    const room = useAppStore.getState().rooms['room-1']
+    expect(room?.messages).toHaveLength(MESSAGE_CAP)
+    expect(room?.messages[0]?.id).toBe('m1')
+    expect(room?.fifoTrimmed).toBe(true)
+    expect(room?.recoveredCount).toBe(1)
+  })
+
+  it('appendRecoveredMessage no-ops for an unknown room', () => {
+    expect(() =>
+      useAppStore.getState().appendRecoveredMessage('nope', userMessage({ id: 'x' })),
+    ).not.toThrow()
+    expect(useAppStore.getState().rooms['nope']).toBeUndefined()
+  })
+
+  it('dismissHistoryAsk is per-join Room state: a fresh join resets it', () => {
+    const store = useAppStore.getState()
+    store.upsertRoom(makeRoom())
+    expect(useAppStore.getState().rooms['room-1']?.historyAskDismissed).toBe(false)
+
+    useAppStore.getState().dismissHistoryAsk('room-1')
+    expect(useAppStore.getState().rooms['room-1']?.historyAskDismissed).toBe(true)
+
+    // Idempotent and unknown-room safe.
+    useAppStore.getState().dismissHistoryAsk('room-1')
+    expect(() => useAppStore.getState().dismissHistoryAsk('nope')).not.toThrow()
+
+    // A leave/rejoin recreates the Room row: the offer may return there
+    // (the manager's ask budget rate-limits the actual sends).
+    useAppStore.getState().upsertRoom(makeRoom())
+    expect(useAppStore.getState().rooms['room-1']?.historyAskDismissed).toBe(false)
+  })
+
+  it('builds the recovered separator line (issue #102, exact string)', () => {
+    expect(RECOVERED_SEPARATOR_TEXT).toBe('— mensajes recuperados de pares —')
   })
 })

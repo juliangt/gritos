@@ -83,6 +83,42 @@ export function unmutePeerAction(identifier: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Issue #102 — opt-in history gossip: the Privacidad-tab consent toggle.
+// The label is the issue's exact string; the hint discloses what a
+// consented share covers (only on an explicit request, at most the last 50
+// chat messages held in memory, nothing persisted, password-room bodies
+// re-sealed so only peers with the same password can read them).
+// ---------------------------------------------------------------------------
+
+/** Privacidad tab — the history-gossip consent toggle (exact issue string). */
+export const SHARE_HISTORY_LABEL = 'Compartir mi historial reciente con quien entra tarde'
+
+/** Privacidad tab — what the consent covers, and what never leaves the tab. */
+export const SHARE_HISTORY_HINT =
+  'Solo si lo activas, quien se incorpore tarde a una sala y lo pida expresamente podrá recibir hasta los últimos 50 mensajes de chat que esta pestaña tenga en memoria. Nada se guarda ni se envía sin petición; en salas con contraseña los cuerpos viajan re-cifrados con la clave de la sala, así que solo quien la conozca puede leerlos.'
+
+// ---------------------------------------------------------------------------
+// Issue #102 phase 3 — the in-feed history-request card (empty room feed):
+// one explicit tap asks the sala for its recent messages, the other
+// dismisses the offer for this join. Repeated asks are rate-limited by the
+// manager's per-room budget; nothing is ever asked automatically. The
+// recovered separator itself lives in lib/feed.ts, per the #95/#96
+// precedent.
+// ---------------------------------------------------------------------------
+
+/** Accessible name of the inline card region. */
+export const HISTORY_ASK_LABEL = 'Pedir mensajes recientes'
+
+/** The offer text (exact issue string). */
+export const HISTORY_ASK_TEXT = '¿Pedir los últimos mensajes a la sala?'
+
+/** Confirm button: dispatches one hist-req (n = 50). */
+export const HISTORY_ASK_CONFIRM = 'Pedir'
+
+/** Dismiss button: declines the offer for this join (memory-only). */
+export const HISTORY_ASK_DISMISS = 'No'
+
+// ---------------------------------------------------------------------------
 // Issue #98 — message reactions (MessageItem quick-pick bar and aggregated
 // chips row). All Spanish wording lives here so components and tests share
 // the exact texts, like the mute affordance above.

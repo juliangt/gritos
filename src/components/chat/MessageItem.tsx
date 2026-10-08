@@ -85,6 +85,12 @@ function reactToMessage(roomId: string, messageId: string, emo: string): void {
  *   through the manager's `toggleReaction` imported directly — again no
  *   callback props.
  *
+ * Issue #102 — a recovered row (opt-in history gossip, `recovered: true`)
+ * keeps the full bubble vocabulary — author, HH:MM, Markdown body — but is
+ * rendered slightly dimmed (an opacity step, the system lines' muted
+ * spirit while staying bubble-styled), honestly labeling provenance under
+ * the feed's recovered separator.
+ *
  * Wrapped in React.memo (M6, RNF-03): every prop is stable while the
  * message is unchanged — `message` is immutable, `peers`/`mentionCandidates`
  * keep their identity across message appends and `ownNickname` rarely
@@ -150,7 +156,9 @@ export const MessageItem = memo(function MessageItem(props: {
 
   return (
     <div
-      className={`group flex flex-col ${own ? 'items-end' : 'items-start'}`}
+      className={`group flex flex-col ${own ? 'items-end' : 'items-start'}${
+        props.message.recovered === true ? ' opacity-70' : ''
+      }`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onKeyDown={(event) => {
