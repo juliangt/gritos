@@ -269,3 +269,10 @@ export const CLEAR_FEED_DIALOG_BODY =
 
 /** /limpiar — ConfirmDialog confirm button. */
 export const CLEAR_FEED_DIALOG_CONFIRM = 'Borrar'
+
+/**
+ * Slash-candidate popup (issue #99 Phase 3) — accessible name of the
+ * composer's inline listbox. The option rows render straight from
+ * SLASH_COMMANDS (usage + help), like the /ayuda overlay.
+ */
+export const SLASH_POPUP_LABEL = 'Sugerencias de comandos'

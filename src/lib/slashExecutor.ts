@@ -50,7 +50,14 @@ import { useUiStore } from '../stores/useUiStore'
 
 /** What the composer must do after the executor handled a parse result. */
 export type SlashDirective =
-  /** Send `text` as a normal chat message through the composer's own path. */
+  /**
+   * Send `text` through the composer's own send path — "send-chat" names
+   * the room path, but the directive is mode-agnostic on purpose: the
+   * composer routes by view, so in a DM composer the same directive goes
+   * out as sendDm/sendManualDm (a DM-mode /me is a DM action prose; the
+   * DM seams have no isAction parameter, so the local italic echo is a
+   * room-path-only convention).
+   */
   | { type: 'send-chat'; text: string; /** /me marker: LOCAL italic echo only. */ isAction?: true }
   /** The command fully performed its local effects; nothing to send. */
   | { type: 'none' }

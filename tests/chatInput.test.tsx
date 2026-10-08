@@ -2,20 +2,26 @@
 import './dom-setup'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act } from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { ChatInput } from '../src/components/chat/ChatInput'
 import {
   DM_DISCONNECTED_TEXT,
   DM_LEGACY_PEER_TEXT,
+  UNKNOWN_COMMAND_HINT,
   TYPING_SIGNAL_THROTTLE_MS,
 } from '../src/lib/feed'
+import { NICKNAME_ERROR_TEXT } from '../src/lib/nickname'
+import { SLASH_COMMANDS } from '../src/lib/slashCommands'
 import {
   SIN_EXPIRY_LABEL,
+  SLASH_POPUP_LABEL,
   TTL_1H_LABEL,
   TTL_30S_LABEL,
   TTL_5M_LABEL,
   TTL_SELECT_LABEL,
 } from '../src/components/settings/messages'
+import { useUiStore } from '../src/stores/useUiStore'
 import type { Room } from '../src/stores/useAppStore'
 
 const { sendChat, sendTyping, sendDm, sendDmTyping } = vi.hoisted(() => ({
@@ -308,5 +314,273 @@ describe('ChatInput TTL selector (issue #96)', () => {
 
     render(<ChatInput dm={{ peerId: 'peer-9', available: true, legacyPeer: true }} />)
     expect(ttlSelect()).toBeDisabled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #99 Phase 3 — slash commands in the composer. The popup is a plain
+// listbox driven by the textarea (ARIA combobox pattern): the options are
+// never focusable, so the focus stays on the input through every
+// interaction. Submitting runs parseSlashCommand + executeSlashCommand: the
+// executor's send-chat directives (/me, the '\/' escape hatch) come back
+// through the same mode-aware send path (sendChat with isAction in a room,
+// sendDm in a DM), unknown verbs and parse errors show the inline hint and
+// send nothing. These tests use real timers: the executor is async (the
+// directive resolves a microtask after Enter), and the useUiStore is reset
+// because real commands flip its seams (/ayuda, /limpiar).
+// ---------------------------------------------------------------------------
+
+const slashListbox = () => screen.getByRole('listbox', { name: SLASH_POPUP_LABEL })
+
+/** Flushes the executor's async directive after a submit/selection. */
+const flushExecutor = () => act(async () => {})
+
+describe('ChatInput slash popup (issue #99 Phase 3)', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+    useUiStore.setState({
+      joinPopoverName: null,
+      helpOpen: false,
+      clearFeedOpen: false,
+      recoveryRoom: null,
+    })
+  })
+
+  it('opens on a bare "/" listing every command with listbox semantics', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/' } })
+
+    const listbox = slashListbox()
+    expect(textarea()).toHaveAttribute('aria-expanded', 'true')
+    expect(textarea()).toHaveAttribute('aria-controls', listbox.id)
+    const options = within(listbox).getAllByRole('option')
+    expect(options).toHaveLength(SLASH_COMMANDS.length)
+    // The first option starts active and is announced by the textarea.
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    expect(textarea()).toHaveAttribute('aria-activedescendant', options[0]?.id)
+    // Each option's ACCESSIBLE NAME carries its usage line (function
+    // matcher: the accname is usage + help; asymmetric matchers do not
+    // work as ByRole name matchers under vitest).
+    for (const command of SLASH_COMMANDS) {
+      expect(
+        within(listbox).getByRole('option', {
+          name: (accessibleName) => accessibleName.includes(command.usage),
+        }),
+      ).toBeInTheDocument()
+    }
+  })
+
+  it('filters by verb prefix ("/n" → /nick, "/ay" → /ayuda)', () => {
+    render(<ChatInput room={makeRoom()} />)
+
+    fireEvent.change(textarea(), { target: { value: '/n' } })
+    expect(within(slashListbox()).getAllByRole('option')).toHaveLength(1)
+    expect(within(slashListbox()).getByRole('option', { name: /\/nick/ })).toBeInTheDocument()
+
+    fireEvent.change(textarea(), { target: { value: '/ay' } })
+    expect(within(slashListbox()).getAllByRole('option')).toHaveLength(1)
+    expect(within(slashListbox()).getByRole('option', { name: /\/ayuda/ })).toBeInTheDocument()
+  })
+
+  it('never opens for the escape hatch or once arguments begin', () => {
+    render(<ChatInput room={makeRoom()} />)
+
+    fireEvent.change(textarea(), { target: { value: '\\/hola' } })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(textarea()).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.change(textarea(), { target: { value: '/me se estira' } })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // A verb with no prefix match closes the popup entirely ('/x').
+    fireEvent.change(textarea(), { target: { value: '/x' } })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('closes on Esc, keeps the text, and typing again re-opens it', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/n' } })
+    expect(slashListbox()).toBeInTheDocument()
+
+    fireEvent.keyDown(textarea(), { key: 'Escape' })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(textarea()).toHaveValue('/n')
+    expect(textarea()).toHaveAttribute('aria-expanded', 'false')
+
+    // Esc is dismissal, not destruction: the next keystroke re-opens.
+    fireEvent.change(textarea(), { target: { value: '/s' } })
+    expect(slashListbox()).toBeInTheDocument()
+  })
+
+  it('moves the active option with the arrows, wrapping at both ends', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/' } })
+    const options = within(slashListbox()).getAllByRole('option')
+
+    fireEvent.keyDown(textarea(), { key: 'ArrowDown' })
+    expect(textarea()).toHaveAttribute('aria-activedescendant', options[1]?.id)
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+    expect(options[0]).toHaveAttribute('aria-selected', 'false')
+
+    fireEvent.keyDown(textarea(), { key: 'ArrowUp' })
+    fireEvent.keyDown(textarea(), { key: 'ArrowUp' })
+    expect(textarea()).toHaveAttribute(
+      'aria-activedescendant',
+      options[SLASH_COMMANDS.length - 1]?.id,
+    )
+  })
+
+  it('Enter on a zero-arg candidate executes it at once and clears the input', async () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/ay' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    expect(textarea()).toHaveValue('')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    await flushExecutor()
+    expect(useUiStore.getState().helpOpen).toBe(true)
+    expect(sendChat).not.toHaveBeenCalled()
+  })
+
+  it('Enter on an argument candidate fills "/nick " with the caret at the end', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/ni' } })
+    textarea().focus()
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    expect(textarea()).toHaveValue('/nick ')
+    expect(textarea().selectionStart).toBe('/nick '.length)
+    expect(textarea().selectionStart).toBe(textarea().selectionEnd)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(textarea()).toHaveFocus()
+  })
+
+  it('Tab also selects the active candidate', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/ni' } })
+    fireEvent.keyDown(textarea(), { key: 'Tab' })
+
+    expect(textarea()).toHaveValue('/nick ')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('a mouse click selects without moving the focus away from the input', async () => {
+    render(<ChatInput room={makeRoom()} />)
+    textarea().focus()
+    fireEvent.change(textarea(), { target: { value: '/' } })
+    fireEvent.click(within(slashListbox()).getByRole('option', { name: /\/ayuda/ }))
+
+    expect(textarea()).toHaveValue('')
+    await flushExecutor()
+    expect(useUiStore.getState().helpOpen).toBe(true)
+    expect(textarea()).toHaveFocus()
+  })
+
+  it('the focus stays on the textarea through navigation and dismissal', () => {
+    render(<ChatInput room={makeRoom()} />)
+    textarea().focus()
+    fireEvent.change(textarea(), { target: { value: '/' } })
+    fireEvent.keyDown(textarea(), { key: 'ArrowDown' })
+    fireEvent.keyDown(textarea(), { key: 'ArrowUp' })
+    fireEvent.keyDown(textarea(), { key: 'Escape' })
+
+    expect(textarea()).toHaveFocus()
+  })
+})
+
+describe('ChatInput slash submit (issue #99 Phase 3)', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+    useUiStore.setState({
+      joinPopoverName: null,
+      helpOpen: false,
+      clearFeedOpen: false,
+      recoveryRoom: null,
+    })
+  })
+
+  it('an unknown verb shows the exact inline hint, sends nothing, keeps the text', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/foo bar' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    expect(screen.getByRole('status')).toHaveTextContent(UNKNOWN_COMMAND_HINT)
+    expect(sendChat).not.toHaveBeenCalled()
+    expect(textarea()).toHaveValue('/foo bar')
+  })
+
+  it('a parse-level error hints inline with the owning wording', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/nick x!' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `${NICKNAME_ERROR_TEXT} Uso: /nick <nombre>`,
+    )
+    expect(sendChat).not.toHaveBeenCalled()
+    expect(textarea()).toHaveValue('/nick x!')
+  })
+
+  it('the hint clears on the next edit', () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/foo' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+    expect(screen.getByRole('status')).toBeInTheDocument()
+
+    fireEvent.change(textarea(), { target: { value: '/foo hola' } })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('the escape hatch sends the literal text as chat, without a popup', async () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '\\/hola' } })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    await flushExecutor()
+    expect(sendChat).toHaveBeenCalledWith('room-1', '/hola')
+    expect(textarea()).toHaveValue('')
+  })
+
+  it('/me in a room routes the directive through sendChat with isAction', async () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/me se estira' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    await flushExecutor()
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'se estira', undefined, { isAction: true })
+    expect(textarea()).toHaveValue('')
+  })
+
+  it('/me in a DM routes the directive through sendDm (the composer owns the mode)', async () => {
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
+    fireEvent.change(textarea(), { target: { value: '/me asiente' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    await flushExecutor()
+    expect(sendDm).toHaveBeenCalledWith('peer-9', 'asiente')
+    expect(sendChat).not.toHaveBeenCalled()
+    expect(textarea()).toHaveValue('')
+  })
+
+  it('a typed zero-arg command executes, clears and never sends', async () => {
+    render(<ChatInput room={makeRoom()} />)
+    fireEvent.change(textarea(), { target: { value: '/salas' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    await flushExecutor()
+    expect(sendChat).not.toHaveBeenCalled()
+    expect(textarea()).toHaveValue('')
+  })
+
+  it('room-scoped commands in a DM run the executor naturally (no send, no crash)', async () => {
+    render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
+    fireEvent.change(textarea(), { target: { value: '/salir' } })
+    fireEvent.keyDown(textarea(), { key: 'Enter' })
+
+    await flushExecutor()
+    expect(sendDm).not.toHaveBeenCalled()
+    expect(sendChat).not.toHaveBeenCalled()
+    expect(textarea()).toHaveValue('')
   })
 })
