@@ -7,12 +7,15 @@ import { formatFingerprint } from '../src/lib/crypto/identity'
 import {
   MAX_CLOCK_SKEW_MS,
   MAX_ENVELOPE_AGE_MS,
+  MAX_REACT_BATCH,
   parseEnvelope,
   type Envelope,
 } from '../src/lib/p2p/protocol'
 import { NICKNAME_MAX_LENGTH } from '../src/lib/nickname'
 import {
   PENDING_CHATS_CAP,
+  REACT_RATE_CAP,
+  REACT_RATE_WINDOW_MS,
   SYSTEM_LINE_RATE_CAP,
   SYSTEM_LINE_RATE_WINDOW_MS,
 } from '../src/lib/p2p/roomManager'
@@ -117,10 +120,21 @@ describe('joinRoom (RF-02, spec §6.3)', () => {
     })
   })
 
-  it('registers exactly the 9 protocol actions (§7.1, incl. ephkeys — issue #93)', async () => {
+  it('registers exactly the 10 protocol actions (§7.1, incl. ephkeys #93 and react #98)', async () => {
     const { room } = await join('lobby')
     expect([...room.actions.keys()].sort()).toEqual(
-      ['chat', 'dm', 'ephkeys', 'keys', 'ping', 'pong', 'presence', 'receipt', 'typing'].sort(),
+      [
+        'chat',
+        'dm',
+        'ephkeys',
+        'keys',
+        'ping',
+        'pong',
+        'presence',
+        'react',
+        'receipt',
+        'typing',
+      ].sort(),
     )
   })
 })
@@ -943,5 +957,230 @@ describe('safeSend routing (issue #45: rejecting sends stay handled)', () => {
     expect(() => room.peerJoin('peer-1')).not.toThrow()
     await flushMicrotasks()
     expect(storedRoom(roomId).peers.map((peer) => peer.id)).toEqual(['peer-1'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #98 — emoji reactions, phase 1 (protocol spike + action)
+// ---------------------------------------------------------------------------
+
+interface ReactDelivery {
+  roomId: string
+  peerId: string
+  payload: unknown
+}
+
+function collectReactDeliveries(): ReactDelivery[] {
+  const deliveries: ReactDelivery[] = []
+  manager.onReact((roomId, peerId, payload) => {
+    deliveries.push({ roomId, peerId, payload })
+  })
+  return deliveries
+}
+
+describe('issue #98 — react receive path (validation + onReact seam)', () => {
+  it('delivers a valid broadcast reaction through the onReact seam', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+
+    room.receive('react', { ids: ['m-1', 'm-2'], emo: '🎉', on: true }, 'peer-1')
+    expect(deliveries).toEqual([
+      { roomId, peerId: 'peer-1', payload: { ids: ['m-1', 'm-2'], emo: '🎉', on: true } },
+    ])
+  })
+
+  it('drops invalid payloads silently (cosmetic class: no seam call)', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+
+    room.receive('react', { ids: ['m-1'], emo: '🚀', on: true }, 'peer-1') // not whitelisted
+    room.receive('react', { ids: ['m-1'], emo: '👍' }, 'peer-1') // on missing
+    room.receive('react', { ids: [], emo: '👍', on: true }, 'peer-1') // empty batch
+    room.receive(
+      'react',
+      { ids: Array.from({ length: MAX_REACT_BATCH + 1 }, (_, i) => `m-${i}`), emo: '👍', on: true },
+      'peer-1',
+    ) // over the batch cap
+    room.receive('react', { emo: '👍', on: true }, 'peer-1') // ids missing
+    room.receive('react', '👍', 'peer-1') // not even an object
+    expect(deliveries).toHaveLength(0)
+  })
+
+  it('delivers DM reactions addressed to self and drops foreign-directed ones', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+
+    room.receive(
+      'react',
+      { ids: ['dm-1'], emo: '❤️', on: true, to: manager.getSelfPeerId() },
+      'peer-1',
+    )
+    expect(deliveries).toHaveLength(1)
+
+    // Directed at another peer: dropped, never relayed (§7.3).
+    room.receive('react', { ids: ['dm-1'], emo: '❤️', on: true, to: 'someone-else' }, 'peer-1')
+    expect(deliveries).toHaveLength(1)
+  })
+})
+
+describe('issue #98 — react rate cap (per peer, rolling minute)', () => {
+  it('accepts REACT_RATE_CAP payloads per peer and drops the excess within the window', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+
+    // Unique id sets: only the rate cap can drop any of these.
+    for (let i = 0; i < REACT_RATE_CAP; i++) {
+      room.receive('react', { ids: [`m-${i}`], emo: '👍', on: true }, 'peer-1')
+    }
+    expect(deliveries).toHaveLength(REACT_RATE_CAP)
+
+    room.receive('react', { ids: ['m-over'], emo: '👍', on: true }, 'peer-1')
+    expect(deliveries).toHaveLength(REACT_RATE_CAP)
+  })
+
+  it('processes again once the rolling window rolls off', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+    for (let i = 0; i < REACT_RATE_CAP; i++) {
+      room.receive('react', { ids: [`m-${i}`], emo: '👍', on: true }, 'peer-1')
+    }
+    expect(deliveries).toHaveLength(REACT_RATE_CAP)
+
+    await vi.advanceTimersByTimeAsync(REACT_RATE_WINDOW_MS + 1)
+    room.receive('react', { ids: ['m-after'], emo: '👍', on: true }, 'peer-1')
+    expect(deliveries).toHaveLength(REACT_RATE_CAP + 1)
+  })
+
+  it('caps per peer without touching other peers', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    room.peerJoin('peer-2')
+    const deliveries = collectReactDeliveries()
+    for (let i = 0; i < REACT_RATE_CAP; i++) {
+      room.receive('react', { ids: [`m-${i}`], emo: '👍', on: true }, 'peer-1')
+    }
+    expect(deliveries).toHaveLength(REACT_RATE_CAP)
+
+    // peer-2 has its own fresh budget.
+    room.receive('react', { ids: ['m-other'], emo: '👍', on: true }, 'peer-2')
+    expect(deliveries).toHaveLength(REACT_RATE_CAP + 1)
+    expect(deliveries[deliveries.length - 1]?.peerId).toBe('peer-2')
+  })
+})
+
+describe('issue #98 — react replay dedup (through the connection BoundedSeenIds)', () => {
+  it('drops an identical replayed payload', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+    const payload = { ids: ['m-1'], emo: '👍', on: true }
+
+    room.receive('react', payload, 'peer-1')
+    room.receive('react', payload, 'peer-1')
+    expect(deliveries).toHaveLength(1)
+  })
+
+  it('still processes the inverse toggle after a replay is dropped', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+
+    room.receive('react', { ids: ['m-1'], emo: '👍', on: true }, 'peer-1')
+    room.receive('react', { ids: ['m-1'], emo: '👍', on: true }, 'peer-1') // replay
+    room.receive('react', { ids: ['m-1'], emo: '👍', on: false }, 'peer-1') // unreact
+    expect(deliveries).toHaveLength(2)
+    expect(deliveries[1]?.payload).toEqual({ ids: ['m-1'], emo: '👍', on: false })
+  })
+
+  it('keeps dropping replays across peer churn on the same connection', async () => {
+    const { room } = await join('lobby')
+    room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+    const payload = { ids: ['m-1'], emo: '👍', on: true }
+    room.receive('react', payload, 'peer-1')
+    expect(deliveries).toHaveLength(1)
+
+    room.peerLeave('peer-1')
+    room.peerJoin('peer-1')
+    room.receive('react', payload, 'peer-1')
+    expect(deliveries).toHaveLength(1)
+  })
+
+  it('starts a fresh dedup window on a NEW connection (per-connection set)', async () => {
+    const first = await join('lobby')
+    first.room.peerJoin('peer-1')
+    const deliveries = collectReactDeliveries()
+    const payload = { ids: ['m-1'], emo: '👍', on: true }
+    first.room.receive('react', payload, 'peer-1')
+    expect(deliveries).toHaveLength(1)
+
+    await manager.leaveRoom(first.roomId)
+    const second = await join('lobby')
+    second.room.peerJoin('peer-1')
+    second.room.receive('react', payload, 'peer-1')
+    expect(deliveries).toHaveLength(2)
+  })
+})
+
+describe('issue #98 — sendReact (batched like receipts, directed vs broadcast)', () => {
+  it('broadcasts room-wide reactions with no target', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    expect(manager.sendReact(roomId, ['m-1', 'm-2'], '🎉', true)).toBe(true)
+    const send = room.lastSend('react')
+    expect(send.data).toEqual({ ids: ['m-1', 'm-2'], emo: '🎉', on: true })
+    expect(send.options).toBeUndefined()
+  })
+
+  it('sends DM reactions directed at the peer with `to` set', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    expect(manager.sendReact(roomId, ['dm-1'], '❤️', true, 'peer-1')).toBe(true)
+    const send = room.lastSend('react')
+    expect(send.data).toEqual({ ids: ['dm-1'], emo: '❤️', on: true, to: 'peer-1' })
+    expect(send.options).toEqual({ target: 'peer-1' })
+  })
+
+  it('chunks oversized batches to MAX_REACT_BATCH ids like receipts', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const ids = Array.from({ length: MAX_REACT_BATCH + 5 }, (_, i) => `m-${i}`)
+    expect(manager.sendReact(roomId, ids, '👍', true)).toBe(true)
+    const sends = room.action('react').sends
+    expect(sends).toHaveLength(2)
+    expect((sends[0]?.data as { ids: string[] }).ids).toHaveLength(MAX_REACT_BATCH)
+    expect((sends[1]?.data as { ids: string[] }).ids).toHaveLength(5)
+  })
+
+  it('dedups input ids before batching', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    expect(manager.sendReact(roomId, ['a', 'a', 'b', 'a'], '👍', true)).toBe(true)
+    expect(room.lastSend('react').data).toEqual({ ids: ['a', 'b'], emo: '👍', on: true })
+  })
+
+  it('refuses unknown, disconnected or invalid requests without sending', async () => {
+    expect(manager.sendReact('nope', ['m-1'], '👍', true)).toBe(false)
+    const { room, roomId } = await join('lobby') // still searching
+    expect(manager.sendReact(roomId, ['m-1'], '👍', true)).toBe(false)
+    room.peerJoin('peer-1')
+    expect(manager.sendReact(roomId, ['m-1'], '🚀', true)).toBe(false) // whitelist
+    expect(manager.sendReact(roomId, [], '👍', true)).toBe(false)
+    expect(manager.sendReact(roomId, ['m-1', ''], '👍', true)).toBe(false)
+    expect(manager.sendReact(roomId, ['m-1'], '👍', 'yes' as unknown as boolean)).toBe(false)
+    expect(room.action('react').sends).toHaveLength(0)
+  })
+
+  it('does not send any chunk when a later batch is invalid', async () => {
+    const { room, roomId } = await join('lobby')
+    room.peerJoin('peer-1')
+    const ids = [...Array.from({ length: MAX_REACT_BATCH }, (_, i) => `m-${i}`), '']
+    expect(manager.sendReact(roomId, ids, '👍', true)).toBe(false)
+    expect(room.action('react').sends).toHaveLength(0)
   })
 })

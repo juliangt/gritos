@@ -44,6 +44,8 @@ export const MAX_PAYLOAD_BYTES = 64 * 1024
 export const MAX_ENCRYPTED_BODY_CHARS = 16_384
 /** Receipts are batched, max 50 ids per action (§7.1). */
 export const MAX_RECEIPT_BATCH = 50
+/** Issue #98 — reactions are batched like receipts, max 50 ids per action. */
+export const MAX_REACT_BATCH = 50
 
 /**
  * Issue #96 — inclusive bounds of the optional per-message `ttl`, in whole
@@ -145,6 +147,36 @@ export type ReceiptPayload = { ids: string[] }
 /** §7.1 — latency probes; RTT = now − t on pong. */
 export type PingPayload = { t: number }
 export type PongPayload = { t: number }
+
+/**
+ * Issue #98 — the reaction whitelist: the canonical, single source both the
+ * UI quick-reaction bar and the wire validator must use. Anything outside it
+ * is dropped whole (§7.3 silence) — a fixed set bounds the flood surface and
+ * keeps reactions renderable everywhere (spec §9.5 cosmetic class, like
+ * receipts and typing: no notifications, no unread, no persistence).
+ */
+export const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '👎'] as const
+
+/**
+ * Issue #98 — an emoji reaction batch (§7.1): `ids` are the message ids the
+ * reaction applies to (1..MAX_REACT_BATCH, dedup'd by `parseReact`), `emo`
+ * is one of REACT_EMOJIS and `on` toggles (true = react, false = unreact).
+ *
+ * The optional `to` makes the payload DIRECTED (issue #98 decision): DM
+ * reactions reuse this action on the room swarm, but a broadcast would leak
+ * DM reaction metadata to the whole room — so the sender targets the peer
+ * (like `dm`/`receipt`) and carries `to`; receivers drop foreign-directed
+ * payloads, never relaying them (§7.3). Absent `to` = room-wide broadcast
+ * (every peer maintains counts). Mixed builds: old peers ignore the whole
+ * action (see the spike note at the `react` registration in roomManager).
+ */
+export type ReactPayload = {
+  ids: string[]
+  emo: string
+  on: boolean
+  /** Recipient peerId — only for directed (DM) reactions; absent = broadcast. */
+  to?: string
+}
 
 // ---------------------------------------------------------------------------
 // Validation / dedup helpers (§7.3)
@@ -404,4 +436,48 @@ export function validateReceipt(payload: unknown): payload is ReceiptPayload {
   if (!Array.isArray(ids)) return false
   if (ids.length === 0 || ids.length > MAX_RECEIPT_BATCH) return false
   return ids.every((id) => typeof id === 'string' && id.length > 0)
+}
+
+/**
+ * Issue #98 — react payload validation (§7.1): `emo` must be on the
+ * REACT_EMOJIS whitelist, `on` is required boolean, `to` (when present) a
+ * non-empty string and `ids` an array of 1..MAX_REACT_BATCH non-empty
+ * strings. Any violation drops the WHOLE payload silently (cosmetic class:
+ * no system lines, no feedback — §7.3), never just the offending field, so
+ * a half-valid batch cannot apply a fraction of what the sender claimed.
+ *
+ * Like `parseEnvelope` this returns a normalized copy: the ids are dedup'd
+ * (first occurrence kept), so a duplicated id inside one batch can neither
+ * double-count nor double-toggle on the receiving side. The raw array is
+ * capped BEFORE dedup (> MAX_REACT_BATCH entries → null), mirroring the
+ * receipt discipline: honest senders never pad, so only attacker input
+ * loses ids to the cap.
+ */
+export function parseReact(raw: unknown): ReactPayload | null {
+  if (!isPlainObject(raw)) return null
+  if (typeof raw.emo !== 'string' || !(REACT_EMOJIS as readonly string[]).includes(raw.emo)) {
+    return null
+  }
+  if (typeof raw.on !== 'boolean') return null
+  if (raw.to !== undefined && (typeof raw.to !== 'string' || raw.to.length === 0)) return null
+  const ids = raw.ids
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_REACT_BATCH) return null
+  if (!ids.every((id) => typeof id === 'string' && id.length > 0)) return null
+  const payload: ReactPayload = { ids: [...new Set(ids)], emo: raw.emo, on: raw.on }
+  if (raw.to !== undefined) payload.to = raw.to
+  return payload
+}
+
+/**
+ * Issue #98 — dedup key for a react payload, fed through the receiving
+ * connection's BoundedSeenIds (markSeen) so a replayed payload is dropped
+ * before it can re-apply a toggle. The key is the payload CONTENT, not a
+ * per-message id: an identical replay collapses onto one key, while the
+ * inverse toggle (on:false after on:true, same ids/emo) keys differently
+ * and still processes — content-keying is what keeps toggles working under
+ * dedup. The `react:` prefix keeps these keys out of the envelope-id
+ * namespace sharing the same bounded set (envelope ids are UUIDs).
+ */
+export function reactSeenKey(payload: ReactPayload): string {
+  return `react:${JSON.stringify([payload.to ?? null, payload.on, payload.emo, payload.ids])}`
 }
