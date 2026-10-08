@@ -83,11 +83,13 @@ import {
   registerFileHost,
   resetFileTransfersForTests,
   roomTornDown,
+  sendFileTransfer,
   type FileAbortPayload,
   type FileAckPayload,
   type FileEndPayload,
   type FileMeta,
   type FileTransferHost,
+  type SendFileOutcome,
 } from './fileTransfer'
 
 /**
@@ -1660,6 +1662,27 @@ export async function resolveTransferKey(ctx: TransferKeyContext): Promise<Crypt
   } catch {
     return null // same failure mode as sendDm's catch: no key, no transfer
   }
+}
+
+/**
+ * Issue #103 phase 4 — the DM file-send seam for the UI. A DM transfer is
+ * ALWAYS sealed (§12.4, fail closed) and rides the shared room's swarm, but
+ * which room that is lives in the manager's connection map — the UI never
+ * sees connection internals — so this mirror of sendDm's own room lookup
+ * resolves it before delegating to the engine. The refusal vocabulary is
+ * the engine's (`SendFileRefusal`); no shared room answers
+ * `peer-not-in-room` before anything is validated or sent.
+ */
+export function sendDmFileTransfer(
+  peerId: string,
+  file: File,
+  onProgress?: (transferred: number, total: number) => void,
+): Promise<SendFileOutcome> {
+  const shared = [...connections.values()].find((entry) => entry.peerKeys.has(peerId))
+  if (shared === undefined) {
+    return Promise.resolve({ ok: false, reason: 'peer-not-in-room' })
+  }
+  return sendFileTransfer(shared.roomId, peerId, file, 'dm', onProgress)
 }
 
 /** §7.1 — DM typing signal, directed at the peer and flagged `dm`. */

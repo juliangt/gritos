@@ -4,6 +4,7 @@ import { ChatHeader } from './ChatHeader'
 import { MessageFeed } from './MessageFeed'
 import { TypingBar } from './TypingBar'
 import { ChatInput } from './ChatInput'
+import { FileTransferCards } from './FileTransferCards'
 import { NetworkErrorBanner } from './NetworkErrorBanner'
 import { JoinRoomPopover } from '../sidebar/JoinRoomPopover'
 import { DmHeader } from '../dm/DmHeader'
@@ -17,6 +18,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useLatency } from '../../hooks/useLatency'
 import { useExpirySweep } from '../../hooks/useExpirySweep'
+import { useFileTransfers } from '../../hooks/useFileTransfers'
 import { useNotifications } from '../../hooks/useNotifications'
 import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
 import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
@@ -46,6 +48,10 @@ function RoomLatencyLoop(props: { roomId: string }) {
  */
 export function ChatLayout() {
   const isMobile = useMediaQuery(MOBILE_QUERY)
+  // Issue #103 phase 4 — the §12.4 transfer records drive the consent/
+  // progress cards; the engine's module map stays the only owner (memory-
+  // only, no store), this is purely the reactive view onto it.
+  const fileTransfers = useFileTransfers()
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
   // Issue #99 — slash-command seams: the /ayuda overlay, the /limpiar
@@ -307,6 +313,17 @@ export function ChatLayout() {
               ariaLabel={dmFeedLabel(activeDm.peerNick)}
               emptyStateText={EMPTY_DM_FEED_TEXT}
             />
+            {/* Issue #103 phase 4 — the transfer strip of the DM view: every
+                record with this peer (an incoming room-kind transfer from
+                the same peer is that peer's transfer all the same). */}
+            <FileTransferCards
+              records={fileTransfers.visibleWithPeer(activeDm.peerId)}
+              peerNick={(peerId) => (peerId === activeDm.peerId ? activeDm.peerNick : null)}
+              onAccept={fileTransfers.accept}
+              onDecline={fileTransfers.decline}
+              onCancel={fileTransfers.cancel}
+              onDismiss={fileTransfers.dismiss}
+            />
             <TypingBar typing={activeDm.typing} peers={dmPeers} />
             <ChatInput
               dm={{
@@ -316,6 +333,8 @@ export function ChatLayout() {
                 // Issue #97 — trackerless manual channels route the composer
                 // through the manualDmManager, not the room DM paths.
                 manual: activeDm.manual === true,
+                // Issue #103 phase 4 — the file dialog's fixed recipient line.
+                peerNick: activeDm.peerNick,
               }}
             />
           </>
@@ -338,6 +357,20 @@ export function ChatLayout() {
               ariaLabel={`Mensajes de #${activeRoom.name}`}
               emptyStateText={EMPTY_ROOM_FEED_TEXT}
               historyAsk={historyAsk}
+            />
+            {/* Issue #103 phase 4 — the transfer strip of the room view: the
+                room's swarm minus the DM-kind sends (those stay scoped to
+                their DM view). Card position is §12.4's UI call: a strip of
+                its own below the feed, never a feed row. */}
+            <FileTransferCards
+              records={fileTransfers.visibleInRoom(activeRoom.id)}
+              peerNick={(peerId) =>
+                activeRoom.peers.find((peer) => peer.id === peerId)?.nickname ?? null
+              }
+              onAccept={fileTransfers.accept}
+              onDecline={fileTransfers.decline}
+              onCancel={fileTransfers.cancel}
+              onDismiss={fileTransfers.dismiss}
             />
             <TypingBar typing={activeRoom.typing} peers={activeRoom.peers} />
             <ChatInput room={activeRoom} />
