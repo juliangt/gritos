@@ -59,6 +59,19 @@ export function leaveSystemLine(nickname: string): string {
 }
 
 /**
+ * Issue #95 — local-only feed lines for a UI mute/unmute of a peer (never
+ * sent over the wire). The @-prefixed nickname identifies the affected
+ * identity; it is display text, not a mention.
+ */
+export function muteSystemLine(nickname: string): string {
+  return `@${nickname} fue silenciado`
+}
+
+export function unmuteSystemLine(nickname: string): string {
+  return `@${nickname} ya no está silenciado`
+}
+
+/**
  * Typing indicator line (RF-03): one known nick → 'nick está escribiendo…',
  * several → 'N personas están escribiendo…', none → null (bar hidden).
  */
@@ -87,8 +100,7 @@ export const DM_DISCONNECTED_TEXT = 'El par se ha desconectado'
  * impossible until it updates, and the honest state replaces the silent
  * message loss of the mixed-version degradation.
  */
-export const DM_LEGACY_PEER_TEXT =
-  'Este par usa una versión anterior sin DM cifrado por sesión'
+export const DM_LEGACY_PEER_TEXT = 'Este par usa una versión anterior sin DM cifrado por sesión'
 
 /** RF-04 — TOFU verification notice shown under the peer's fingerprint. */
 export const DM_VERIFY_NOTICE = 'Compáralo con tu interlocutor para verificar su identidad'

@@ -1,14 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { latencyDot, type Peer, type Room, useAppStore } from '../../stores/useAppStore'
+import { canonicalFingerprint } from '../../lib/crypto/dm'
 import { disambiguatedNickname } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
+import { useSettingsStore } from '../../stores/useSettingsStore'
+import { ConfirmDialog } from '../common/ConfirmDialog'
+import {
+  MUTE_DM_DIALOG_BODY,
+  MUTE_DM_DIALOG_CONFIRM_LABEL,
+  MUTE_DM_DIALOG_TITLE,
+  MUTE_PEER_ACTION,
+  UNMUTE_PEER_ACTION,
+} from '../settings/messages'
 
 /**
  * *Pares* section (RF-06): peers of the active view with nickname and
  * latency dot (🟢 <150 ms, 🟡 150–400, 🔴 >400, ⚪ degraded/no data).
  * Duplicate nicknames get a short peerId suffix ('nick·a3f1'). Clicking a
  * peer opens the menu (§10.1): 'Mensaje directo' (M3, RF-04) opens the
- * E2EE DM view; 'Copiar fingerprint' uses the clipboard. The menu closes
+ * E2EE DM view; 'Copiar fingerprint' uses the clipboard; issue #95 adds
+ * 'Silenciar' (local mute keyed by the identity fingerprint, with a
+ * confirm when the peer has an open DM channel — muting also ignores its
+ * future DMs) or 'Dejar de silenciar' while muted. The menu closes
  * on Esc, outside clicks and after any action. Issue #22 (TOFU): peers
  * whose DM channel is flagged `keyChanged` show the pinned first-seen
  * fingerprint (tooltip and copy) plus a visible rotation warning.
@@ -16,9 +29,12 @@ import { useRoomManager } from '../../hooks/useRoomManager'
 export function PeerList({ room }: { room: Room | null }) {
   const [menuPeerId, setMenuPeerId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  // Issue #95 — peer waiting for the mute confirmation (open DM channel).
+  const [confirmMutePeer, setConfirmMutePeer] = useState<Peer | null>(null)
   const sectionRef = useRef<HTMLElement>(null)
-  const { openDm } = useRoomManager()
+  const { openDm, muteFromUi, unmuteFromUi } = useRoomManager()
   const dms = useAppStore((state) => state.dms)
+  const mutedFingerprints = useSettingsStore((state) => state.settings.mutedFingerprints)
 
   // Menu closes on Esc and on any click outside the section (§10.1).
   useEffect(() => {
@@ -69,6 +85,42 @@ export function PeerList({ room }: { room: Room | null }) {
   const startDm = (peer: Peer) => {
     setMenuPeerId(null)
     openDm(peer.id)
+  }
+
+  // Issue #95 — whether the peer's displayed fingerprint is on the mute
+  // list (the list persists canonical form; the displayed value may carry
+  // the spaced 8×4 groups).
+  const isPeerMuted = (peer: Peer): boolean => {
+    const fingerprint = displayedFingerprint(peer)
+    return fingerprint !== null && mutedFingerprints.includes(canonicalFingerprint(fingerprint))
+  }
+
+  const applyMute = (peer: Peer) => {
+    setMenuPeerId(null)
+    setConfirmMutePeer(null)
+    const fingerprint = displayedFingerprint(peer)
+    if (fingerprint === null) return
+    muteFromUi(fingerprint, peer.nickname)
+  }
+
+  // Muting a peer with an open DM channel also ignores its future DMs
+  // (phase 2 enforcement): that loss is disclosed behind a confirm.
+  const requestMute = (peer: Peer) => {
+    const fingerprint = displayedFingerprint(peer)
+    if (fingerprint === null) return
+    if (dms[peer.id] !== undefined) {
+      setMenuPeerId(null)
+      setConfirmMutePeer(peer)
+      return
+    }
+    applyMute(peer)
+  }
+
+  const unmutePeer = (peer: Peer) => {
+    setMenuPeerId(null)
+    const fingerprint = displayedFingerprint(peer)
+    if (fingerprint === null) return
+    unmuteFromUi(fingerprint)
   }
 
   return (
@@ -133,6 +185,27 @@ export function PeerList({ room }: { room: Room | null }) {
                   >
                     Copiar fingerprint
                   </button>
+                  {isPeerMuted(peer) ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={fingerprint === null}
+                      onClick={() => unmutePeer(peer)}
+                      className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
+                    >
+                      {UNMUTE_PEER_ACTION}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={fingerprint === null}
+                      onClick={() => requestMute(peer)}
+                      className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
+                    >
+                      {MUTE_PEER_ACTION}
+                    </button>
+                  )}
                 </div>
               )}
             </li>
@@ -140,6 +213,20 @@ export function PeerList({ room }: { room: Room | null }) {
         })}
       </ul>
       {copied && <p className="text-xs text-muted">Fingerprint copiado.</p>}
+
+      {/* Issue #95 — muting a peer with an open DM channel discloses that its
+          future DMs will be ignored too (phase 2 receive-path enforcement). */}
+      <ConfirmDialog
+        open={confirmMutePeer !== null}
+        title={MUTE_DM_DIALOG_TITLE}
+        body={MUTE_DM_DIALOG_BODY}
+        confirmLabel={MUTE_DM_DIALOG_CONFIRM_LABEL}
+        danger
+        onConfirm={() => {
+          if (confirmMutePeer !== null) applyMute(confirmMutePeer)
+        }}
+        onCancel={() => setConfirmMutePeer(null)}
+      />
     </section>
   )
 }

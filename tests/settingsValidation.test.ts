@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { normalizeSettings } from '../src/lib/validateSettings'
+import { MAX_MUTED_FINGERPRINTS, normalizeSettings } from '../src/lib/validateSettings'
 import {
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
@@ -16,6 +16,18 @@ import {
 
 /** Fresh baseline for the pure pass (normalizeSettings never mutates it). */
 const FALLBACK: typeof DEFAULT_SETTINGS = { ...DEFAULT_SETTINGS }
+
+/** Issue #95 — a fingerprint in the 8×4 display form and its canonical form. */
+const FP_DISPLAY = 'A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678'
+const FP_CANONICAL = 'A31F09BC77D24E5A51C0FFEE12345678'
+
+/** `count` distinct canonical fingerprints, index-encoded in the low digits. */
+function mutedList(count: number): string[] {
+  return Array.from(
+    { length: count },
+    (_, index) => `A31F09BC77D24E5A51C0FFEE${index.toString(16).padStart(8, '0').toUpperCase()}`,
+  )
+}
 
 /** Re-imports the store so it rehydrates from the current localStorage. */
 async function rehydrate(): Promise<ReturnType<typeof useSettingsStore.getState>> {
@@ -47,10 +59,7 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
 
   it('coerces booleans by type only', () => {
     expect(
-      normalizeSettings(
-        { autoJoinLobby: false, notifications: 1, rememberRooms: 'yes' },
-        FALLBACK,
-      ),
+      normalizeSettings({ autoJoinLobby: false, notifications: 1, rememberRooms: 'yes' }, FALLBACK),
     ).toEqual({
       ...DEFAULT_SETTINGS,
       autoJoinLobby: false,
@@ -65,9 +74,9 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
       rememberTurnCredentials: false,
     })
     // Only the exact `false` boolean turns it off; anything else falls back.
-    expect(normalizeSettings({ rememberTurnCredentials: 0 }, FALLBACK).rememberTurnCredentials).toBe(
-      true,
-    )
+    expect(
+      normalizeSettings({ rememberTurnCredentials: 0 }, FALLBACK).rememberTurnCredentials,
+    ).toBe(true)
     expect(
       normalizeSettings({ rememberTurnCredentials: 'no' }, FALLBACK).rememberTurnCredentials,
     ).toBe(true)
@@ -186,8 +195,68 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
       notifications: true,
       rememberRooms: false,
       rememberTurnCredentials: true,
+      mutedFingerprints: [FP_CANONICAL],
     }
     expect(normalizeSettings(valid, FALLBACK)).toEqual(valid)
+  })
+})
+
+describe('normalizeSettings mute list (issue #95)', () => {
+  it('accepts a valid list and stores it in canonical form', () => {
+    // Spaced 8×4 display form and lowercase compact form both canonicalize.
+    expect(
+      normalizeSettings(
+        { mutedFingerprints: [FP_DISPLAY, 'bbbb cccc dddd eeee ffff 0000 1111 2222'] },
+        FALLBACK,
+      ).mutedFingerprints,
+    ).toEqual([FP_CANONICAL, 'BBBBCCCCDDDDEEEEFFFF000011112222'])
+  })
+
+  it('drops malformed entries and keeps the well-formed ones', () => {
+    const { mutedFingerprints } = normalizeSettings(
+      {
+        mutedFingerprints: [
+          FP_DISPLAY, // the only well-formed one
+          'A31F 09BC 77D2 4E5A', // wrong length: 16 hex chars
+          `${FP_CANONICAL}ABCD`, // wrong length: 36 hex chars
+          'G31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678', // non-hex
+          'A31F-09BC-77D2-4E5A-51C0-FFEE-1234-5678', // wrong separator
+          '', // empty
+          42, // non-string entries
+          null,
+          {},
+        ],
+      },
+      FALLBACK,
+    )
+    expect(mutedFingerprints).toEqual([FP_CANONICAL])
+  })
+
+  it('falls back to [] for non-array payloads', () => {
+    expect(
+      normalizeSettings({ mutedFingerprints: FP_CANONICAL }, FALLBACK).mutedFingerprints,
+    ).toEqual([])
+    expect(normalizeSettings({ mutedFingerprints: 42 }, FALLBACK).mutedFingerprints).toEqual([])
+    expect(normalizeSettings({}, FALLBACK).mutedFingerprints).toEqual([])
+  })
+
+  it('deduplicates entries that canonicalize to the same fingerprint', () => {
+    expect(
+      normalizeSettings(
+        { mutedFingerprints: [FP_DISPLAY, FP_CANONICAL, FP_CANONICAL.toLowerCase()] },
+        FALLBACK,
+      ).mutedFingerprints,
+    ).toEqual([FP_CANONICAL])
+  })
+
+  it('accepts exactly MAX_MUTED_FINGERPRINTS entries', () => {
+    const full = mutedList(MAX_MUTED_FINGERPRINTS)
+    expect(normalizeSettings({ mutedFingerprints: full }, FALLBACK).mutedFingerprints).toEqual(full)
+  })
+
+  it('rejects a list over the cap wholesale instead of truncating', () => {
+    const over = mutedList(MAX_MUTED_FINGERPRINTS + 1)
+    expect(normalizeSettings({ mutedFingerprints: over }, FALLBACK).mutedFingerprints).toEqual([])
   })
 })
 
@@ -274,5 +343,25 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
     const { settings } = await rehydrate()
     expect(settings.rememberTurnCredentials).toBe(false)
     expect(settings.iceServers).toEqual([{ urls: 'turn:turn.example:3478', username: 'ana' }])
+  })
+
+  it('loads a persisted mute list and drops corrupt entries on the way in (issue #95)', async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        mutedFingerprints: [FP_DISPLAY, 'A31F 09BC 77D2 4E5A', 'not-a-fingerprint', 42],
+      }),
+    )
+    const { settings } = await rehydrate()
+    expect(settings.mutedFingerprints).toEqual([FP_CANONICAL])
+  })
+
+  it('rejects an over-cap persisted mute list wholesale (issue #95)', async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({ mutedFingerprints: mutedList(MAX_MUTED_FINGERPRINTS + 1) }),
+    )
+    const { settings } = await rehydrate()
+    expect(settings.mutedFingerprints).toEqual([])
   })
 })

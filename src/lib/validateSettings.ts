@@ -12,14 +12,21 @@
  * Issue #30: when `rememberTurnCredentials` resolves to false, TURN
  * `credential` fields are dropped on load as well — a stale record written
  * before the toggle existed (or by a careless import) must not survive
- * rehydration once remembering is off.
+ * rehydration once remembering is off. Issue #95: the local-moderation mute
+ * list rides in the same record (spec §8.2: no sixth `gritos:*` key); its
+ * entries must match the canonical fingerprint form and a list over the cap
+ * is rejected wholesale instead of silently truncated.
  */
 
+import { canonicalFingerprint } from './crypto/dm'
 import type { Settings, ThemeChoice } from '../stores/useAppStore'
 
 /** RF-02 active-room cap, enforced by the NetworkTab UI (1–6). */
 export const MIN_ACTIVE_ROOMS = 1
 export const MAX_ACTIVE_ROOMS = 6
+
+/** Issue #95 — mute-list cap: at most 100 muted fingerprints. */
+export const MAX_MUTED_FINGERPRINTS = 100
 
 /** §8.1 — the only theme values the app knows (RF-10). */
 const THEMES: readonly ThemeChoice[] = ['light', 'dark', 'system']
@@ -93,6 +100,33 @@ function normalizeMaxActiveRooms(raw: unknown, fallback: Settings): number {
 }
 
 /**
+ * Issue #95 — canonical fingerprint rule: after `canonicalFingerprint`
+ * (whitespace stripped, uppercased — the same normalizer the DM derivation
+ * and the TOFU pin comparison run) the value must be exactly 32 hex chars,
+ * i.e. the 8×4 display groups concatenated. Both the spaced display form
+ * and the compact form are accepted, in either hex case.
+ */
+export function isValidFingerprint(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9A-F]{32}$/.test(canonicalFingerprint(value))
+}
+
+/**
+ * Issue #95 — keeps only well-formed entries of the persisted mute list,
+ * deduplicated and in canonical form. A list over MAX_MUTED_FINGERPRINTS
+ * unique entries cannot be produced by the app (the store helper refuses
+ * the 101st), so it is corrupt or hostile: it is rejected wholesale —
+ * falling back to [] — rather than silently evicting user mutes.
+ */
+function normalizeMutedFingerprints(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const muted = raw
+    .filter((entry): entry is string => isValidFingerprint(entry))
+    .map((entry) => canonicalFingerprint(entry))
+  const unique = [...new Set(muted)]
+  return unique.length > MAX_MUTED_FINGERPRINTS ? [] : unique
+}
+
+/**
  * Issue #30 — shallow-copies each ICE entry without its `credential`
  * (`urls`/`username` and any other field survive). Used on the persist path
  * when `rememberTurnCredentials` is off so the stored `gritos:settings`
@@ -137,5 +171,6 @@ export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
     rememberRooms:
       typeof record.rememberRooms === 'boolean' ? record.rememberRooms : fallback.rememberRooms,
     rememberTurnCredentials,
+    mutedFingerprints: normalizeMutedFingerprints(record.mutedFingerprints),
   }
 }

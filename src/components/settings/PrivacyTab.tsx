@@ -5,19 +5,27 @@ import {
   type NotificationPermissionState,
 } from '../../lib/notifications'
 import { panicWipe } from '../../lib/panic'
-import { useSettingsStore } from '../../stores/useSettingsStore'
+import { getMutedNickname, useSettingsStore } from '../../stores/useSettingsStore'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { Toggle } from './Toggle'
-import { P2P_IP_EXPOSURE_NOTE, TURN_CREDENTIAL_STORAGE_HINT } from './messages'
+import {
+  EMPTY_MUTED_PEERS_TEXT,
+  MUTED_PEERS_HEADING,
+  MUTED_PEERS_HINT,
+  P2P_IP_EXPOSURE_NOTE,
+  TURN_CREDENTIAL_STORAGE_HINT,
+  UNMUTE_PEER_ACTION,
+  unmutePeerAction,
+} from './messages'
 
 /**
  * Privacidad tab (RF-07/RF-08): the notifications toggle with its
- * permission request flow, remember-recents, the P2P exposure disclosure
- * (issue #35), an at-rest storage note for the wrapped identity key
- * (issue #24) and for the TURN credentials (issue #30), identity
- * regeneration behind a confirming dialog, and the panic button behind a
- * double confirmation.
+ * permission request flow, remember-recents, the local mute list with
+ * per-row unmute (issue #95), the P2P exposure disclosure (issue #35), an
+ * at-rest storage note for the wrapped identity key (issue #24) and for the
+ * TURN credentials (issue #30), identity regeneration behind a confirming
+ * dialog, and the panic button behind a double confirmation.
  */
 
 const PERMISSION_GRANTED_TEXT = 'Permiso concedido.'
@@ -31,10 +39,18 @@ const REGENERATE_DIALOG_BODY =
 
 const PANIC_BUTTON_LABEL = 'Borrar todo y salir'
 const PANIC_DIALOG_TITLE = PANIC_BUTTON_LABEL
-const PANIC_DIALOG_BODY =
-  'Se borrarán apodo, claves, ajustes y todo rastro local. ¿Continuar?'
+const PANIC_DIALOG_BODY = 'Se borrarán apodo, claves, ajustes y todo rastro local. ¿Continuar?'
 const PANIC_FINAL_DIALOG_BODY =
   'Esta acción es definitiva: se cerrarán todas las conexiones y la aplicación se recargará para empezar de cero.'
+
+/**
+ * Issue #95 — canonical fingerprint shortened to its first two 8×4 display
+ * groups: enough to tell entries apart without printing the 39-char form.
+ */
+function shortFingerprint(canonical: string): string {
+  const grouped = canonical.replace(/(.{4})(?=.)/g, '$1 ')
+  return `${grouped.split(' ').slice(0, 2).join(' ')}…`
+}
 
 function permissionText(state: NotificationPermissionState): string {
   switch (state) {
@@ -53,7 +69,7 @@ export function PrivacyTab() {
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   // Never bootstraps an identity: regeneration acts on the session only.
-  const { regenerateIdentity } = useRoomManager({ ensureIdentity: false })
+  const { regenerateIdentity, unmuteFromUi } = useRoomManager({ ensureIdentity: false })
   const [permission, setPermission] = useState<NotificationPermissionState>(() =>
     notificationPermissionState(),
   )
@@ -103,6 +119,42 @@ export function PrivacyTab() {
         onChange={(rememberRooms) => setSettings({ rememberRooms })}
       />
 
+      {/* Issue #95 — the local mute list: fingerprints persisted in
+          `gritos:settings` with their last-seen nickname when known this
+          session (the map rides memory-only); each row unmutes. */}
+      <div className="flex flex-col gap-2 border-t border-border pt-3">
+        <h3 className="text-sm font-semibold">{MUTED_PEERS_HEADING}</h3>
+        {settings.mutedFingerprints.length === 0 ? (
+          <p className="text-xs text-muted">{EMPTY_MUTED_PEERS_TEXT}</p>
+        ) : (
+          <>
+            <p className="text-xs text-muted">{MUTED_PEERS_HINT}</p>
+            <ul className="flex flex-col gap-1">
+              {settings.mutedFingerprints.map((fingerprint) => {
+                const nickname = getMutedNickname(fingerprint)
+                const shortFp = shortFingerprint(fingerprint)
+                return (
+                  <li key={fingerprint} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm">
+                      {nickname !== null && <span className="mr-2">{nickname}</span>}
+                      <span className="font-mono text-xs text-muted">{shortFp}</span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={unmutePeerAction(nickname !== null ? `@${nickname}` : shortFp)}
+                      onClick={() => unmuteFromUi(fingerprint)}
+                      className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:border-accent"
+                    >
+                      {UNMUTE_PEER_ACTION}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
+        )}
+      </div>
+
       {/* Issue #35 — P2P transparency: what room peers (and trackers) see. */}
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted">{P2P_IP_EXPOSURE_NOTE}</p>
@@ -110,18 +162,16 @@ export function PrivacyTab() {
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted">
-          {TURN_CREDENTIAL_STORAGE_HINT} Se configuran en la pestaña Red;
-          desactiva allí «Recordar credenciales TURN en este navegador» para
-          que solo vivan en la memoria de la sesión.
+          {TURN_CREDENTIAL_STORAGE_HINT} Se configuran en la pestaña Red; desactiva allí «Recordar
+          credenciales TURN en este navegador» para que solo vivan en la memoria de la sesión.
         </p>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted">
-          Tu clave privada se guarda cifrada en este navegador: la clave que la
-          descifra vive en IndexedDB y nada viaja por la red. Aun así, si algo
-          compromete por completo este origen (una extensión maliciosa,
-          malware en tu equipo) podría usar esa clave para suplantarte.
+          Tu clave privada se guarda cifrada en este navegador: la clave que la descifra vive en
+          IndexedDB y nada viaja por la red. Aun así, si algo compromete por completo este origen
+          (una extensión maliciosa, malware en tu equipo) podría usar esa clave para suplantarte.
         </p>
         <p className="text-xs text-muted">
           Genera un nuevo par de claves ECDH: tu fingerprint cambiará para todos tus pares.

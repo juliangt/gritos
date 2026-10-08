@@ -32,6 +32,14 @@ export interface Settings {
    * JSON drops them, so a reload requires re-entering them. Default: true.
    */
   rememberTurnCredentials: boolean
+  /**
+   * Issue #95 — fingerprints of muted peers, each in the canonical form
+   * (`canonicalFingerprint`: whitespace-free uppercase, the 8×4 display
+   * groups concatenated to 32 hex chars). Rides inside `gritos:settings`
+   * (spec §8.2: no sixth localStorage key), capped at MAX_MUTED_FINGERPRINTS
+   * entries; the cap refuses, it never evicts. Default: [].
+   */
+  mutedFingerprints: string[]
 }
 
 export interface Identity {
@@ -186,10 +194,7 @@ export function appendMessageCapped(
       if (
         previous.kind !== 'user' ||
         previous.authorId === 'self' ||
-        !(
-          message.ts < previous.ts &&
-          previous.ts - message.ts <= ARRIVAL_ORDER_WINDOW_MS
-        )
+        !(message.ts < previous.ts && previous.ts - message.ts <= ARRIVAL_ORDER_WINDOW_MS)
       ) {
         break
       }
@@ -455,9 +460,9 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       const messages = appendMessageCapped(channel.messages, message)
       // RF-04 — peer messages in non-focused DMs increment the unread badge;
       // own messages never do.
-      const isActiveView =
-        state.activeView?.kind === 'dm' && state.activeView.peerId === peerId
-      const countsAsUnread = message.authorId !== 'self' && message.kind !== 'system' && !isActiveView
+      const isActiveView = state.activeView?.kind === 'dm' && state.activeView.peerId === peerId
+      const countsAsUnread =
+        message.authorId !== 'self' && message.kind !== 'system' && !isActiveView
       return {
         dms: {
           ...state.dms,

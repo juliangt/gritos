@@ -2,7 +2,7 @@
 import './dom-setup'
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Sidebar } from '../src/components/sidebar/Sidebar'
 import { joinRoom, resetManagerForTests, setJoinRoomFactory } from '../src/lib/p2p/roomManager'
 import { ROOMS_STORAGE_KEY } from '../src/lib/recentRooms'
@@ -270,7 +270,9 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     fireEvent.click(directMessage)
     expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-aaaa3f1' })
     // The menu closed after the action.
-    expect(screen.queryByRole('menu', { name: 'Acciones para luna-cauta·a3f1' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menu', { name: 'Acciones para luna-cauta·a3f1' }),
+    ).not.toBeInTheDocument()
   })
 
   it('peer menu closes on Escape (§10.1)', () => {
@@ -337,5 +339,97 @@ describe('Sidebar (spec §10.1, RF-02, RF-06)', () => {
     fireEvent.click(screen.getByText('zorro-bravo'))
     expect(useAppStore.getState().activeView).toEqual({ kind: 'dm', peerId: 'peer-bbbb9c2' })
     expect(useAppStore.getState().dms['peer-bbbb9c2']?.unread).toBe(0)
+  })
+})
+
+describe('PeerList local mute (issue #95)', () => {
+  // 128-bit fingerprint in the spaced 8×4 display form, as announced/derived.
+  const PEER_FP = 'A31F 09BC 77D2 4E5A 0F1E 2D3C 4B5A 6978'
+  // Canonical form persisted by the settings store (issue #95 phase 1).
+  const CANONICAL_FP = 'A31F09BC77D24E5A0F1E2D3C4B5A6978'
+
+  function seedMutePeer(withFingerprint: boolean): void {
+    const store = useAppStore.getState()
+    // Focus first: the mute system line lands on the active room's feed.
+    store.setActiveView({ kind: 'room', id: 'room-lobby' })
+    store.upsertRoom(
+      room({
+        peers: [
+          withFingerprint
+            ? { ...peer('peer-aaaa3f1', 'luna-cauta'), fingerprint: PEER_FP }
+            : peer('peer-aaaa3f1', 'luna-cauta'),
+        ],
+      }),
+    )
+  }
+
+  function openPeerMenu(): void {
+    // Scoped to the Pares section: an open DM channel would list the same
+    // nickname under Mensajes directos.
+    const pares = within(screen.getByRole('region', { name: 'Pares' }))
+    fireEvent.click(pares.getByText('luna-cauta').closest('button') as HTMLElement)
+  }
+
+  function systemLines(): string[] {
+    const stored = useAppStore.getState().rooms['room-lobby']
+    if (stored === undefined) return []
+    return stored.messages.filter((message) => message.kind === 'system').map((m) => m.text)
+  }
+
+  it('Silenciar mutes by canonical fingerprint and announces the local line (issue #95)', () => {
+    seedMutePeer(true)
+    render(<Sidebar />)
+    openPeerMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Silenciar' }))
+
+    // The mute keys on the canonical fingerprint, never the nickname.
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([CANONICAL_FP])
+    // Local-only line on the active room feed (RF-06 style).
+    expect(systemLines()).toContain('@luna-cauta fue silenciado')
+  })
+
+  it('muting a peer with an open DM channel confirms first; cancel keeps the list (issue #95)', () => {
+    seedMutePeer(true)
+    useAppStore.getState().ensureDmChannel('peer-aaaa3f1', 'luna-cauta', PEER_FP)
+    render(<Sidebar />)
+    openPeerMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Silenciar' }))
+
+    // The dialog discloses the DM loss; nothing is muted yet.
+    expect(screen.getByRole('dialog', { name: 'Silenciar par' })).toBeInTheDocument()
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
+    expect(systemLines()).not.toContain('@luna-cauta fue silenciado')
+
+    // Confirming the second attempt applies the mute.
+    openPeerMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Silenciar' }))
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'))
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([CANONICAL_FP])
+    expect(systemLines()).toContain('@luna-cauta fue silenciado')
+  })
+
+  it('a muted peer offers Dejar de silenciar and announces the local unmute line (issue #95)', () => {
+    seedMutePeer(true)
+    expect(useSettingsStore.getState().muteFingerprint(PEER_FP, 'luna-cauta')).toBe(true)
+    render(<Sidebar />)
+    openPeerMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Silenciar' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Dejar de silenciar' }))
+
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
+    expect(systemLines()).toContain('@luna-cauta ya no está silenciado')
+  })
+
+  it('Silenciar stays disabled until the peer announces a fingerprint (issue #95)', () => {
+    seedMutePeer(false)
+    render(<Sidebar />)
+    openPeerMenu()
+    expect(screen.getByRole('menuitem', { name: 'Silenciar' })).toBeDisabled()
+    // Same gate as Copiar fingerprint: without an identity there is nothing
+    // to key the mute on.
+    expect(screen.getByRole('menuitem', { name: 'Copiar fingerprint' })).toBeDisabled()
   })
 })

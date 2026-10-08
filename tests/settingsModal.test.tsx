@@ -434,6 +434,58 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
   })
 })
 
+describe('Privacidad mute list (issue #95)', () => {
+  const PEER_FP = 'A31F 09BC 77D2 4E5A 0F1E 2D3C 4B5A 6978'
+  const CANONICAL_FP = 'A31F09BC77D24E5A0F1E2D3C4B5A6978'
+  const OTHER_FP = 'B31F09BC77D24E5A0F1E2D3C4B5A6978'
+
+  it('shows the empty state until a peer is muted', () => {
+    renderModal()
+    openTab('Privacidad')
+    expect(screen.getByText('No has silenciado a ningún par.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Dejar de silenciar/ })).not.toBeInTheDocument()
+  })
+
+  it('lists muted peers with nickname and truncated fingerprint, and unmutes per row', () => {
+    expect(useSettingsStore.getState().muteFingerprint(PEER_FP, 'luna-cauta')).toBe(true)
+    // A second entry written straight into the persisted list bypasses the
+    // memory-only nickname map (like a record rehydrated after a reload):
+    // its row degrades to the truncated fingerprint.
+    useSettingsStore.getState().setSettings({ mutedFingerprints: [CANONICAL_FP, OTHER_FP] })
+    renderModal()
+    openTab('Privacidad')
+
+    expect(screen.getByRole('heading', { name: 'Pares silenciados' })).toBeInTheDocument()
+    expect(screen.getByText('luna-cauta')).toBeInTheDocument()
+    expect(screen.getByText('A31F 09BC…')).toBeInTheDocument()
+    expect(screen.getByText('B31F 09BC…')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dejar de silenciar a @luna-cauta' }))
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([OTHER_FP])
+    expect(screen.queryByText('A31F 09BC…')).not.toBeInTheDocument()
+
+    // The nickname-less row's button is identified by its fingerprint.
+    fireEvent.click(screen.getByRole('button', { name: 'Dejar de silenciar a B31F 09BC…' }))
+    expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
+    expect(screen.getByText('No has silenciado a ningún par.')).toBeInTheDocument()
+  })
+
+  it('unmuting from the list appends the local system line to the active room (issue #95)', async () => {
+    const connection = await manager.joinRoom('lobby')
+    useAppStore.getState().setActiveView({ kind: 'room', id: connection.roomId })
+    expect(useSettingsStore.getState().muteFingerprint(PEER_FP, 'luna-cauta')).toBe(true)
+
+    renderModal()
+    openTab('Privacidad')
+    fireEvent.click(screen.getByRole('button', { name: 'Dejar de silenciar a @luna-cauta' }))
+
+    const messages = useAppStore.getState().rooms[connection.roomId]?.messages ?? []
+    expect(
+      messages.some((m) => m.kind === 'system' && m.text === '@luna-cauta ya no está silenciado'),
+    ).toBe(true)
+  })
+})
+
 describe('Apariencia tab (RF-07/RF-10)', () => {
   it('the theme radio group drives the settings store (single source of truth)', () => {
     renderModal()
