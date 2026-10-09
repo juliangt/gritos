@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
 import spec from '../docs/spec.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 
@@ -8,7 +8,7 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  * per-message TTL) — the docs phase of the issue. Pins the documentation to
  * the shipped behavior:
  *
- *  1. the README's feature bullet documents the TTL under the ephemerality
+ *  1. the features reference bullet documents the TTL under the ephemerality
  *     story with the additive-wire degradation,
  *  2. spec §7.2 documents the optional `ttl` field (units, inclusive bounds,
  *     absent = session-lived, invalid = whole envelope dropped) and keeps
@@ -27,11 +27,11 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  */
 
 describe('self-destructing messages documentation (issue #96)', () => {
-  it('documents the TTL under a README feature bullet with the degradation', () => {
-    expect(readme).toContain('**Self-destructing messages (issue #96)**')
-    expect(readme).toContain('30 s / 5 min / 1 h')
-    expect(readme).toContain('receiver-clock expiry')
-    expect(readme).toContain('older builds ignore the field and keep the message for the session')
+  it('documents the TTL under a features-reference bullet with the degradation', () => {
+    expect(features).toContain('**Self-destructing messages (issue #96)**')
+    expect(features).toContain('30 s / 5 min / 1 h')
+    expect(features).toContain('receiver-clock expiry')
+    expect(features).toContain('older builds ignore the field and keep the message for the session')
   })
 
   it('documents the ttl field and its bounds in spec §7.2', () => {
@@ -44,7 +44,9 @@ describe('self-destructing messages documentation (issue #96)', () => {
 
   it('keeps the envelope version per-kind with no bump for ttl', () => {
     expect(spec).toContain('introduces no new version')
-    expect(spec).toContain('ignores the field silently and **keeps the message for the whole session**')
+    expect(spec).toContain(
+      'ignores the field silently and **keeps the message for the whole session**',
+    )
   })
 
   it('pins the §7.3 enforcement rule: receiver clock, sweep, separator, guards', () => {
