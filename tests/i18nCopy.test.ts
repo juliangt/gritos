@@ -21,6 +21,7 @@ import {
   unmuteSystemLine,
 } from '../src/lib/feed'
 import { dmNotificationTitle, mentionNotificationTitle, notificationBody } from '../src/lib/notifications'
+import { formatFileSize } from '../src/lib/fileSize'
 import { RoomLimitError } from '../src/lib/p2p/roomManager'
 import {
   fileCardLabel,
@@ -121,6 +122,18 @@ describe('migrated builders resolve the exact legacy strings (en)', () => {
     expect(notificationBody('zorro-bravo', 'hola @ti…')).toBe('zorro-bravo: hola @ti…')
   })
 
+  it('localizes BOTH notification titles at fire time under es (explicit pin)', () => {
+    // Notifications resolve their templates when they FIRE (out-of-render
+    // `t` calls), so a Spanish UI must never send an English title and vice
+    // versa — pinned for the DM and mention titles together.
+    setLocale('es')
+    expect(dmNotificationTitle('luna-cauta')).toBe('gritos — DM de luna-cauta')
+    expect(mentionNotificationTitle('general')).toBe('gritos — mención en #general')
+    setLocale('en')
+    expect(dmNotificationTitle('luna-cauta')).toBe('gritos — DM from luna-cauta')
+    expect(mentionNotificationTitle('general')).toBe('gritos — mention in #general')
+  })
+
   it('keeps the file-refusal, failure and blob/knock error entries', () => {
     expect(fileRefusalText('unknown-room')).toBe('The room is no longer connected: the file cannot be sent.')
     expect(fileRefusalText('file-too-big')).toBe('The file exceeds the 20 MB limit.')
@@ -175,10 +188,12 @@ describe('builders are call-time live (no boot-frozen strings)', () => {
   it('a builder sample flips with the locale and back', () => {
     expect(getLocale()).toBe('en')
     expect(joinSystemLine('luna-cauta')).toBe('— luna-cauta joined —')
+    expect(formatFileSize(16356)).toBe('16.0 KB')
     setLocale('es')
     expect(getLocale()).toBe('es')
     expect(joinSystemLine('luna-cauta')).toBe('— luna-cauta se ha unido —')
     expect(dmNotificationTitle('luna-cauta')).toBe('gritos — DM de luna-cauta')
+    expect(formatFileSize(16356)).toBe('16,0 KB')
     expect(fileRefusalText('file-too-big')).toBe('El archivo supera el límite de 20 MB.')
     expect(SLASH_COMMANDS[0]?.help).toBe(
       'Cambia tu apodo (2–24 caracteres: letras, números, espacios, guiones y guiones bajos).',

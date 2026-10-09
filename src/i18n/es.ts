@@ -212,6 +212,12 @@ export const es: Translations = {
   'settings.themeSystem': 'Sistema',
   'settings.collapseSidebarLabel': 'Contraer la barra lateral al iniciar',
 
+  // Issue #119 — the UI-language picker: only the label and the 'Auto'
+  // option translate; 'English'/'Español' are literal endonyms in both
+  // locales (they always render in their own language).
+  'settings.languageLabel': 'Idioma',
+  'settings.languageAuto': 'Automático',
+
   // -------------------------------------------------------------------------
   // chat — the chat header/composer: the §10.3 connection-status templates,
   // the network banners (RNF-07, #43, #125) and the password-room not-found

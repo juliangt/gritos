@@ -100,6 +100,20 @@ export function setLocale(language: LanguageSetting): void {
   if (typeof document !== 'undefined') document.documentElement.lang = locale
 }
 
+/**
+ * THE one write path for the UI language (issue #119): persists the user's
+ * choice through the settings store AND applies it live via `setLocale` —
+ * writing the store alone would survive a reload but leave the running page
+ * in the old locale. EVERY caller (the Appearance picker, future imports of
+ * settings, tests) must go through this helper, never the store's
+ * `setSettings({ language })` alone. No new import edge: `useSettingsStore`
+ * is already this module's (acyclic) dependency — see the header note.
+ */
+export function setLanguagePreference(language: LanguageSetting): void {
+  useSettingsStore.getState().setSettings({ language })
+  setLocale(language)
+}
+
 /** Keys whose missing-translation warning already fired (once per key). */
 const warnedKeys = new Set<string>()
 

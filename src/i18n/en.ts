@@ -328,6 +328,14 @@ export const en = {
   'settings.themeSystem': 'System',
   'settings.collapseSidebarLabel': 'Collapse sidebar on start',
 
+  /** Appearance tab — the UI-language picker (issue #119). 'English' and
+   * 'Español' are endonyms: they render in their own language under every
+   * locale (the standard for language menus) and therefore stay literal in
+   * both dictionaries; only the group label and the 'Auto' option
+   * translate. */
+  'settings.languageLabel': 'Language',
+  'settings.languageAuto': 'Auto',
+
   // -------------------------------------------------------------------------
   // chat — the chat header/composer: the §10.3 connection-status templates,
   // the network banners (RNF-07, issue #43, issue #125) and the password-room
