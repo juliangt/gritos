@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 
@@ -9,21 +10,26 @@ import { useSettingsStore } from '../stores/useSettingsStore'
  * the exact §10.5 formats; clicking focuses the window and navigates to
  * the origin view. Every Notification access is guarded so environments
  * without the API (tests, old browsers) can never crash.
+ *
+ * Issue #119 phase 2 — i18n: the title/body builders resolve through `t()`
+ * on EVERY call (locale-live — the notify* entry points call them at fire
+ * time, never at module scope), so a notification renders in the locale
+ * active when it fires.
  */
 
-/** §10.5 — exact DM title format: 'gritos — DM from <nick>'. */
+/** §10.5 — exact DM title format: 'gritos — DM from <nick>'. Locale-live. */
 export function dmNotificationTitle(nick: string): string {
-  return `gritos — DM from ${nick}`
+  return t('notifications.dmTitle', { nick })
 }
 
-/** §10.5 — exact mention title format: 'gritos — mention in #<room>'. */
+/** §10.5 — exact mention title format: 'gritos — mention in #<room>'. Locale-live. */
 export function mentionNotificationTitle(roomName: string): string {
-  return `gritos — mention in #${roomName}`
+  return t('notifications.mentionTitle', { room: roomName })
 }
 
-/** §10.5 — exact body format: '<nick>: <text>'. */
+/** §10.5 — exact body format: '<nick>: <text>'. Locale-neutral (names are data). */
 export function notificationBody(nick: string, text: string): string {
-  return `${nick}: ${text}`
+  return t('notifications.body', { nick, text })
 }
 
 export interface NotificationGating {

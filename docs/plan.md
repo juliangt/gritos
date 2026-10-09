@@ -293,3 +293,34 @@ Relative complexity: **S** = 1–2 days, **M** = 3–5 days, **L** = 1–2 weeks
 | M6 Polish and release   | M          | 6–7 weeks             |
 
 **Demonstrable milestones**: end of M2 = public chat-in-rooms demo; end of M4 = full privacy demo (E2EE + hidden rooms); end of M6 = deployable v1.0.0.
+
+## 10. Post-v1 issue log
+
+The milestones above shipped v1.0.0; feature issues landed afterwards are
+logged here (one entry per issue, in landing order) so the plan stays the
+historical record without rewriting sections 4–9.
+
+### Issue #119 — English/Spanish locale (spec §10.10)
+
+Shipped in five phases: the `src/i18n/` runtime with zero-dependency
+`en`/`es` dictionaries (347 keys) and `t`/`tPlural`/`useT`; the copy
+migration of every UI surface (components, aria-labels/titles/placeholders,
+system lines, notifications, slash help) with lib-level shims preserving the
+legacy exact-string exports the docs-pinned suites import; the
+`language: 'en'|'es'|'auto'` setting persisted inside `gritos:settings`
+(8.2 — no sixth `gritos:*` key); the native-quality Spanish pass under a
+fixed glossary (tuteo, tracker loanword, «sala»); and the Settings →
+Appearance language picker whose single write path (`setLanguagePreference`)
+persists the choice and applies the locale live, `<html lang>` included.
+
+Key decisions: plain static-import dictionaries instead of an i18n library
+or lazy chunks (the surface is a few hundred short strings); en↔es key
+parity compile-enforced by the `Translations` type (plus a runtime parity
+assert); the boot locale resolves lazily on the first `t()`/`getLocale()`
+call so the i18n → settings-store import edge stays acyclic while still
+seeing the persisted language on the very first string; a fixed en/es
+glossary bans the rejected mistranslations (enforced by tests).
+
+Verification: the automated suites (runtime, boot, picker, copy contract,
+Spanish review gate) plus the QA-119 manual matrix in
+`docs/qa-checklist.md`.

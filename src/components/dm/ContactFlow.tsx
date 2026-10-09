@@ -8,29 +8,8 @@ import { KnockError, knockPeer, onKnockResolved } from '../../lib/p2p/signalChan
 import { buildContactLink } from '../../lib/shareLinks'
 import { isValidFingerprint } from '../../lib/validateSettings'
 import { useAppStore } from '../../stores/useAppStore'
-import {
-  CONTACT_BACK_BUTTON,
-  CONTACT_COPIED_FEEDBACK,
-  CONTACT_COPY_BUTTON,
-  CONTACT_DIALOG_LABEL,
-  CONTACT_DOWNLOAD_BUTTON,
-  CONTACT_FP_INVALID_TEXT,
-  CONTACT_FP_LABEL,
-  CONTACT_INTRO_TEXT,
-  CONTACT_KNOCK_ENTRY_BUTTON,
-  CONTACT_KNOCK_INTRO_TEXT,
-  CONTACT_KNOCK_NOTE_LABEL,
-  CONTACT_KNOCK_PASTE_LABEL,
-  CONTACT_KNOCK_REJECTED_TEXT,
-  CONTACT_KNOCK_SEND_BUTTON,
-  CONTACT_KNOCK_WAITING_TEXT,
-  CONTACT_QR_CANVAS_LABEL,
-  CONTACT_QR_SAME_INSTALL_NOTE,
-  CONTACT_SHARE_BUTTON,
-  CONTACT_CANCEL_BUTTON,
-  KNOCK_ERROR_TEXT,
-  contactNoteCounter,
-} from '../settings/messages'
+import { useT } from '../../i18n/index'
+import { contactNoteCounter, knockErrorText } from '../settings/messages'
 
 /**
  * Issue #105 phase 3 (spec §12.5) — the contact flow behind the DmList's
@@ -70,6 +49,7 @@ export function ContactFlow(props: {
   /** Canonical fingerprint prefilled into the knock form (the `#contact=` deep link). */
   initialFp?: string | null
 }) {
+  const t = useT()
   const { open, onClose } = props
   const identity = useAppStore((state) => state.identity)
 
@@ -187,7 +167,7 @@ export function ContactFlow(props: {
   const handleKnock = () => {
     setErrorText(null)
     if (!isValidFingerprint(pasted)) {
-      setErrorText(CONTACT_FP_INVALID_TEXT)
+      setErrorText(t('contact.fpInvalid'))
       return
     }
     const canonical = canonicalFingerprint(pasted)
@@ -197,8 +177,8 @@ export function ContactFlow(props: {
     } catch (error) {
       setErrorText(
         error instanceof KnockError
-          ? KNOCK_ERROR_TEXT[error.reason]
-          : KNOCK_ERROR_TEXT['invalid-knock'],
+          ? knockErrorText(error.reason)
+          : knockErrorText('invalid-knock'),
       )
       return
     }
@@ -207,24 +187,24 @@ export function ContactFlow(props: {
   }
 
   return (
-    <Modal open={props.open} onClose={handleClose} label={CONTACT_DIALOG_LABEL}>
+    <Modal open={props.open} onClose={handleClose} label={t('contact.dialogLabel')}>
       <div className="flex flex-col gap-3">
         {screen === 'pick' && (
           <>
-            <p className="text-xs text-muted">{CONTACT_INTRO_TEXT}</p>
+            <p className="text-xs text-muted">{t('contact.intro')}</p>
             <button
               type="button"
               onClick={() => setScreen('share')}
               className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
             >
-              {CONTACT_SHARE_BUTTON}
+              {t('contact.shareButton')}
             </button>
             <button
               type="button"
               onClick={() => setScreen('knock')}
               className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
             >
-              {CONTACT_KNOCK_ENTRY_BUTTON}
+              {t('contact.knockEntryButton')}
             </button>
           </>
         )}
@@ -233,12 +213,12 @@ export function ContactFlow(props: {
           <>
             {identity === null ? (
               <p role="note" className="text-xs text-accent">
-                No identity in this session.
+                {t('contact.noIdentity')}
               </p>
             ) : (
               <>
                 <textarea
-                  aria-label={CONTACT_FP_LABEL}
+                  aria-label={t('contact.fpLabel')}
                   readOnly
                   value={identity.fingerprint}
                   rows={2}
@@ -251,31 +231,31 @@ export function ContactFlow(props: {
                     onClick={handleCopy}
                     className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:border-accent"
                   >
-                    {CONTACT_COPY_BUTTON}
+                    {t('common.copy')}
                   </button>
                   {copied && (
                     <span aria-live="polite" className="text-xs text-muted">
-                      {CONTACT_COPIED_FEEDBACK}
+                      {t('common.copied')}
                     </span>
                   )}
                 </div>
                 <canvas
                   ref={canvasRef}
                   role="img"
-                  aria-label={CONTACT_QR_CANVAS_LABEL}
+                  aria-label={t('contact.qrCanvasLabel')}
                   className="h-44 w-44 self-center rounded border border-border bg-surface"
                 />
                 {/* Selectable fallback: exactly the string the QR encodes. */}
                 <p className="select-all break-all text-center font-mono text-xs text-muted">
                   {link}
                 </p>
-                <p className="text-center text-xs text-muted">{CONTACT_QR_SAME_INSTALL_NOTE}</p>
+                <p className="text-center text-xs text-muted">{t('qr.sameInstallNote')}</p>
                 <button
                   type="button"
                   onClick={() => downloadContactQrPng(link)}
                   className="self-center rounded bg-accent px-3 py-1.5 text-xs font-semibold text-accent-text"
                 >
-                  {CONTACT_DOWNLOAD_BUTTON}
+                  {t('qr.downloadButton')}
                 </button>
               </>
             )}
@@ -284,24 +264,24 @@ export function ContactFlow(props: {
 
         {screen === 'knock' && (
           <>
-            <p className="text-xs text-muted">{CONTACT_KNOCK_INTRO_TEXT}</p>
+            <p className="text-xs text-muted">{t('contact.knockIntro')}</p>
             <textarea
-              aria-label={CONTACT_KNOCK_PASTE_LABEL}
+              aria-label={t('contact.knockPasteLabel')}
               value={pasted}
               disabled={knockStatus === 'waiting'}
               onChange={(event) => setPasted(event.target.value)}
               rows={2}
-              placeholder={CONTACT_KNOCK_PASTE_LABEL}
+              placeholder={t('contact.knockPasteLabel')}
               className="w-full resize-none break-all rounded-md border border-border bg-bg p-2 font-mono text-xs leading-snug focus:border-accent disabled:opacity-50"
             />
             <textarea
-              aria-label={CONTACT_KNOCK_NOTE_LABEL}
+              aria-label={t('contact.knockNoteLabel')}
               value={note}
               disabled={knockStatus === 'waiting'}
               maxLength={NOTE_MAX_LENGTH}
               onChange={(event) => setNote(event.target.value.slice(0, NOTE_MAX_LENGTH))}
               rows={2}
-              placeholder={CONTACT_KNOCK_NOTE_LABEL}
+              placeholder={t('contact.knockNoteLabel')}
               className="w-full resize-none rounded-md border border-border bg-bg p-2 text-sm focus:border-accent disabled:opacity-50"
             />
             <span aria-live="polite" className="self-end text-[10px] tabular-nums text-muted">
@@ -309,12 +289,12 @@ export function ContactFlow(props: {
             </span>
             {knockStatus === 'waiting' && (
               <p role="status" className="text-xs text-muted">
-                {CONTACT_KNOCK_WAITING_TEXT}
+                {t('contact.knockWaiting')}
               </p>
             )}
             {knockStatus === 'rejected' && (
               <p role="alert" className="text-xs text-accent">
-                {CONTACT_KNOCK_REJECTED_TEXT}
+                {t('contact.knockRejected')}
               </p>
             )}
             {errorText !== null && (
@@ -328,7 +308,7 @@ export function ContactFlow(props: {
               disabled={knockStatus === 'waiting' || pasted.trim() === ''}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-text disabled:opacity-40"
             >
-              {CONTACT_KNOCK_SEND_BUTTON}
+              {t('contact.knockSendButton')}
             </button>
           </>
         )}
@@ -342,7 +322,7 @@ export function ContactFlow(props: {
             }}
             className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
           >
-            {CONTACT_BACK_BUTTON}
+            {t('contact.backButton')}
           </button>
         )}
 
@@ -351,7 +331,7 @@ export function ContactFlow(props: {
           onClick={handleClose}
           className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
         >
-          {CONTACT_CANCEL_BUTTON}
+          {t('common.cancel')}
         </button>
       </div>
     </Modal>

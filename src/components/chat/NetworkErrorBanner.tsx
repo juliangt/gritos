@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useAppStore, type AppState } from '../../stores/useAppStore'
 import { SettingsModal } from '../settings/SettingsModal'
 import { StatusDot } from '../common/StatusDot'
-import { INSECURE_CONTEXT_BANNER_TEXT, NETWORK_ERROR_BANNER_TEXT } from '../../lib/rooms'
-import { MANUAL_DM_BANNER_SHORTCUT } from '../settings/messages'
+import { useT } from '../../i18n/index'
 
 /**
  * Network error banner (RNF-07 — never an indistinguishable silence):
@@ -36,6 +35,7 @@ interface BannerState {
 }
 
 export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
+  const t = useT()
   const joinedErrorIds = useAppStore(selectErrorRoomIds)
   const [state, setState] = useState<BannerState>({ lastJoined: joinedErrorIds, dismissed: [] })
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -69,16 +69,16 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
       {contextNoticeVisible && (
         <div
           role="status"
-          aria-label="Network status"
+          aria-label={t('chat.networkStatusAria')}
           className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
         >
           <StatusDot status="error" />
-          <p className="min-w-0 flex-1 text-muted">{INSECURE_CONTEXT_BANNER_TEXT}</p>
+          <p className="min-w-0 flex-1 text-muted">{t('chat.insecureContextBanner')}</p>
           <button
             type="button"
             onClick={() => setContextNoticeDismissed(true)}
-            aria-label="Dismiss the notice"
-            title="Dismiss the notice"
+            aria-label={t('common.dismissNotice')}
+            title={t('common.dismissNotice')}
             className="shrink-0 rounded px-1 text-muted hover:text-text"
           >
             ✕
@@ -88,33 +88,33 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
       {visibleIds.length > 0 && (
         <div
           role="status"
-          aria-label="Network status"
+          aria-label={t('chat.networkStatusAria')}
           className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
         >
           <StatusDot status="error" />
-          <p className="min-w-0 flex-1 text-muted">{NETWORK_ERROR_BANNER_TEXT}</p>
+          <p className="min-w-0 flex-1 text-muted">{t('chat.networkErrorBanner')}</p>
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
             className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
           >
-            Open settings
+            {t('chat.openSettings')}
           </button>
           {props.onOpenManualDm !== undefined && (
             <button
               type="button"
               onClick={props.onOpenManualDm}
-              title="Start a direct conversation without trackers"
+              title={t('wizard.inviteEntryTitle')}
               className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
             >
-              {MANUAL_DM_BANNER_SHORTCUT}
+              {t('wizard.bannerShortcut')}
             </button>
           )}
           <button
             type="button"
             onClick={dismiss}
-            aria-label="Dismiss the notice"
-            title="Dismiss the notice"
+            aria-label={t('common.dismissNotice')}
+            title={t('common.dismissNotice')}
             className="shrink-0 rounded px-1 text-muted hover:text-text"
           >
             ✕

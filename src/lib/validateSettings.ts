@@ -20,9 +20,13 @@
  * `notifications`/`rememberRooms`, defaulting to silence. Issue #105: the
  * global-DM opt-in flag joins the same boolean pass, defaulting to off
  * (joining the signal swarm is a visible privacy decision, spec §12.5).
+ * Issue #119: the UI language joins the enum pass like `theme` — only
+ * 'en'/'es'/'auto' survive verbatim, anything else falls back to 'auto'
+ * (follow the browser).
  */
 
 import { canonicalFingerprint } from './crypto/dm'
+import type { LanguageSetting } from '../i18n/index'
 import type { Settings, ThemeChoice } from '../stores/useAppStore'
 
 /** RF-02 active-room cap, enforced by the NetworkTab UI (1–6). */
@@ -34,6 +38,9 @@ export const MAX_MUTED_FINGERPRINTS = 100
 
 /** §8.1 — the only theme values the app knows (RF-10). */
 const THEMES: readonly ThemeChoice[] = ['light', 'dark', 'system']
+
+/** Issue #119 — the only UI-language values the app knows. */
+const LANGUAGES: readonly LanguageSetting[] = ['en', 'es', 'auto']
 
 /** `new URL` that yields null instead of throwing (never trust the store). */
 function parseUrl(value: string): URL | null {
@@ -179,5 +186,8 @@ export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
     shareHistory:
       typeof record.shareHistory === 'boolean' ? record.shareHistory : fallback.shareHistory,
     globalDm: typeof record.globalDm === 'boolean' ? record.globalDm : fallback.globalDm,
+    language: LANGUAGES.includes(record.language as LanguageSetting)
+      ? (record.language as LanguageSetting)
+      : fallback.language,
   }
 }

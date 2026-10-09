@@ -12,8 +12,9 @@
  *   name, trimmed /dm target, end-trimmed /me action). Dispatch on `verb`.
  * - `kind: 'error'` — known verb, rejected arguments; the executor prints a
  *   local system line. `error` says why, `arg` carries the trimmed raw input
- *   for quoting; wording reuses the owning libs (NICKNAME_ERROR_TEXT,
- *   INVALID_ROOM_NAME_TEXT) plus the row's usage (`slashUsageText`).
+ *   for quoting; wording reuses the owning libs' i18n keys
+ *   (errors.nicknameInvalid, settings.invalidRoomName) plus the row's usage
+ *   (`slashUsageText`).
  * - `kind: 'unknown'` — leading '/' with a verb outside the table: the input
  *   is NEVER sent; the UI hints "Unknown command — /help".
  * - `kind: 'literal'` — `\/` escape hatch: the composer strips the backslash
@@ -30,14 +31,17 @@
  * original Spanish command verbs to their English counterparts keeps NO
  * Spanish aliases — the app has no released users, so there is no
  * compatibility burden to carry. English is the primary language of the
- * table: usage and help strings below are the shipped copy.
+ * table: `verb` and `usage` are protocol grammar, literal English in every
+ * locale.
  *
- * Help and usage strings live in this table rather than settings/messages.ts
- * (superseding the Phase-4 note in the issue): the command table is
- * protocol-adjacent grammar data owned by the parser module, and the /help
- * overlay renders straight from SLASH_COMMANDS.
+ * Help strings live in the i18n dictionary (`src/i18n/en.ts`, `slash.*Help`
+ * keys) rather than settings/messages.ts (superseding the Phase-4 note in
+ * the issue): the /help overlay renders straight from SLASH_COMMANDS, so
+ * each row carries a `help` GETTER that resolves its key at access time —
+ * locale-live with the public row shape unchanged.
  */
 
+import { t } from '../i18n/index'
 import { isValidNickname, normalizeNickname } from './nickname'
 
 /** Argument grammar of a command row. */
@@ -53,65 +57,94 @@ export interface SlashCommandDef {
   /** Loose on purpose: the concrete literals live in the SLASH_COMMANDS rows. */
   readonly verb: string
   readonly arity: SlashArity
-  /** Argument shape shown by /help and in usage errors, e.g. '/nick <name>'. */
+  /**
+   * Argument shape shown by /help and in usage errors, e.g. '/nick <name>'.
+   * PROTOCOL DATA — deliberately literal English in every locale (the
+   * parser's grammar tokens are matched nowhere, but they are the command
+   * grammar itself, documented in spec §10.7).
+   */
   readonly usage: string
-  /** One-line English help text (feeds the /help overlay). */
+  /**
+   * One-line help text (feeds the /help overlay). Issue #119 phase 2 —
+   * i18n: a GETTER over the `slash.<verb>Help` key, so consumers read
+   * `row.help` unchanged and the string resolves AT ACCESS TIME — locale-
+   * live for both the /help overlay and the composer popup, with zero call
+   * sites changed.
+   */
   readonly help: string
 }
 
 /**
  * The v1 command set (issue #99), in /help display order. Kept as a plain
  * tuple so `SlashVerb` derives from it and the parser switch stays
- * exhaustive over the real rows.
+ * exhaustive over the real rows. `verb`/`usage` stay literal English
+ * (protocol grammar, per the issue-#112 rename); each row's `help` getter
+ * resolves its `slash.*Help` dictionary key live.
  */
 export const SLASH_COMMANDS = [
   {
     verb: 'nick',
     arity: 'value',
     usage: '/nick <name>',
-    help: 'Changes your nickname (2–24 characters: letters, numbers, spaces, hyphens and underscores).',
+    get help(): string {
+      return t('slash.nickHelp')
+    },
   },
   {
     verb: 'room',
     arity: 'value',
     usage: '/room <name>',
-    help: 'Joins a room by its name (normalized to lowercase with hyphens).',
+    get help(): string {
+      return t('slash.roomHelp')
+    },
   },
   {
     verb: 'dm',
     arity: 'value',
     usage: '/dm <nick>',
-    help: 'Opens an encrypted direct conversation with a peer.',
+    get help(): string {
+      return t('slash.dmHelp')
+    },
   },
   {
     verb: 'me',
     arity: 'rest',
     usage: '/me <action>',
-    help: 'Sends an action: rendered in italics as "* nickname action".',
+    get help(): string {
+      return t('slash.meHelp')
+    },
   },
   {
     verb: 'rooms',
     arity: 'none',
     usage: '/rooms',
-    help: 'Lists the active rooms and their unread counts.',
+    get help(): string {
+      return t('slash.roomsHelp')
+    },
   },
   {
     verb: 'clear',
     arity: 'none',
     usage: '/clear',
-    help: 'Clears the local history of this room (your browser only).',
+    get help(): string {
+      return t('slash.clearHelp')
+    },
   },
   {
     verb: 'leave',
     arity: 'none',
     usage: '/leave',
-    help: 'Leaves the active room.',
+    get help(): string {
+      return t('slash.leaveHelp')
+    },
   },
   {
     verb: 'help',
     arity: 'none',
     usage: '/help',
-    help: 'Shows this command list.',
+    get help(): string {
+      return t('slash.helpHelp')
+    },
   },
 ] as const satisfies readonly SlashCommandDef[]
 
@@ -170,10 +203,14 @@ export function getSlashCommandDef(verb: string): SlashCommandDef | undefined {
   return SLASH_COMMANDS.find((entry) => entry.verb === verb)
 }
 
-/** 'Usage: /nick <name>' — prefix for arity and validation error lines. */
+/**
+ * 'Usage: /nick <name>' — prefix for arity and validation error lines. The
+ * `Usage: ` prefix is UI chrome (the `slash.usageLine` template translates);
+ * `{usage}` is injected parser-grammar English in every locale. Locale-live.
+ */
 export function slashUsageText(verb: SlashVerb): string {
   const def = getSlashCommandDef(verb)
-  return `Usage: ${def?.usage ?? `/${verb}`}`
+  return t('slash.usageLine', { usage: def?.usage ?? `/${verb}` })
 }
 
 /**

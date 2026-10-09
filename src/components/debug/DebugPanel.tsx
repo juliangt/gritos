@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { connectionStatusText, latencyDot, useAppStore } from '../../stores/useAppStore'
 import { getSelfPeerId, sendTestChat } from '../../lib/p2p/roomManager'
-import { NICKNAME_ERROR_TEXT } from '../../lib/nickname'
+import { en } from '../../i18n/en'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useLatency } from '../../hooks/useLatency'
 
@@ -16,6 +16,14 @@ import { useLatency } from '../../hooks/useLatency'
  * `import.meta.env.DEV`, so it never ships to production. It calls the
  * manager's `sendTestChat` directly — the hook does not thread it, keeping
  * the debug-only path out of the shipped `useRoomManager` API.
+ *
+ * i18n EXEMPTION (issue #119 phase 3): this panel is the one deliberate
+ * untranslated surface (dev-only chrome stays English). Its single
+ * user-visible validation line reads the ENGLISH DICTIONARY VALUE directly
+ * — NOT `t()` — so the `NICKNAME_ERROR_TEXT` shim could be deleted without
+ * dragging the i18n runtime's locale resolution into a panel that must not
+ * switch language. (The shim is gone now; this direct dictionary read is
+ * what replaced it.)
  */
 export function DebugPanel() {
   const identity = useAppStore((state) => state.identity)
@@ -64,7 +72,7 @@ export function DebugPanel() {
                     try {
                       changeNickname(nickValue)
                     } catch {
-                      setError(NICKNAME_ERROR_TEXT)
+                      setError(en['errors.nicknameInvalid'])
                     }
                   }
                   setNickDraft(null)

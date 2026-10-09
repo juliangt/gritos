@@ -1,20 +1,8 @@
 import { useState } from 'react'
 import { Modal } from '../common/Modal'
 import { formatFileSize } from '../../lib/fileSize'
-import {
-  FILE_CANCEL_BUTTON,
-  FILE_DIALOG_LABEL,
-  FILE_ENC_NOTICE_DM,
-  FILE_ENC_NOTICE_ROOM,
-  FILE_ENC_WARNING_PUBLIC,
-  FILE_NO_PEERS_TEXT,
-  FILE_PICK_LABEL,
-  FILE_RECIPIENT_LABEL,
-  FILE_REFUSAL_TEXT,
-  FILE_SEND_BUTTON,
-  FILE_UNKNOWN_MIME_TEXT,
-  fileRecipientDmText,
-} from '../settings/messages'
+import { useT } from '../../i18n/index'
+import { fileRecipientDmText, fileRefusalText } from '../settings/messages'
 import type { SendFileOutcome } from '../../lib/p2p/fileTransfer'
 
 /**
@@ -49,6 +37,7 @@ export function FileSendDialog(props: {
   /** DM mode: the fixed recipient; no selector, DM-key notice. */
   dmPeer?: { peerId: string; nickname: string }
 }) {
+  const t = useT()
   const [file, setFile] = useState<File | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -69,10 +58,10 @@ export function FileSendDialog(props: {
 
   const dmMode = props.dmPeer !== undefined
   const encryptionNotice = dmMode
-    ? FILE_ENC_NOTICE_DM
+    ? t('files.encNoticeDm')
     : props.encryptedRoom === true
-      ? FILE_ENC_NOTICE_ROOM
-      : FILE_ENC_WARNING_PUBLIC
+      ? t('files.encNoticeRoom')
+      : t('files.encWarningPublic')
 
   const noPeers = !dmMode && (props.peers === undefined || props.peers.length === 0)
 
@@ -85,7 +74,7 @@ export function FileSendDialog(props: {
       if (outcome.ok) {
         resetAndClose()
       } else {
-        setRefusal(FILE_REFUSAL_TEXT[outcome.reason])
+        setRefusal(fileRefusalText(outcome.reason))
       }
     } finally {
       setSending(false)
@@ -96,10 +85,10 @@ export function FileSendDialog(props: {
     <Modal
       open={props.open}
       onClose={resetAndClose}
-      label={FILE_DIALOG_LABEL}
+      label={t('files.dialogLabel')}
       className="w-full max-w-md rounded-lg border border-border bg-surface p-4 outline-none"
     >
-      <h2 className="text-base font-semibold">{FILE_DIALOG_LABEL}</h2>
+      <h2 className="text-base font-semibold">{t('files.dialogLabel')}</h2>
 
       {/* The picker rides first (the meta below appears once a file is
           chosen); the input is sr-only and the styled label is the
@@ -107,7 +96,7 @@ export function FileSendDialog(props: {
       <label className="mt-3 flex cursor-pointer items-center justify-center rounded-md border border-dashed border-border px-3 py-3 text-sm hover:border-accent">
         <input
           type="file"
-          aria-label={FILE_PICK_LABEL}
+          aria-label={t('files.pickLabel')}
           className="sr-only"
           onChange={(event) => {
             const chosen = event.target.files?.[0]
@@ -119,7 +108,7 @@ export function FileSendDialog(props: {
             event.target.value = ''
           }}
         />
-        <span aria-hidden="true">{FILE_PICK_LABEL}</span>
+        <span aria-hidden="true">{t('files.pickLabel')}</span>
       </label>
 
       {file !== null && (
@@ -128,7 +117,7 @@ export function FileSendDialog(props: {
           <span className="text-xs text-muted">{formatFileSize(file.size)}</span>
           {' · '}
           <span className="text-xs text-muted">
-            {file.type !== '' ? file.type : FILE_UNKNOWN_MIME_TEXT}
+            {file.type !== '' ? file.type : t('files.unknownMime')}
           </span>
         </p>
       )}
@@ -138,10 +127,10 @@ export function FileSendDialog(props: {
       {dmMode ? (
         <p className="mt-2 text-sm">{fileRecipientDmText(props.dmPeer?.nickname ?? '')}</p>
       ) : noPeers ? (
-        <p className="mt-2 text-xs text-accent">{FILE_NO_PEERS_TEXT}</p>
+        <p className="mt-2 text-xs text-accent">{t('files.noPeers')}</p>
       ) : (
         <select
-          aria-label={FILE_RECIPIENT_LABEL}
+          aria-label={t('files.recipientLabel')}
           value={peerId ?? ''}
           onChange={(event) => setPeerId(event.target.value)}
           className="mt-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-sm focus:border-accent"
@@ -166,7 +155,7 @@ export function FileSendDialog(props: {
           onClick={resetAndClose}
           className="rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent"
         >
-          {FILE_CANCEL_BUTTON}
+          {t('common.cancel')}
         </button>
         <button
           type="button"
@@ -175,7 +164,7 @@ export function FileSendDialog(props: {
           onClick={() => void handleSend()}
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-text hover:opacity-90 disabled:opacity-40"
         >
-          {FILE_SEND_BUTTON}
+          {t('files.sendButton')}
         </button>
       </div>
     </Modal>

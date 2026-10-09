@@ -116,6 +116,22 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
     expect(normalizeSettings({ theme: 'light' }, FALLBACK).theme).toBe('light')
   })
 
+  it('accepts only the language enum and falls back to auto (issue #119)', () => {
+    // Absent or hostile → the documented default: 'auto' (follow the
+    // browser language). Same enum pass as `theme`.
+    expect(DEFAULT_SETTINGS.language).toBe('auto')
+    expect(normalizeSettings({}, FALLBACK).language).toBe('auto')
+    // The three valid values survive verbatim.
+    expect(normalizeSettings({ language: 'en' }, FALLBACK).language).toBe('en')
+    expect(normalizeSettings({ language: 'es' }, FALLBACK).language).toBe('es')
+    expect(normalizeSettings({ language: 'auto' }, FALLBACK).language).toBe('auto')
+    // Anything else — unknown string, wrong type — falls back.
+    expect(normalizeSettings({ language: 'fr' }, FALLBACK).language).toBe('auto')
+    expect(normalizeSettings({ language: 42 }, FALLBACK).language).toBe('auto')
+    expect(normalizeSettings({ language: null }, FALLBACK).language).toBe('auto')
+    expect(normalizeSettings({ language: true }, FALLBACK).language).toBe('auto')
+  })
+
   it('keeps only well-formed wss:// trackers', () => {
     expect(
       normalizeSettings(
@@ -224,6 +240,7 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
       mutedFingerprints: [FP_CANONICAL],
       shareHistory: true,
       globalDm: true,
+      language: 'es',
     }
     expect(normalizeSettings(valid, FALLBACK)).toEqual(valid)
   })
@@ -416,5 +433,18 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
 
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ globalDm: 'on' }))
     expect((await rehydrate()).settings.globalDm).toBe(false)
+  })
+
+  it('loads a persisted language and falls back to auto when it is junk (issue #119)', async () => {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ language: 'es' }))
+    expect((await rehydrate()).settings.language).toBe('es')
+
+    // A record written before the field existed (or by hand) follows the
+    // browser after an upgrade — nothing is pinned silently.
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ theme: 'dark' }))
+    expect((await rehydrate()).settings.language).toBe('auto')
+
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ language: 'fr' }))
+    expect((await rehydrate()).settings.language).toBe('auto')
   })
 })

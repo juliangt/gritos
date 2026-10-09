@@ -1,10 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import {
-  EMPTY_ROOM_PASSWORD_TEXT,
-  ENCRYPTED_ROOM_HINT,
-  INVALID_ROOM_NAME_TEXT,
-} from '../../lib/rooms'
 import { normalizeRoomName } from '../../lib/p2p/roomManager'
+import { useT } from '../../i18n/index'
 import { useRoomManager } from '../../hooks/useRoomManager'
 
 /**
@@ -13,8 +9,8 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * room password hides behind the 'encrypted room' toggle with the one-line
  * explanation; when the toggle is on a non-empty password is required —
  * the room key and the §9.4 roomId both derive from it. Room-cap rejections
- * surface the exact manager message "Active room limit reached (N)":
- * the popover's own submit sets it as the local error, and `managerError`
+ * surface the exact manager message ('Active room limit reached (N)' under
+ * the en locale — the errors.* templates): the popover's own submit sets it as the local error, and `managerError`
  * carries one raised outside (issue #87: a suggested-room join rejected by
  * the sidebar reuses this open popover instead of a hidden paragraph).
  * A wrong password is NOT a join error: the room simply never finds peers,
@@ -37,6 +33,7 @@ export function JoinRoomPopover(props: {
    */
   managerError?: string | null
 }) {
+  const t = useT()
   const [name, setName] = useState(props.initialName ?? '')
   const [encrypted, setEncrypted] = useState(false)
   const [password, setPassword] = useState('')
@@ -64,11 +61,11 @@ export function JoinRoomPopover(props: {
     event.preventDefault()
     if (busy) return
     if (normalized === null) {
-      setError(INVALID_ROOM_NAME_TEXT)
+      setError(t('settings.invalidRoomName'))
       return
     }
     if (encrypted && password === '') {
-      setError(EMPTY_ROOM_PASSWORD_TEXT)
+      setError(t('settings.emptyRoomPassword'))
       return
     }
     setBusy(true)
@@ -86,14 +83,14 @@ export function JoinRoomPopover(props: {
 
   return (
     <form
-      aria-label="Join by name"
+      aria-label={t('sidebar.joinByNameLabel')}
       onSubmit={(event) => void submit(event)}
       className="flex flex-col gap-2 rounded-md border border-border bg-surface p-2"
     >
       <input
-        aria-label="Room name"
+        aria-label={t('sidebar.roomNameAria')}
         autoFocus
-        placeholder="room-name"
+        placeholder={t('sidebar.roomNamePlaceholder')}
         spellCheck={false}
         value={name}
         onChange={(event) => {
@@ -104,13 +101,14 @@ export function JoinRoomPopover(props: {
       />
       {name.trim() !== '' && (
         <p className="text-xs text-muted">
-          You will join <span className="font-mono text-text">#{normalized ?? '—'}</span>
+          {t('sidebar.joinPreview')}{' '}
+          <span className="font-mono text-text">#{normalized ?? '—'}</span>
         </p>
       )}
       <label className="flex items-center gap-1.5 text-xs text-muted">
         <input
           type="checkbox"
-          aria-label="encrypted room"
+          aria-label={t('common.encryptedRoomAria')}
           checked={encrypted}
           onChange={(event) => {
             setEncrypted(event.target.checked)
@@ -118,14 +116,14 @@ export function JoinRoomPopover(props: {
           }}
           className="h-3.5 w-3.5 accent-accent"
         />
-        <span>🔒 encrypted room</span>
+        <span>{t('sidebar.encryptedRoomText')}</span>
       </label>
       {encrypted && (
         <>
           <input
-            aria-label="Room password"
+            aria-label={t('sidebar.roomPasswordAria')}
             type="password"
-            placeholder="Room password"
+            placeholder={t('sidebar.roomPasswordPlaceholder')}
             spellCheck={false}
             value={password}
             onChange={(event) => {
@@ -134,7 +132,7 @@ export function JoinRoomPopover(props: {
             }}
             className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm focus:border-accent"
           />
-          <p className="text-xs text-muted">{ENCRYPTED_ROOM_HINT}</p>
+          <p className="text-xs text-muted">{t('settings.encryptedRoomHint')}</p>
         </>
       )}
       {(error !== null || managerError !== null) && (
@@ -148,7 +146,7 @@ export function JoinRoomPopover(props: {
           disabled={busy}
           className="rounded bg-accent px-3 py-1.5 text-xs font-semibold text-accent-text disabled:opacity-50"
         >
-          Join
+          {t('common.join')}
         </button>
         {props.onDismiss !== undefined && (
           <button
@@ -156,7 +154,7 @@ export function JoinRoomPopover(props: {
             onClick={props.onDismiss}
             className="rounded border border-border px-3 py-1.5 text-xs"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         )}
       </div>

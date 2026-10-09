@@ -1,27 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Modal } from '../common/Modal'
 import { ManualBlobError, ManualPeerError, type ManualPeerState } from '../../lib/p2p/manualPeer'
+import { useT, t } from '../../i18n/index'
 import {
-  MANUAL_BLOB_ERROR_TEXT,
-  MANUAL_DM_CANCEL_BUTTON,
-  MANUAL_DM_CONNECT_BUTTON,
-  MANUAL_DM_COPIED_FEEDBACK,
-  MANUAL_DM_COPY_BUTTON,
-  MANUAL_DM_DROPPED_TEXT,
-  MANUAL_DM_GENERATE_ANSWER_BUTTON,
-  MANUAL_DM_INTRO_TEXT,
-  MANUAL_DM_INVITE_BLOB_LABEL,
-  MANUAL_DM_NETWORK_WARNING,
-  MANUAL_DM_PASTE_ANSWER_LABEL,
-  MANUAL_DM_PASTE_INVITE_LABEL,
-  MANUAL_DM_PROGRESS_CONNECTED,
-  MANUAL_DM_PROGRESS_ESTABLISHING,
-  MANUAL_DM_PROGRESS_GENERATING,
-  MANUAL_DM_RETRY_BUTTON,
-  MANUAL_DM_ROLE_ANSWER_BUTTON,
-  MANUAL_DM_ROLE_INVITE_BUTTON,
-  MANUAL_DM_WIZARD_LABEL,
-  MANUAL_PEER_ERROR_TEXT,
+  manualBlobErrorText,
+  manualPeerErrorText,
 } from '../settings/messages'
 import { useRoomManager } from '../../hooks/useRoomManager'
 
@@ -59,14 +42,16 @@ type Screen =
   | 'connected' // brief confirmation, then the wizard closes itself
   | 'failed' // guard fired or link dropped: visible error + retry
 
-/** Maps an engine/blob rejection to its exact English inline message. */
+/** Maps an engine/blob rejection to its inline message (locale-live: the
+ * lookup functions resolve through `t()` at call time). */
 function errorTextFor(error: unknown): string {
-  if (error instanceof ManualBlobError) return MANUAL_BLOB_ERROR_TEXT[error.reason]
-  if (error instanceof ManualPeerError) return MANUAL_PEER_ERROR_TEXT[error.code] ?? error.message
-  return error instanceof Error && error.message !== '' ? error.message : 'Unknown error'
+  if (error instanceof ManualBlobError) return manualBlobErrorText(error.reason)
+  if (error instanceof ManualPeerError) return manualPeerErrorText(error.code) ?? error.message
+  return error instanceof Error && error.message !== '' ? error.message : t('errors.unknown')
 }
 
 export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
+  const t = useT()
   const { open, onClose } = props
   const {
     startManualDmInvite,
@@ -137,10 +122,10 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
         setErrorText(errorTextFor(error))
       } else if (state === 'disconnected') {
         setScreen('failed')
-        setErrorText(MANUAL_DM_DROPPED_TEXT)
+        setErrorText(t('dm.peerDisconnected'))
       }
     },
-    [onClose, resetFlow],
+    [onClose, resetFlow, t],
   )
 
   /** Cancel/Esc/backdrop: dispose the pending engine, close, no traces. */
@@ -240,24 +225,24 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
   }
 
   return (
-    <Modal open={props.open} onClose={handleCancel} label={MANUAL_DM_WIZARD_LABEL}>
+    <Modal open={props.open} onClose={handleCancel} label={t('wizard.label')}>
       <div className="flex flex-col gap-3">
         {screen === 'pick' && (
           <>
-            <p className="text-xs text-muted">{MANUAL_DM_INTRO_TEXT}</p>
+            <p className="text-xs text-muted">{t('wizard.intro')}</p>
             <button
               type="button"
               onClick={handleCreateInvite}
               className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
             >
-              {MANUAL_DM_ROLE_INVITE_BUTTON}
+              {t('wizard.roleInviteButton')}
             </button>
             <button
               type="button"
               onClick={handleStartAnswer}
               className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
             >
-              {MANUAL_DM_ROLE_ANSWER_BUTTON}
+              {t('wizard.roleAnswerButton')}
             </button>
           </>
         )}
@@ -267,10 +252,10 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
             {blob !== '' ? (
               <>
                 <p className="text-xs text-accent" role="note">
-                  {MANUAL_DM_NETWORK_WARNING}
+                  {t('wizard.networkWarning')}
                 </p>
                 <textarea
-                  aria-label={MANUAL_DM_INVITE_BLOB_LABEL}
+                  aria-label={t('wizard.inviteBlobLabel')}
                   readOnly
                   value={blob}
                   rows={6}
@@ -283,18 +268,18 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
                     onClick={handleCopy}
                     className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:border-accent"
                   >
-                    {MANUAL_DM_COPY_BUTTON}
+                    {t('common.copy')}
                   </button>
                   {copied && (
                     <span aria-live="polite" className="text-xs text-muted">
-                      {MANUAL_DM_COPIED_FEEDBACK}
+                      {t('common.copied')}
                     </span>
                   )}
                 </div>
               </>
             ) : (
               <p role="status" className="text-xs text-muted">
-                {MANUAL_DM_PROGRESS_GENERATING}
+                {t('wizard.progressGenerating')}
               </p>
             )}
           </>
@@ -303,11 +288,11 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
         {screen === 'inviteReady' && (
           <div className="flex flex-col gap-2">
             <textarea
-              aria-label={MANUAL_DM_PASTE_ANSWER_LABEL}
+              aria-label={t('wizard.pasteAnswerLabel')}
               value={pasted}
               onChange={(event) => setPasted(event.target.value)}
               rows={4}
-              placeholder={MANUAL_DM_PASTE_ANSWER_LABEL}
+              placeholder={t('wizard.pasteAnswerLabel')}
               className="w-full resize-none break-all rounded-md border border-border bg-bg p-2 font-mono text-[10px] leading-snug focus:border-accent"
             />
             <button
@@ -316,31 +301,31 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
               disabled={pasted.trim() === ''}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-text disabled:opacity-40"
             >
-              {MANUAL_DM_CONNECT_BUTTON}
+              {t('wizard.connectButton')}
             </button>
           </div>
         )}
 
         {screen === 'connecting' && (
           <p role="status" className="text-xs text-muted">
-            {MANUAL_DM_PROGRESS_ESTABLISHING}
+            {t('wizard.progressEstablishing')}
           </p>
         )}
 
         {screen === 'answerReady' && (
           <p role="status" className="text-xs text-muted">
-            {MANUAL_DM_PROGRESS_ESTABLISHING}
+            {t('wizard.progressEstablishing')}
           </p>
         )}
 
         {screen === 'answerPaste' && (
           <div className="flex flex-col gap-2">
             <textarea
-              aria-label={MANUAL_DM_PASTE_INVITE_LABEL}
+              aria-label={t('wizard.pasteInviteLabel')}
               value={pasted}
               onChange={(event) => setPasted(event.target.value)}
               rows={6}
-              placeholder={MANUAL_DM_PASTE_INVITE_LABEL}
+              placeholder={t('wizard.pasteInviteLabel')}
               className="w-full resize-none break-all rounded-md border border-border bg-bg p-2 font-mono text-[10px] leading-snug focus:border-accent"
             />
             <button
@@ -349,28 +334,28 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
               disabled={pasted.trim() === ''}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-text disabled:opacity-40"
             >
-              {MANUAL_DM_GENERATE_ANSWER_BUTTON}
+              {t('wizard.generateAnswerButton')}
             </button>
           </div>
         )}
 
         {screen === 'connected' && (
           <p role="status" className="text-sm font-semibold">
-            {MANUAL_DM_PROGRESS_CONNECTED}
+            {t('wizard.progressConnected')}
           </p>
         )}
 
         {screen === 'failed' && (
           <>
             <p role="alert" className="text-xs text-accent">
-              {errorText ?? MANUAL_PEER_ERROR_TEXT['illegal-transition']}
+              {errorText ?? manualPeerErrorText('illegal-transition')}
             </p>
             <button
               type="button"
               onClick={handleRetry}
               className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
             >
-              {MANUAL_DM_RETRY_BUTTON}
+              {t('wizard.retryButton')}
             </button>
           </>
         )}
@@ -386,7 +371,7 @@ export function ManualDmWizard(props: { open: boolean; onClose: () => void }) {
           onClick={handleCancel}
           className="rounded-md border border-border px-2 py-1.5 text-sm font-medium hover:border-accent"
         >
-          {MANUAL_DM_CANCEL_BUTTON}
+          {t('common.cancel')}
         </button>
       </div>
     </Modal>

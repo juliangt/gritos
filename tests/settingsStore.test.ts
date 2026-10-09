@@ -38,6 +38,9 @@ describe('settings store defaults (spec §8.1)', () => {
       // Issue #105 (spec §12.5) — the global DM signaling channel is
       // strictly opt-in: the default is off, the swarm never joins silently.
       globalDm: false,
+      // Issue #119 — 'auto' follows the browser language (Spanish for es*,
+      // English otherwise); 'en'/'es' pin the locale.
+      language: 'auto',
     })
   })
 

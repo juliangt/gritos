@@ -6,13 +6,7 @@ import { disambiguatedNickname } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { ConfirmDialog } from '../common/ConfirmDialog'
-import {
-  MUTE_DM_DIALOG_BODY,
-  MUTE_DM_DIALOG_CONFIRM_LABEL,
-  MUTE_DM_DIALOG_TITLE,
-  MUTE_PEER_ACTION,
-  UNMUTE_PEER_ACTION,
-} from '../settings/messages'
+import { tPlural, useT } from '../../i18n/index'
 
 /**
  * *Pares* section (RF-06): peers of the active view with nickname and
@@ -28,6 +22,7 @@ import {
  * fingerprint (tooltip and copy) plus a visible rotation warning.
  */
 export function PeerList({ room }: { room: Room | null }) {
+  const t = useT()
   const [menuPeerId, setMenuPeerId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   // Issue #95 — peer waiting for the mute confirmation (open DM channel).
@@ -129,12 +124,16 @@ export function PeerList({ room }: { room: Room | null }) {
   }
 
   return (
-    <section ref={sectionRef} aria-label="Peers" className="flex flex-col gap-1">
+    <section
+      ref={sectionRef}
+      aria-label={t('sidebar.peersSectionLabel')}
+      className="flex flex-col gap-1"
+    >
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-        Peers ({room.peers.length})
+        {tPlural('sidebar.peerCount', room.peers.length)}
       </h2>
       {room.peers.length === 0 && (
-        <p className="text-xs text-muted">No peers yet. Share the room name so others can join.</p>
+        <p className="text-xs text-muted">{t('sidebar.emptyPeers')}</p>
       )}
       <ul className="flex flex-col">
         {room.peers.map((peer) => {
@@ -150,12 +149,16 @@ export function PeerList({ room }: { room: Room | null }) {
                 className="flex items-center gap-1.5 truncate rounded px-1.5 py-1 text-left hover:bg-surface"
                 title={fingerprint ?? undefined}
               >
-                <span role="img" aria-label="latency">
+                <span role="img" aria-label={t('sidebar.latencyAria')}>
                   {latencyDot(peer.latencyMs, peer.degraded)}
                 </span>
                 <span className="truncate">{displayName}</span>
                 {keyChanged && (
-                  <span role="img" aria-label="fingerprint changed" className="text-accent">
+                  <span
+                    role="img"
+                    aria-label={t('sidebar.fingerprintChangedAria')}
+                    className="text-accent"
+                  >
                     ⚠
                   </span>
                 )}
@@ -163,12 +166,12 @@ export function PeerList({ room }: { room: Room | null }) {
               {menuPeerId === peer.id && (
                 <div
                   role="menu"
-                  aria-label={`Actions for ${displayName}`}
+                  aria-label={t('sidebar.peerActionsLabel', { nickname: displayName })}
                   className="absolute left-2 top-7 z-10 flex flex-col rounded-md border border-border bg-surface p-1 text-xs shadow-lg"
                 >
                   {keyChanged && (
                     <p role="alert" className="px-2 py-1 text-accent">
-                      ⚠ The fingerprint changed since your last verification
+                      {t('dm.keyChangedWarning')}
                     </p>
                   )}
                   <button
@@ -177,7 +180,7 @@ export function PeerList({ room }: { room: Room | null }) {
                     onClick={() => startDm(peer)}
                     className="rounded px-2 py-1 text-left hover:bg-bg"
                   >
-                    Direct message
+                    {t('dm.directMessageAction')}
                   </button>
                   <button
                     type="button"
@@ -186,7 +189,7 @@ export function PeerList({ room }: { room: Room | null }) {
                     onClick={() => copyFingerprint(peer)}
                     className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
                   >
-                    Copy fingerprint
+                    {t('dm.copyFingerprint')}
                   </button>
                   {isPeerMuted(peer) ? (
                     <button
@@ -196,7 +199,7 @@ export function PeerList({ room }: { room: Room | null }) {
                       onClick={() => unmutePeer(peer)}
                       className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
                     >
-                      {UNMUTE_PEER_ACTION}
+                      {t('common.unmute')}
                     </button>
                   ) : (
                     <button
@@ -206,7 +209,7 @@ export function PeerList({ room }: { room: Room | null }) {
                       onClick={() => requestMute(peer)}
                       className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
                     >
-                      {MUTE_PEER_ACTION}
+                      {t('common.mute')}
                     </button>
                   )}
                 </div>
@@ -215,15 +218,15 @@ export function PeerList({ room }: { room: Room | null }) {
           )
         })}
       </ul>
-      {copied && <p className="text-xs text-muted">Fingerprint copied.</p>}
+      {copied && <p className="text-xs text-muted">{t('dm.fingerprintCopied')}</p>}
 
       {/* Issue #95 — muting a peer with an open DM channel discloses that its
           future DMs will be ignored too (phase 2 receive-path enforcement). */}
       <ConfirmDialog
         open={confirmMutePeer !== null}
-        title={MUTE_DM_DIALOG_TITLE}
-        body={MUTE_DM_DIALOG_BODY}
-        confirmLabel={MUTE_DM_DIALOG_CONFIRM_LABEL}
+        title={t('settings.muteDmDialogTitle')}
+        body={t('settings.muteDmDialogBody')}
+        confirmLabel={t('common.mute')}
         danger
         onConfirm={() => {
           if (confirmMutePeer !== null) applyMute(confirmMutePeer)

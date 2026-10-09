@@ -75,7 +75,7 @@ import {
 } from '../crypto/dm'
 import { mentionsNickname } from '../markdown/parse'
 import { decryptRoomMessage, deriveRoomKey, encryptRoomMessage } from '../crypto/roomKey'
-import { ENCRYPTED_MESSAGE_PLACEHOLDER } from '../rooms'
+import { t } from '../../i18n/index'
 import { dropRecentRoom, pushRecentRoom, removeRecentRoom, saveRecentRooms } from '../recentRooms'
 import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '../tofu'
 import { joinSystemLine, leaveSystemLine, muteSystemLine, unmuteSystemLine } from '../feed'
@@ -314,12 +314,17 @@ export type RelaySockets = Record<string, { readonly readyState: number }>
 /** Returns Trystero's current url → relay socket record (`getRelaySockets`). */
 export type RelaySocketsProvider = () => RelaySockets
 
-/** RF-02 — exceeding settings.maxActiveRooms rejects with this typed error. */
+/**
+ * RF-02 — exceeding settings.maxActiveRooms rejects with this typed error.
+ * Issue #119 — the message is the single-sourced `errors.roomLimitReached`
+ * template, resolved through `t` at throw time (these messages surface
+ * verbatim in the join popover, the recovery form and /room lines).
+ */
 export class RoomLimitError extends Error {
   readonly maxRooms: number
 
   constructor(maxRooms: number) {
-    super(`Active room limit reached (${maxRooms})`)
+    super(t('errors.roomLimitReached', { count: maxRooms }))
     this.name = 'RoomLimitError'
     this.maxRooms = maxRooms
   }
@@ -328,7 +333,7 @@ export class RoomLimitError extends Error {
 /** RF-02 — invalid room names reject before any network call. */
 export class RoomNameError extends Error {
   constructor(rawName: string) {
-    super(`Invalid room name: "${rawName}"`)
+    super(t('errors.roomNameInvalid', { name: rawName }))
     this.name = 'RoomNameError'
   }
 }
@@ -336,7 +341,7 @@ export class RoomNameError extends Error {
 /** RF-01 — invalid nicknames reject before any state/presence change. */
 export class NicknameError extends Error {
   constructor(rawNickname: string) {
-    super(`Invalid nickname: "${rawNickname}"`)
+    super(t('errors.invalidNickname', { nickname: rawNickname }))
     this.name = 'NicknameError'
   }
 }
@@ -1089,7 +1094,7 @@ export function requestHistory(roomId: string, n: number = MAX_HISTORY_REQUEST):
  * the SAME shape the live path appends (author peerId, author nick, author
  * ts preserved for display), flagged `recovered: true`. `encrypted` mirrors
  * the live convention: the stored row is plaintext when it could be opened,
- * the ENCRYPTED_MESSAGE_PLACEHOLDER with `encrypted: true` when it could
+ * the `feed.encryptedPlaceholder` text with `encrypted: true` when it could
  * not (the placeholder is never re-gossiped — shareableFeedEnvelopes drops
  * encrypted rows). `expiresAt` is computed by the caller on the RECEIVER
  * clock (issue #96 parity): recovery must not resurrect a zombie TTL
@@ -1170,7 +1175,7 @@ async function acceptRecoveredEnvelopes(
         if (text.length > MAX_PLAINTEXT_LENGTH) continue
         appendRecoveredRow(connection, envelope, text, false, expiresAt)
       } catch {
-        appendRecoveredRow(connection, envelope, ENCRYPTED_MESSAGE_PLACEHOLDER, true, expiresAt)
+        appendRecoveredRow(connection, envelope, t('feed.encryptedPlaceholder'), true, expiresAt)
       }
     } else {
       appendRecoveredRow(connection, envelope, envelope.body, false, expiresAt)
@@ -2727,7 +2732,7 @@ async function decryptChatEnvelope(
       appendRoomChat(connection, envelope, senderId, text, false)
     }
   } catch {
-    appendRoomChat(connection, envelope, senderId, ENCRYPTED_MESSAGE_PLACEHOLDER, true)
+    appendRoomChat(connection, envelope, senderId, t('feed.encryptedPlaceholder'), true)
   }
   queueReceipt(connection, senderId, envelope.id)
 }

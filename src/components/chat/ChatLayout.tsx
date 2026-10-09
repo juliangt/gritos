@@ -22,14 +22,10 @@ import { useLatency } from '../../hooks/useLatency'
 import { useExpirySweep } from '../../hooks/useExpirySweep'
 import { useFileTransfers } from '../../hooks/useFileTransfers'
 import { useNotifications } from '../../hooks/useNotifications'
-import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
+import { useT } from '../../i18n/index'
 import { clearRoomHash, parseContactHash, parseRoomHash } from '../../lib/shareLinks'
 import { joinRoom, requestHistory } from '../../lib/p2p/roomManager'
-import {
-  CLEAR_FEED_DIALOG_BODY,
-  CLEAR_FEED_DIALOG_CONFIRM,
-  CLEAR_FEED_DIALOG_TITLE,
-} from '../settings/messages'
+import { dmFeedLabel } from '../../lib/feed'
 
 /** Spec §10.1 — at this width the sidebar becomes an overlay drawer. */
 const MOBILE_QUERY = '(max-width: 768px)'
@@ -49,6 +45,9 @@ function RoomLatencyLoop(props: { roomId: string }) {
  * never touches the room connections (RF-02).
  */
 export function ChatLayout() {
+  // Issue #119 — locale subscription: every rendered string resolves through
+  // `t` (live snapshot), so a language switch re-renders the layout.
+  const t = useT()
   const isMobile = useMediaQuery(MOBILE_QUERY)
   // Issue #103 phase 4 — the §12.4 transfer records drive the consent/
   // progress cards; the engine's module map stays the only owner (memory-
@@ -271,7 +270,7 @@ export function ChatLayout() {
           className="fixed inset-0 z-30 flex"
           role="dialog"
           aria-modal="true"
-          aria-label="Sidebar"
+          aria-label={t('chat.sidebarDrawerLabel')}
         >
           <div
             className="absolute inset-0 bg-black/50"
@@ -312,10 +311,10 @@ export function ChatLayout() {
           (linkedRoomName ?? slashRecoveryRoom) === activeRoom.name &&
           (activeRoom.status === 'error' || activeRoom.peerlessHint === true) && (
             <section
-              aria-label="Join with password"
+              aria-label={t('chat.joinWithPasswordLabel')}
               className="flex flex-col items-center gap-2 border-b border-border bg-surface px-3 py-3"
             >
-              <p className="text-xs text-muted">If the room has a password, join with it:</p>
+              <p className="text-xs text-muted">{t('chat.passwordJoinPrompt')}</p>
               <div className="w-full max-w-xs">
                 <JoinRoomPopover
                   initialName={activeRoom.name}
@@ -357,7 +356,7 @@ export function ChatLayout() {
               expiredCount={activeDm.expiredCount}
               recoveredCount={0}
               ariaLabel={dmFeedLabel(activeDm.peerNick)}
-              emptyStateText={EMPTY_DM_FEED_TEXT}
+              emptyStateText={t('feed.emptyDm')}
             />
             {/* Issue #103 phase 4 — the transfer strip of the DM view: every
                 record with this peer (an incoming room-kind transfer from
@@ -389,9 +388,7 @@ export function ChatLayout() {
           </>
         ) : activeRoom === null ? (
           <main className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-            <p className="text-sm text-muted">
-              No active room. Join one from the sidebar (press Ctrl/Cmd+B to show it).
-            </p>
+            <p className="text-sm text-muted">{t('chat.noActiveRoomHint')}</p>
           </main>
         ) : (
           <>
@@ -402,8 +399,8 @@ export function ChatLayout() {
               fifoTrimmed={activeRoom.fifoTrimmed}
               expiredCount={activeRoom.expiredCount}
               recoveredCount={activeRoom.recoveredCount}
-              ariaLabel={`Messages in #${activeRoom.name}`}
-              emptyStateText={EMPTY_ROOM_FEED_TEXT}
+              ariaLabel={t('chat.roomFeedLabel', { name: activeRoom.name })}
+              emptyStateText={t('feed.emptyRoom')}
               historyAsk={historyAsk}
             />
             {/* Issue #103 phase 4 — the transfer strip of the room view: the
@@ -448,9 +445,9 @@ export function ChatLayout() {
           feed; cancel and Esc leave it untouched. */}
       <ConfirmDialog
         open={clearFeedOpen}
-        title={CLEAR_FEED_DIALOG_TITLE}
-        body={CLEAR_FEED_DIALOG_BODY}
-        confirmLabel={CLEAR_FEED_DIALOG_CONFIRM}
+        title={t('slash.clearDialogTitle')}
+        body={t('slash.clearDialogBody')}
+        confirmLabel={t('slash.clearDialogConfirm')}
         onConfirm={() => {
           cancelClearFeed()
           if (activeView?.kind === 'room') useAppStore.getState().clearRoomFeed(activeView.id)

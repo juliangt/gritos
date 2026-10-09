@@ -4,7 +4,7 @@ Every user-facing capability of gritos, with the guarantees each one ships. The 
 
 **Look & feel:** a compact two-pane chat — a collapsible sidebar with your active rooms, suggested rooms, recent rooms, direct messages and the peers of the current room (nickname + latency dot); the main pane shows the room header with live connection status ("Searching for peers on the torrent network…" → "P2P channel established · N peers"), a flat message feed with per-author stable colors and Markdown rendering, typing indicators, ✓/✓✓ receipts, and an auto-growing composer. Light/dark/system theme, keyboard-first, mobile drawer layout.
 
-The UI language is **English** — hardcoded English-first per issue #112 (a deliberate clean break for v1; an i18n layer is explicitly deferred and may be revisited later).
+The UI language is **English or Spanish** (issue #119, spec §10.10): `auto` follows the browser (`es*` → Spanish), the explicit choice persists in Settings → Appearance and wins over the browser, and switching is instant — every visible string, aria-label and `<html lang>` updates without a reload. The slash verbs stay English in both locales (protocol grammar, §10.7).
 
 ## Rooms
 

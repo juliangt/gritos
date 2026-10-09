@@ -1,16 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { NicknameInput } from './NicknameInput'
-import {
-  generateNickname,
-  isValidNickname,
-  normalizeNickname,
-  NICKNAME_ERROR_TEXT,
-} from '../../lib/nickname'
+import { generateNickname, isValidNickname, normalizeNickname } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { clearRoomHash, parseRoomHash } from '../../lib/shareLinks'
-import { P2P_DISCLOSURE_TEXT } from '../settings/messages'
+import { useT } from '../../i18n/index'
 
 /**
  * First-visit onboarding (RF-01, spec §10.2): centered screen over the
@@ -20,9 +15,11 @@ import { P2P_DISCLOSURE_TEXT } from '../settings/messages'
  * becomes the initial active view. A '#room' deep link (issue #41) is
  * carried through: after the nickname is chosen the linked room is joined
  * and focused, and the hash is consumed. The chat layout takes over as soon
- * as the store holds an identity.
+ * as the store holds an identity. Every rendered string resolves through
+ * `t` (issue #119 — locale-live; the phase-2 legacy shims are gone).
  */
 export function OnboardingScreen() {
+  const t = useT()
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [entering, setEntering] = useState(false)
@@ -49,7 +46,7 @@ export function OnboardingScreen() {
     const normalized = normalizeNickname(value)
     const nickname = normalized === '' ? generateNickname() : normalized
     if (!isValidNickname(nickname)) {
-      setError(NICKNAME_ERROR_TEXT)
+      setError(t('errors.nicknameInvalid'))
       return
     }
 
@@ -73,7 +70,7 @@ export function OnboardingScreen() {
       if (useAppStore.getState().identity === null) setEntering(false)
     } catch {
       // Web Crypto unavailable (non-secure context): stay and explain.
-      setError('Could not create the local identity (insecure context).')
+      setError(t('onboarding.insecureContextError'))
       setEntering(false)
     }
   }
@@ -82,19 +79,16 @@ export function OnboardingScreen() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6 py-12">
       <div className="flex flex-col items-center gap-3">
         <h1 className="text-5xl font-bold tracking-tight">gritos</h1>
-        <p className="max-w-md text-center text-sm text-muted">
-          No server, no accounts: your messages travel directly between browsers and disappear on
-          reload.
-        </p>
+        <p className="max-w-md text-center text-sm text-muted">{t('onboarding.tagline')}</p>
       </div>
 
       <form
-        aria-label="enter"
+        aria-label={t('onboarding.formAria')}
         onSubmit={(event) => void enter(event)}
         className="flex w-full max-w-sm flex-col gap-4"
       >
         <label className="flex flex-col gap-1 text-sm font-medium">
-          Your nickname
+          {t('common.yourNickname')}
           <NicknameInput
             value={value}
             onValueChange={(next) => {
@@ -113,28 +107,27 @@ export function OnboardingScreen() {
             disabled={entering}
             className="rounded-md border border-border px-3 py-2 text-sm hover:border-accent disabled:opacity-50"
           >
-            surprise me
+            {t('onboarding.surpriseButton')}
           </button>
           <button
             type="submit"
             disabled={entering}
             className="ml-auto rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-text disabled:opacity-50"
           >
-            Enter →
+            {t('onboarding.enterButton')}
           </button>
         </div>
         {autoJoinLobby && (
-          <p className="text-center text-xs text-muted">
-            You will join #lobby automatically; from the sidebar you can join other rooms.
-          </p>
+          <p className="text-center text-xs text-muted">{t('onboarding.lobbyHint')}</p>
         )}
         {linkedRoom !== null && (
           <p className="text-center text-xs text-muted">
-            You will join the room <span className="font-mono text-text">#{linkedRoom}</span> from
-            the shared link.
+            {t('onboarding.linkedRoomPrefix')}{' '}
+            <span className="font-mono text-text">#{linkedRoom}</span>{' '}
+            {t('onboarding.linkedRoomSuffix')}
           </p>
         )}
-        <p className="text-center text-xs text-muted">{P2P_DISCLOSURE_TEXT}</p>
+        <p className="text-center text-xs text-muted">{t('settings.p2pDisclosure')}</p>
       </form>
     </main>
   )

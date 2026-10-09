@@ -9,19 +9,8 @@ import { getMutedNickname, useSettingsStore } from '../../stores/useSettingsStor
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { Toggle } from './Toggle'
-import {
-  EMPTY_MUTED_PEERS_TEXT,
-  GLOBAL_DM_TOGGLE_HINT,
-  GLOBAL_DM_TOGGLE_LABEL,
-  MUTED_PEERS_HEADING,
-  MUTED_PEERS_HINT,
-  P2P_IP_EXPOSURE_NOTE,
-  SHARE_HISTORY_HINT,
-  SHARE_HISTORY_LABEL,
-  TURN_CREDENTIAL_STORAGE_HINT,
-  UNMUTE_PEER_ACTION,
-  unmutePeerAction,
-} from './messages'
+import { useT, type TranslationKey } from '../../i18n/index'
+import { unmutePeerAction } from './messages'
 
 /**
  * Privacy tab (RF-07/RF-08): the notifications toggle with its
@@ -31,47 +20,33 @@ import {
  * unmute (issue #95), the P2P exposure disclosure (issue #35), an at-rest
  * storage note for the wrapped identity key (issue #24) and for the TURN
  * credentials (issue #30), identity regeneration behind a confirming
- * dialog, and the panic button behind a double confirmation.
+ * dialog, and the panic button behind a double confirmation. Every rendered
+ * string resolves through `t` (issue #119 — locale-live).
  */
 
-const PERMISSION_GRANTED_TEXT = 'Permission granted.'
-const PERMISSION_DEFAULT_TEXT = 'Permission not requested.'
-const PERMISSION_DENIED_TEXT = 'Permission denied. Enable it from the browser settings.'
-const PERMISSION_UNSUPPORTED_TEXT = 'Your browser does not support notifications.'
-
-const REGENERATE_DIALOG_TITLE = 'Regenerate identity'
-const REGENERATE_DIALOG_BODY =
-  'A new key pair will be generated: your fingerprint will change and the DM channels with your peers will stop matching. Continue?'
-
-const PANIC_BUTTON_LABEL = 'Wipe everything and leave'
-const PANIC_DIALOG_TITLE = PANIC_BUTTON_LABEL
-const PANIC_DIALOG_BODY = 'Nickname, keys, settings and every local trace will be wiped. Continue?'
-const PANIC_FINAL_DIALOG_BODY =
-  'This action is definitive: every connection will be closed and the app will reload to start from scratch.'
-
-/**
- * Issue #95 — canonical fingerprint shortened to its first two 8×4 display
- * groups: enough to tell entries apart without printing the 39-char form.
- */
+/** Issue #95 — canonical fingerprint shortened to its first two 8×4 display
+ * groups: enough to tell entries apart without printing the 39-char form. */
 function shortFingerprint(canonical: string): string {
   const grouped = canonical.replace(/(.{4})(?=.)/g, '$1 ')
   return `${grouped.split(' ').slice(0, 2).join(' ')}…`
 }
 
-function permissionText(state: NotificationPermissionState): string {
+/** NotificationPermissionState → dictionary key (resolved through `t`). */
+function permissionKey(state: NotificationPermissionState): TranslationKey {
   switch (state) {
     case 'granted':
-      return PERMISSION_GRANTED_TEXT
+      return 'settings.permissionGranted'
     case 'denied':
-      return PERMISSION_DENIED_TEXT
+      return 'settings.permissionDenied'
     case 'unsupported':
-      return PERMISSION_UNSUPPORTED_TEXT
+      return 'settings.permissionUnsupported'
     default:
-      return PERMISSION_DEFAULT_TEXT
+      return 'settings.permissionDefault'
   }
 }
 
 export function PrivacyTab() {
+  const t = useT()
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   // Never bootstraps an identity: regeneration acts on the session only.
@@ -103,10 +78,10 @@ export function PrivacyTab() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Toggle
-          label="Desktop notifications"
+          label={t('settings.notificationsLabel')}
           checked={settings.notifications}
           disabled={permission !== 'granted'}
-          hint={permissionText(permission)}
+          hint={t(permissionKey(permission))}
           onChange={(notifications) => setSettings({ notifications })}
         />
         <button
@@ -115,12 +90,12 @@ export function PrivacyTab() {
           disabled={permission !== 'default'}
           className="self-start rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
         >
-          Allow notifications
+          {t('settings.allowNotifications')}
         </button>
       </div>
 
       <Toggle
-        label="Remember recent rooms"
+        label={t('settings.rememberRoomsLabel')}
         checked={settings.rememberRooms}
         onChange={(rememberRooms) => setSettings({ rememberRooms })}
       />
@@ -129,9 +104,9 @@ export function PrivacyTab() {
           `gritos:settings`; only an explicit peer request can ever pull
           history, and only while the consent is on. */}
       <Toggle
-        label={SHARE_HISTORY_LABEL}
+        label={t('settings.shareHistoryLabel')}
         checked={settings.shareHistory}
-        hint={SHARE_HISTORY_HINT}
+        hint={t('settings.shareHistoryHint')}
         onChange={(shareHistory) => setSettings({ shareHistory })}
       />
 
@@ -141,9 +116,9 @@ export function PrivacyTab() {
           of the signal-backed channels), so the UI stays declarative. The
           hint is the honest §9.5 exposure disclosure. */}
       <Toggle
-        label={GLOBAL_DM_TOGGLE_LABEL}
+        label={t('contact.toggleLabel')}
         checked={settings.globalDm}
-        hint={GLOBAL_DM_TOGGLE_HINT}
+        hint={t('contact.toggleHint')}
         onChange={(globalDm) => setSettings({ globalDm })}
       />
 
@@ -151,12 +126,12 @@ export function PrivacyTab() {
           `gritos:settings` with their last-seen nickname when known this
           session (the map rides memory-only); each row unmutes. */}
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <h3 className="text-sm font-semibold">{MUTED_PEERS_HEADING}</h3>
+        <h3 className="text-sm font-semibold">{t('settings.mutedPeersHeading')}</h3>
         {settings.mutedFingerprints.length === 0 ? (
-          <p className="text-xs text-muted">{EMPTY_MUTED_PEERS_TEXT}</p>
+          <p className="text-xs text-muted">{t('settings.emptyMutedPeers')}</p>
         ) : (
           <>
-            <p className="text-xs text-muted">{MUTED_PEERS_HINT}</p>
+            <p className="text-xs text-muted">{t('settings.mutedPeersHint')}</p>
             <ul className="flex flex-col gap-1">
               {settings.mutedFingerprints.map((fingerprint) => {
                 const nickname = getMutedNickname(fingerprint)
@@ -173,7 +148,7 @@ export function PrivacyTab() {
                       onClick={() => unmuteFromUi(fingerprint)}
                       className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:border-accent"
                     >
-                      {UNMUTE_PEER_ACTION}
+                      {t('common.unmute')}
                     </button>
                   </li>
                 )
@@ -185,54 +160,42 @@ export function PrivacyTab() {
 
       {/* Issue #35 — P2P transparency: what room peers (and trackers) see. */}
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">{P2P_IP_EXPOSURE_NOTE}</p>
+        <p className="text-xs text-muted">{t('settings.p2pIpExposureNote')}</p>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">
-          {TURN_CREDENTIAL_STORAGE_HINT} They are configured in the Network tab; turn off «Remember
-          TURN credentials in this browser» there so they only live in the session’s memory.
-        </p>
+        <p className="text-xs text-muted">{t('settings.turnCredentialAtRestNote')}</p>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">
-          Your private key is stored encrypted in this browser: the key that decrypts it lives in
-          IndexedDB and nothing travels over the network. Even so, if something fully compromises
-          this origin (a malicious extension, malware on your computer) it could use that key to
-          impersonate you.
-        </p>
-        <p className="text-xs text-muted">
-          Generate a new ECDH key pair: your fingerprint will change for all your peers.
-        </p>
+        <p className="text-xs text-muted">{t('settings.identityKeyAtRestNote')}</p>
+        <p className="text-xs text-muted">{t('settings.regenerateHint')}</p>
         <button
           type="button"
           onClick={() => setRegenerateDialogOpen(true)}
           disabled={regenerating}
           className="self-start rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
         >
-          Regenerate identity
+          {t('settings.regenerateIdentity')}
         </button>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">
-          Last resort: wipes the nickname, keys, settings and every local trace in this browser.
-        </p>
+        <p className="text-xs text-muted">{t('panic.lastResortNote')}</p>
         <button
           type="button"
           onClick={() => setPanicDialogOpen(true)}
           className="self-start rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-500"
         >
-          {PANIC_BUTTON_LABEL}
+          {t('panic.buttonLabel')}
         </button>
       </div>
 
       <ConfirmDialog
         open={regenerateDialogOpen}
-        title={REGENERATE_DIALOG_TITLE}
-        body={REGENERATE_DIALOG_BODY}
-        confirmLabel="Regenerate"
+        title={t('settings.regenerateIdentity')}
+        body={t('settings.regenerateDialogBody')}
+        confirmLabel={t('settings.regenerateConfirm')}
         danger
         onConfirm={() => void confirmRegenerate()}
         onCancel={() => setRegenerateDialogOpen(false)}
@@ -240,9 +203,9 @@ export function PrivacyTab() {
 
       <ConfirmDialog
         open={panicDialogOpen}
-        title={PANIC_DIALOG_TITLE}
-        body={PANIC_DIALOG_BODY}
-        confirmLabel="Continue"
+        title={t('panic.buttonLabel')}
+        body={t('panic.dialogBody')}
+        confirmLabel={t('common.continue')}
         danger
         onConfirm={() => {
           setPanicDialogOpen(false)
@@ -253,9 +216,9 @@ export function PrivacyTab() {
 
       <ConfirmDialog
         open={panicFinalOpen}
-        title={PANIC_BUTTON_LABEL}
-        body={PANIC_FINAL_DIALOG_BODY}
-        confirmLabel={PANIC_BUTTON_LABEL}
+        title={t('panic.buttonLabel')}
+        body={t('panic.finalDialogBody')}
+        confirmLabel={t('panic.buttonLabel')}
         danger
         onConfirm={() => {
           setPanicFinalOpen(false)

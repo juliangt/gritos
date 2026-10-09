@@ -1,9 +1,13 @@
 import { NICKNAME_MAX_LENGTH } from '../../lib/nickname'
+import { useT } from '../../i18n/index'
 
 /**
  * Onboarding nickname field (RF-01): keeps the raw text (trim/collapse
  * happens at validation), reports the inline validation error and surfaces
- * the 2–24 character limit to assistive tech.
+ * the 2–24 character limit to assistive tech. The placeholder's
+ * 'zorro-bravo' example is DATA (an English-wordlist pair, like anything
+ * `generateNickname` may produce) — only the surrounding 'e.g.' translates
+ * (issue #119).
  */
 export function NicknameInput(props: {
   value: string
@@ -11,15 +15,16 @@ export function NicknameInput(props: {
   error: string | null
   disabled?: boolean
 }) {
+  const t = useT()
   return (
     <div className="flex flex-col gap-1">
       <input
-        aria-label="Your nickname"
+        aria-label={t('common.yourNickname')}
         name="nickname"
         autoComplete="off"
         spellCheck={false}
         maxLength={NICKNAME_MAX_LENGTH + 16}
-        placeholder="e.g. zorro-bravo"
+        placeholder={t('onboarding.nicknamePlaceholder')}
         value={props.value}
         disabled={props.disabled === true}
         aria-invalid={props.error !== null}

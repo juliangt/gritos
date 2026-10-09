@@ -25,7 +25,6 @@ import {
   type FakeRTCPeerConnection,
 } from './fakeManualPeer'
 import {
-  MANUAL_BLOB_ERROR_TEXT,
   MANUAL_DM_BANNER_SHORTCUT,
   MANUAL_DM_COPY_BUTTON,
   MANUAL_DM_COPIED_FEEDBACK,
@@ -40,6 +39,7 @@ import {
   MANUAL_DM_ROLE_ANSWER_BUTTON,
   MANUAL_DM_ROLE_INVITE_BUTTON,
   MANUAL_DM_WIZARD_LABEL,
+  manualBlobErrorText,
 } from '../src/components/settings/messages'
 
 /**
@@ -353,7 +353,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
       target: { value: 'esto no es un blob' },
     })
     fireEvent.click(screen.getByRole('button', { name: MANUAL_DM_GENERATE_ANSWER_BUTTON }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(MANUAL_BLOB_ERROR_TEXT.encoding)
+    expect(await screen.findByRole('alert')).toHaveTextContent(manualBlobErrorText('encoding'))
     // The wizard stays open: the paste can be corrected and retried.
     expect(screen.getByRole('dialog', { name: MANUAL_DM_WIZARD_LABEL })).toBeInTheDocument()
 

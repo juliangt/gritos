@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { t, tPlural, type LanguageSetting } from '../i18n/index'
 import { REACT_EMOJIS, type ReactEmoji } from '../lib/p2p/protocol'
 
 /**
@@ -63,6 +64,16 @@ export interface Settings {
    * rest of the record.
    */
   globalDm: boolean
+  /**
+   * Issue #119 — UI language. 'auto' follows the browser: Spanish when
+   * `navigator.language` starts with "es", English for everything else
+   * (including undefined/empty); 'en'/'es' pin the locale outright. The
+   * raw choice persists here while the RESOLVED locale lives in the i18n
+   * runtime (src/i18n/index, which re-derives it on boot and on change).
+   * Rides inside `gritos:settings` (spec §8.2) and is wiped by the panic
+   * button like the rest of the record. Default: 'auto'.
+   */
+  language: LanguageSetting
 }
 
 export interface Identity {
@@ -453,17 +464,24 @@ export function applyReactionsToMessages(
  * spec §10.3 — exact connection status header texts, including the
  * best-effort transition state (searching with peers already discovered but
  * no DataChannel yet): "Conectando (N pares encontrados)…".
+ *
+ * Issue #119 phase 2 — i18n: the three templates live in `chat.*`; the two
+ * count-based ones are `…One`/`…Other` pairs selected by `tPlural` (English
+ * singular grammar at count 1 — '1 peer'/'1 peer found' — matching the
+ * seeded `common.peerCount` convention). Locale-live: resolves on every
+ * call, so non-React callers (roomStatusText, the debug panel) see the
+ * current locale.
  */
 export function connectionStatusText(status: RoomStatus, peerCount: number): string {
   switch (status) {
     case 'searching':
       return peerCount > 0
-        ? `Connecting (${peerCount} peers found)…`
-        : 'Searching for peers on the torrent network…'
+        ? tPlural('chat.connectingStatus', peerCount)
+        : t('chat.searchingStatus')
     case 'connected':
-      return `P2P channel established · ${peerCount} peers`
+      return tPlural('chat.connectedStatus', peerCount)
     case 'error':
-      return 'No tracker access — check your connection or configure alternative trackers'
+      return t('chat.networkErrorBanner')
   }
 }
 

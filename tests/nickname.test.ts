@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { en } from '../src/i18n/en'
 import {
   disambiguatedNickname,
   generateNickname,
   isValidNickname,
   normalizeNickname,
   NICKNAME_ADJECTIVES,
-  NICKNAME_ERROR_TEXT,
   NICKNAME_MAX_LENGTH,
   NICKNAME_MIN_LENGTH,
   NICKNAME_NOUNS,
@@ -88,7 +88,10 @@ describe('isValidNickname (RF-01: 2–24, letters/numbers/space/hyphen/underscor
   it('keeps the constants consistent with the spec', () => {
     expect(NICKNAME_MIN_LENGTH).toBe(2)
     expect(NICKNAME_MAX_LENGTH).toBe(24)
-    expect(NICKNAME_ERROR_TEXT).toContain('2 to 24')
+    // Issue #119 phase 3 — the exact-text contract lives in `en.ts` now
+    // (the NICKNAME_ERROR_TEXT shim was deleted): pin the same string via
+    // the dictionary key the migrated consumers resolve through `t`.
+    expect(en['errors.nicknameInvalid']).toContain('2 to 24')
   })
 })
 
