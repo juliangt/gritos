@@ -137,7 +137,7 @@ describe('FIFO cap + separator flag (RF-03)', () => {
     const room = useAppStore.getState().rooms['room-1']
     expect(room?.messages).toHaveLength(500)
     expect(room?.fifoTrimmed).toBe(true)
-    expect(FIFO_SEPARATOR_TEXT).toBe('— mensajes anteriores descartados —')
+    expect(FIFO_SEPARATOR_TEXT).toBe('— earlier messages discarded —')
   })
 })
 
@@ -504,8 +504,8 @@ describe('feed presentation helpers', () => {
   })
 
   it('builds the system lines (RF-06)', () => {
-    expect(joinSystemLine('luna-cauta')).toBe('— luna-cauta se ha unido —')
-    expect(leaveSystemLine('luna-cauta')).toBe('— luna-cauta ha salido —')
+    expect(joinSystemLine('luna-cauta')).toBe('— luna-cauta joined —')
+    expect(leaveSystemLine('luna-cauta')).toBe('— luna-cauta left —')
   })
 
   it('builds the typing line (RF-03)', () => {
@@ -521,8 +521,8 @@ describe('feed presentation helpers', () => {
   })
 
   it('builds the expiry separator line (issue #96, FIFO-separator wording)', () => {
-    expect(expiredSeparatorText(1)).toBe('— 1 mensaje expirado —')
-    expect(expiredSeparatorText(3)).toBe('— 3 mensajes expirados —')
+    expect(expiredSeparatorText(1)).toBe('— 1 expired message —')
+    expect(expiredSeparatorText(3)).toBe('— 3 expired messages —')
   })
 })
 
@@ -628,6 +628,6 @@ describe('recovered append + history-ask dismissal (issue #102 phase 3)', () => 
   })
 
   it('builds the recovered separator line (issue #102, exact string)', () => {
-    expect(RECOVERED_SEPARATOR_TEXT).toBe('— mensajes recuperados de pares —')
+    expect(RECOVERED_SEPARATOR_TEXT).toBe('— messages recovered from peers —')
   })
 })

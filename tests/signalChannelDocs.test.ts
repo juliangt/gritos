@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import readme from '../README.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 import spec from '../docs/spec.md?raw'
+import { DM_DISCONNECTED_TEXT } from '../src/lib/feed'
 
 /**
  * Release guard for issue #105 (global DM signaling channel: fingerprint
@@ -94,7 +95,7 @@ describe('global signal channel design note (issue #105)', () => {
 
   it('pins the teardown contract: leaving destroys swarm state and signal-backed DMs', () => {
     expect(spec).toContain('cualquier canal DM respaldado por él')
-    expect(spec).toContain('«El par se ha desconectado»')
+    expect(spec).toContain(`«${DM_DISCONNECTED_TEXT}»`)
   })
 
   it('pins the DmTransport abstraction (one interface, same DmChannel slice)', () => {

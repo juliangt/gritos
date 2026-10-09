@@ -504,7 +504,7 @@ describe('Privacidad mute list (issue #95)', () => {
 
     const messages = useAppStore.getState().rooms[connection.roomId]?.messages ?? []
     expect(
-      messages.some((m) => m.kind === 'system' && m.text === '@luna-cauta ya no está silenciado'),
+      messages.some((m) => m.kind === 'system' && m.text === '@luna-cauta is no longer muted'),
     ).toBe(true)
   })
 })

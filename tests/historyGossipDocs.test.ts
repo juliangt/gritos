@@ -122,7 +122,7 @@ describe('history gossip documentation (issue #102)', () => {
   })
 
   it('labels provenance with the exact separator and cross-references the §9.5 trust note', () => {
-    expect(RECOVERED_SEPARATOR_TEXT).toBe('— mensajes recuperados de pares —')
+    expect(RECOVERED_SEPARATOR_TEXT).toBe('— messages recovered from peers —')
     expect(spec).toContain(`«${RECOVERED_SEPARATOR_TEXT}»`)
     expect(spec).toContain('mismo nivel de confianza que el chat en vivo')
     expect(spec).toContain('(9.5, plano de control sin autenticar)')

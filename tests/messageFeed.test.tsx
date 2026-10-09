@@ -108,7 +108,7 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
     )
     // Same rendering path as the FIFO separator: a muted centered line at
     // the top of the log, above the history.
-    const line = screen.getByText('— 2 mensajes expirados —')
+    const line = screen.getByText('— 2 expired messages —')
     expect(line).toBeInTheDocument()
     expect(line.className).toBe('my-1 text-center text-xs text-muted')
     expect(container.querySelector('[role="log"]')?.firstElementChild).toBe(line)
@@ -125,7 +125,7 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
         ariaLabel="feed"
       />,
     )
-    expect(screen.getByText('— 1 mensaje expirado —')).toBeInTheDocument()
+    expect(screen.getByText('— 1 expired message —')).toBeInTheDocument()
   })
 
   it('renders nothing when no message has expired', () => {
@@ -139,7 +139,7 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
         ariaLabel="feed"
       />,
     )
-    expect(screen.queryByText(/expirado/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/expired/)).not.toBeInTheDocument()
   })
 
   it('coexists with the FIFO separator above the history', () => {
@@ -153,8 +153,8 @@ describe('MessageFeed TTL expiry separator (issue #96)', () => {
         ariaLabel="feed"
       />,
     )
-    expect(screen.getByText('— mensajes anteriores descartados —')).toBeInTheDocument()
-    expect(screen.getByText('— 5 mensajes expirados —')).toBeInTheDocument()
+    expect(screen.getByText('— earlier messages discarded —')).toBeInTheDocument()
+    expect(screen.getByText('— 5 expired messages —')).toBeInTheDocument()
   })
 })
 
@@ -321,7 +321,7 @@ describe('MessageFeed recovered separator + dimming (issue #102)', () => {
         ariaLabel="feed"
       />,
     )
-    const line = screen.getByText('— mensajes recuperados de pares —')
+    const line = screen.getByText('— messages recovered from peers —')
     expect(line).toBeInTheDocument()
     // Same rendering path as the FIFO/expired separators: a muted centered
     // line at the top of the log.
@@ -340,7 +340,7 @@ describe('MessageFeed recovered separator + dimming (issue #102)', () => {
         ariaLabel="feed"
       />,
     )
-    expect(screen.queryByText(/recuperados/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/recovered/)).not.toBeInTheDocument()
   })
 
   it('coexists with the FIFO and expiry separators above the history', () => {
@@ -354,9 +354,9 @@ describe('MessageFeed recovered separator + dimming (issue #102)', () => {
         ariaLabel="feed"
       />,
     )
-    expect(screen.getByText('— mensajes anteriores descartados —')).toBeInTheDocument()
-    expect(screen.getByText('— 2 mensajes expirados —')).toBeInTheDocument()
-    expect(screen.getByText('— mensajes recuperados de pares —')).toBeInTheDocument()
+    expect(screen.getByText('— earlier messages discarded —')).toBeInTheDocument()
+    expect(screen.getByText('— 2 expired messages —')).toBeInTheDocument()
+    expect(screen.getByText('— messages recovered from peers —')).toBeInTheDocument()
   })
 
   it('renders recovered rows slightly dimmed and normal rows untouched', () => {

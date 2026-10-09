@@ -741,7 +741,7 @@ export class ManualPeerEngine {
     }
   }
 
-  /** §12.2 — a drop after connecting lands on «El par se ha desconectado». */
+  /** §12.2 — a drop after connecting lands on «The peer has disconnected». */
   private handleChannelClosed(): void {
     if (this.state === 'connected') {
       this.teardown('disconnected')

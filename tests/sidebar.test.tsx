@@ -386,7 +386,7 @@ describe('PeerList local mute (issue #95)', () => {
     // The mute keys on the canonical fingerprint, never the nickname.
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([CANONICAL_FP])
     // Local-only line on the active room feed (RF-06 style).
-    expect(systemLines()).toContain('@luna-cauta fue silenciado')
+    expect(systemLines()).toContain('@luna-cauta was muted')
   })
 
   it('muting a peer with an open DM channel confirms first; cancel keeps the list (issue #95)', () => {
@@ -402,14 +402,14 @@ describe('PeerList local mute (issue #95)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
-    expect(systemLines()).not.toContain('@luna-cauta fue silenciado')
+    expect(systemLines()).not.toContain('@luna-cauta was muted')
 
     // Confirming the second attempt applies the mute.
     openPeerMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Mute' }))
     fireEvent.click(screen.getByTestId('confirm-dialog-confirm'))
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([CANONICAL_FP])
-    expect(systemLines()).toContain('@luna-cauta fue silenciado')
+    expect(systemLines()).toContain('@luna-cauta was muted')
   })
 
   it('a muted peer offers Unmute and announces the local unmute line (issue #95)', () => {
@@ -421,7 +421,7 @@ describe('PeerList local mute (issue #95)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Unmute' }))
 
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
-    expect(systemLines()).toContain('@luna-cauta ya no está silenciado')
+    expect(systemLines()).toContain('@luna-cauta is no longer muted')
   })
 
   it('Mute stays disabled until the peer announces a fingerprint (issue #95)', () => {

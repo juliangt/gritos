@@ -51,7 +51,7 @@ describe('self-destructing messages documentation (issue #96)', () => {
     expect(spec).toContain('Caducidad por mensaje (issue #96)')
     expect(spec).toContain('expiresAt = receivedAt + ttl·1000')
     expect(spec).toContain('jamás se usa para expirar')
-    expect(spec).toContain('— N mensajes expirados —')
+    expect(spec).toContain('— N expired messages —')
     // No resurrection: bounded expired-ids guard on the receive paths.
     expect(spec).toContain('no resurrección')
     // Receipts, unread and notifications are never retro-touched.

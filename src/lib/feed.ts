@@ -5,7 +5,7 @@
  */
 
 /** RF-03 — separator shown when the 500-message cap has trimmed history. */
-export const FIFO_SEPARATOR_TEXT = '— mensajes anteriores descartados —'
+export const FIFO_SEPARATOR_TEXT = '— earlier messages discarded —'
 
 /**
  * Issue #96 — local separator for TTL messages the expiry sweep has removed
@@ -14,7 +14,7 @@ export const FIFO_SEPARATOR_TEXT = '— mensajes anteriores descartados —'
  * semantics as the FIFO trim flag).
  */
 export function expiredSeparatorText(count: number): string {
-  const noun = count === 1 ? 'mensaje expirado' : 'mensajes expirados'
+  const noun = count === 1 ? 'expired message' : 'expired messages'
   return `— ${count} ${noun} —`
 }
 
@@ -25,7 +25,7 @@ export function expiredSeparatorText(count: number): string {
  * feed like the FIFO/expired lines (rendered while `recoveredCount > 0`),
  * memory-only, and never sent over the wire.
  */
-export const RECOVERED_SEPARATOR_TEXT = '— mensajes recuperados de pares —'
+export const RECOVERED_SEPARATOR_TEXT = '— messages recovered from peers —'
 
 // ---------------------------------------------------------------------------
 // Empty states (M6, spec §10.4 — discrete; English UI copy per issue #112)
@@ -71,11 +71,11 @@ export function formatTimeHHMM(ts: number): string {
 
 /** RF-06 — system feed lines for peer joins/leaves. */
 export function joinSystemLine(nickname: string): string {
-  return `— ${nickname} se ha unido —`
+  return `— ${nickname} joined —`
 }
 
 export function leaveSystemLine(nickname: string): string {
-  return `— ${nickname} ha salido —`
+  return `— ${nickname} left —`
 }
 
 /**
@@ -84,11 +84,11 @@ export function leaveSystemLine(nickname: string): string {
  * identity; it is display text, not a mention.
  */
 export function muteSystemLine(nickname: string): string {
-  return `@${nickname} fue silenciado`
+  return `@${nickname} was muted`
 }
 
 export function unmuteSystemLine(nickname: string): string {
-  return `@${nickname} ya no está silenciado`
+  return `@${nickname} is no longer muted`
 }
 
 // ---------------------------------------------------------------------------
