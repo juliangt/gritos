@@ -12,7 +12,7 @@ import { DM_DISCONNECTED_TEXT } from '../src/lib/feed'
  *  1. the §12.5 subsection heading exists, is marked IMPLEMENTED, and the
  *     §12 roadmap item 3 carries its shipped summary,
  *  2. the single home of the constants and the well-known swarm name
- *     (`SIGNAL_ROOM_NAME = '_gritos/senal/v1'` → deriveSignalRoomId()),
+ *     (`SIGNAL_ROOM_NAME = '_gritos/signal/v1'` → deriveSignalRoomId()),
  *     with the #90 appId-namespace citation,
  *  3. the three signal actions and their exact envelopes (knock directed,
  *     no content field beyond the optional ≤140 note; whoami; knock-ack
@@ -56,7 +56,7 @@ describe('global signal channel design note (issue #105)', () => {
 
   it('pins the single home of the constants and the well-known swarm name', () => {
     expect(spec).toContain('`lib/p2p/signalChannelConstants.ts`')
-    expect(spec).toContain("SIGNAL_ROOM_NAME = '_gritos/senal/v1'")
+    expect(spec).toContain("SIGNAL_ROOM_NAME = '_gritos/signal/v1'")
     expect(spec).toContain('deriveSignalRoomId()')
     expect(spec).toContain('deriveRoomId(SIGNAL_ROOM_NAME)')
   })
