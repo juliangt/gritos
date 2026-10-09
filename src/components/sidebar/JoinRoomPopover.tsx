@@ -1,10 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import {
-  EMPTY_ROOM_PASSWORD_TEXT,
-  ENCRYPTED_ROOM_HINT,
-  INVALID_ROOM_NAME_TEXT,
-} from '../../lib/rooms'
 import { normalizeRoomName } from '../../lib/p2p/roomManager'
+import { useT } from '../../i18n/index'
 import { useRoomManager } from '../../hooks/useRoomManager'
 
 /**
@@ -37,6 +33,7 @@ export function JoinRoomPopover(props: {
    */
   managerError?: string | null
 }) {
+  const t = useT()
   const [name, setName] = useState(props.initialName ?? '')
   const [encrypted, setEncrypted] = useState(false)
   const [password, setPassword] = useState('')
@@ -64,11 +61,11 @@ export function JoinRoomPopover(props: {
     event.preventDefault()
     if (busy) return
     if (normalized === null) {
-      setError(INVALID_ROOM_NAME_TEXT)
+      setError(t('settings.invalidRoomName'))
       return
     }
     if (encrypted && password === '') {
-      setError(EMPTY_ROOM_PASSWORD_TEXT)
+      setError(t('settings.emptyRoomPassword'))
       return
     }
     setBusy(true)
@@ -134,7 +131,7 @@ export function JoinRoomPopover(props: {
             }}
             className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm focus:border-accent"
           />
-          <p className="text-xs text-muted">{ENCRYPTED_ROOM_HINT}</p>
+          <p className="text-xs text-muted">{t('settings.encryptedRoomHint')}</p>
         </>
       )}
       {(error !== null || managerError !== null) && (

@@ -1,12 +1,7 @@
 import { useState } from 'react'
 import type { DmChannel } from '../../stores/useAppStore'
 import { displayFingerprint } from '../../lib/crypto/identity'
-import {
-  DM_DISCONNECTED_TEXT,
-  DM_KEY_CHANGED_HINT,
-  DM_KEY_CHANGED_WARNING,
-  DM_VERIFY_NOTICE,
-} from '../../lib/feed'
+import { useT } from '../../i18n/index'
 import { SettingsModal } from '../settings/SettingsModal'
 
 /**
@@ -24,6 +19,7 @@ import { SettingsModal } from '../settings/SettingsModal'
  * identical spaced 8×4 groups.
  */
 export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: () => void }) {
+  const t = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const channel = props.channel
 
@@ -49,7 +45,7 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
               className={`shrink-0 text-xs ${channel.available ? 'text-muted' : 'text-accent'}`}
               role="status"
             >
-              {channel.available ? '1 peer' : DM_DISCONNECTED_TEXT}
+              {channel.available ? '1 peer' : t('dm.peerDisconnected')}
             </span>
           </div>
           <p className="truncate text-xs text-muted">
@@ -57,11 +53,11 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
               {channel.peerFingerprint === null ? '— — —' : displayFingerprint(channel.peerFingerprint)}
             </span>
             <span>{' · '}</span>
-            <span>{channel.keyChanged ? DM_KEY_CHANGED_WARNING : DM_VERIFY_NOTICE}</span>
+            <span>{channel.keyChanged ? t('dm.keyChangedWarning') : t('dm.verifyNotice')}</span>
           </p>
           {channel.keyChanged && (
             <p className="text-xs text-accent" role="alert">
-              {DM_KEY_CHANGED_HINT}
+              {t('dm.keyChangedHint')}
             </p>
           )}
         </div>

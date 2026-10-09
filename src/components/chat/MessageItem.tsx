@@ -5,10 +5,8 @@ import { disambiguatedNickname } from '../../lib/nickname'
 import { formatTimeHHMM } from '../../lib/feed'
 import { getSelfPeerId, muteFromUi, toggleReaction } from '../../lib/p2p/roomManager'
 import { REACT_EMOJIS, type ReactEmoji } from '../../lib/p2p/protocol'
+import { useT } from '../../i18n/index'
 import {
-  REACTION_ADD_LABEL,
-  REACTION_BAR_LABEL,
-  REACTIONS_ROW_LABEL,
   muteAuthorAction,
   reactionChipTooltip,
   reactQuickPickLabel,
@@ -110,6 +108,9 @@ export const MessageItem = memo(function MessageItem(props: {
   // a row's kind never changes for its key).
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
+  // Issue #119 — locale subscription (hooks stay before the system-line
+  // early return): a language switch re-renders every mounted row.
+  const t = useT()
 
   if (props.message.kind === 'system') {
     return <p className="my-1 text-center text-xs text-muted">{props.message.text}</p>
@@ -185,8 +186,8 @@ export const MessageItem = memo(function MessageItem(props: {
         {reactionsOffered && (
           <button
             type="button"
-            aria-label={REACTION_ADD_LABEL}
-            title={REACTION_ADD_LABEL}
+            aria-label={t('common.reactionAdd')}
+            title={t('common.reactionAdd')}
             // Click AND focus both open (never toggle: focus fires before
             // click on mouse activation, so a toggle would close instantly).
             onClick={() => setPinned(true)}
@@ -222,7 +223,7 @@ export const MessageItem = memo(function MessageItem(props: {
         )}
       </div>
       {barVisible && (
-        <div role="group" aria-label={REACTION_BAR_LABEL} className="mt-0.5 flex gap-0.5">
+        <div role="group" aria-label={t('common.reactionBar')} className="mt-0.5 flex gap-0.5">
           {(REACT_EMOJIS as readonly ReactEmoji[]).map((emo) => (
             <button
               key={emo}
@@ -238,7 +239,7 @@ export const MessageItem = memo(function MessageItem(props: {
         </div>
       )}
       {chips.length > 0 && (
-        <div role="group" aria-label={REACTIONS_ROW_LABEL} className="mt-0.5 flex flex-wrap gap-1">
+        <div role="group" aria-label={t('common.reactionsRow')} className="mt-0.5 flex flex-wrap gap-1">
           {chips.map(({ emo, peerIds }) => {
             const mine = peerIds.includes(selfId)
             return (

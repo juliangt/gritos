@@ -2,20 +2,30 @@
  * Chat-feed presentation helpers (RF-03 / RF-06 / spec §10.4): system-line
  * texts, the FIFO separator, smart-scroll decision, HH:MM formatting and
  * the typing-indicator line. Pure functions, unit-testable without DOM.
+ *
+ * Issue #119 phase 2 — i18n: the user-facing strings live in
+ * `src/i18n/en.ts` under `feed.*`, `dm.*` and `slash.*`. Every builder
+ * resolves through `t()`/`tPlural()` on each call — locale-live, no
+ * caching. Plain-string constants survive as LEGACY SHIMS for the test
+ * suites that import them (`export const X = t('key')`, resolved ONCE at
+ * module load — NOT locale-live); component consumers must use `t('key')`
+ * instead, and a shim with no remaining test importer is deleted.
  */
 
-/** RF-03 — separator shown when the 500-message cap has trimmed history. */
-export const FIFO_SEPARATOR_TEXT = '— earlier messages discarded —'
+import { t, tPlural } from '../i18n/index'
+
+/** RF-03 — separator shown when the 500-message cap has trimmed history.
+ * Legacy shim (module-load resolution; see the module docblock). */
+export const FIFO_SEPARATOR_TEXT = t('feed.fifoSeparator')
 
 /**
  * Issue #96 — local separator for TTL messages the expiry sweep has removed
  * from this feed. Mirrors the FIFO separator: one line above the history,
  * memory-only; the count accumulates for the feed's lifetime (same latched
- * semantics as the FIFO trim flag).
+ * semantics as the FIFO trim flag). Locale-live: resolves on every call.
  */
 export function expiredSeparatorText(count: number): string {
-  const noun = count === 1 ? 'expired message' : 'expired messages'
-  return `— ${count} ${noun} —`
+  return tPlural('feed.expiredSeparator', count)
 }
 
 /**
@@ -23,26 +33,27 @@ export function expiredSeparatorText(count: number): string {
  * history gossip. Exact issue string, no count: it labels PROVENANCE (these
  * rows are a peer's replay, not live arrivals), not a quantity. Latched per
  * feed like the FIFO/expired lines (rendered while `recoveredCount > 0`),
- * memory-only, and never sent over the wire.
+ * memory-only, and never sent over the wire. FROZEN verbatim by
+ * tests/historyGossipDocs.test.ts.
+ * Legacy shim (module-load resolution; see the module docblock).
  */
-export const RECOVERED_SEPARATOR_TEXT = '— messages recovered from peers —'
+export const RECOVERED_SEPARATOR_TEXT = t('feed.recoveredSeparator')
 
-// ---------------------------------------------------------------------------
-// Empty states (M6, spec §10.4 — discrete; English UI copy per issue #112)
-// ---------------------------------------------------------------------------
+/** Empty room feed: invites sharing the room name (RF-02).
+ * Legacy shims (module-load resolution; see the module docblock). */
+export const EMPTY_ROOM_FEED_TEXT = t('feed.emptyRoom')
 
-/** Empty room feed: invites sharing the room name (RF-02). */
-export const EMPTY_ROOM_FEED_TEXT = 'Share the room name so others can join.'
+/** Empty DM feed (RF-04): the conversation exists but has no messages yet.
+ * Legacy shims (module-load resolution; see the module docblock). */
+export const EMPTY_DM_FEED_TEXT = t('feed.emptyDm')
 
-/** Empty DM feed (RF-04): the conversation exists but has no messages yet. */
-export const EMPTY_DM_FEED_TEXT = 'No messages yet. Write the first one.'
+/** Empty *Direct messages* section (RF-04): no open DM channels.
+ * Legacy shims (module-load resolution; see the module docblock). */
+export const EMPTY_DM_LIST_TEXT = t('feed.emptyDmList')
 
-/** Empty *Direct messages* section (RF-04): no open DM channels. */
-export const EMPTY_DM_LIST_TEXT =
-  'No direct messages yet. Open a peer’s menu to start an encrypted conversation.'
-
-/** Empty *Recents* section (RF-02): nothing remembered yet. */
-export const EMPTY_RECENTS_TEXT = 'No recent rooms yet.'
+/** Empty *Recents* section (RF-02): nothing remembered yet.
+ * Legacy shims (module-load resolution; see the module docblock). */
+export const EMPTY_RECENTS_TEXT = t('feed.emptyRecents')
 
 /** RF-03 — auto-scroll only when the user is at most this far from the bottom. */
 export const SMART_SCROLL_THRESHOLD_PX = 150
@@ -61,7 +72,8 @@ export function shouldAutoScroll(distanceFromBottomPx: number): boolean {
   return distanceFromBottomPx <= SMART_SCROLL_THRESHOLD_PX
 }
 
-/** Local HH:MM for a message timestamp (RF-03: author's ts, local render). */
+/** Local HH:MM for a message timestamp (RF-03: author's ts, local render).
+ * Locale-neutral: clock digits, not copy. */
 export function formatTimeHHMM(ts: number): string {
   const date = new Date(ts)
   const hours = String(date.getHours()).padStart(2, '0')
@@ -69,114 +81,114 @@ export function formatTimeHHMM(ts: number): string {
   return `${hours}:${minutes}`
 }
 
-/** RF-06 — system feed lines for peer joins/leaves. */
+/** RF-06 — system feed lines for peer joins/leaves. Locale-live. */
 export function joinSystemLine(nickname: string): string {
-  return `— ${nickname} joined —`
+  return t('feed.joinLine', { nickname })
 }
 
 export function leaveSystemLine(nickname: string): string {
-  return `— ${nickname} left —`
+  return t('feed.leaveLine', { nickname })
 }
 
 /**
  * Issue #95 — local-only feed lines for a UI mute/unmute of a peer (never
  * sent over the wire). The @-prefixed nickname identifies the affected
- * identity; it is display text, not a mention.
+ * identity; it is display text, not a mention. Locale-live.
  */
 export function muteSystemLine(nickname: string): string {
-  return `@${nickname} was muted`
+  return t('feed.muteLine', { nickname })
 }
 
 export function unmuteSystemLine(nickname: string): string {
-  return `@${nickname} is no longer muted`
+  return t('feed.unmuteLine', { nickname })
 }
 
 // ---------------------------------------------------------------------------
 // Issue #99 (issue #112 phase 1) — local feed lines for the slash commands
-// (executor feedback and errors). English per the issue-#112 rename: these
-// builders are slash-only (nothing else consumes them). Like the mute lines
-// above, they are never sent over the wire.
+// (executor feedback and errors). These builders are slash-only (nothing
+// else consumes them) and resolve through `slash.*` keys, locale-live. Like
+// the mute lines above, they are never sent over the wire.
 // ---------------------------------------------------------------------------
 
-/** Inline hint for an unknown verb — never sent, points at /help. */
-export const UNKNOWN_COMMAND_HINT = 'Unknown command — /help'
+/** Inline hint for an unknown verb — never sent, points at /help.
+ * Legacy shim (module-load resolution; see the module docblock). */
+export const UNKNOWN_COMMAND_HINT = t('slash.unknownCommand')
 
-/** Error line when a room-scoped command (/clear, /leave) has no target. */
-export const NO_ACTIVE_ROOM_TEXT = 'No active room.'
+/** Error line when a room-scoped command (/clear, /leave) has no target.
+ * Legacy shim (module-load resolution; see the module docblock). */
+export const NO_ACTIVE_ROOM_TEXT = t('slash.noActiveRoom')
 
-/** Confirmation line after a successful /nick (the manager re-announced presence). */
+/** Confirmation line after a successful /nick (the manager re-announced presence). Locale-live. */
 export function nicknameChangedLine(nickname: string): string {
-  return `Nickname changed to "${nickname}"`
+  return t('slash.nicknameChanged', { nickname })
 }
 
 /**
  * /rooms output: one line listing the active rooms in join order, each with
- * its unread badge when it has pending messages.
+ * its unread badge when it has pending messages. The `#{name}` pieces stay
+ * literal in every locale (a room name is a protocol token); the prefix and
+ * the unread badge translate. Locale-live.
  */
 export function activeRoomsLine(rooms: ReadonlyArray<{ name: string; unread: number }>): string {
-  if (rooms.length === 0) return 'No active rooms.'
+  if (rooms.length === 0) return t('slash.noActiveRooms')
   const parts = rooms.map((room) =>
-    room.unread > 0 ? `#${room.name} (${room.unread} unread)` : `#${room.name}`,
+    room.unread > 0
+      ? tPlural('slash.roomUnread', room.unread, { name: room.name })
+      : `#${room.name}`,
   )
-  return `Active rooms: ${parts.join(', ')}`
+  return t('slash.activeRooms', { rooms: parts.join(', ') })
 }
 
-/** /dm error: no current peer carries that nickname (case-insensitive match). */
+/** /dm error: no current peer carries that nickname (case-insensitive match). Locale-live. */
 export function dmPeerNotFoundLine(nickname: string): string {
-  return `Nobody among your peers is named "${nickname}".`
+  return t('slash.dmPeerNotFound', { nickname })
 }
 
-/** /dm error: several peers share the nickname; the peer list disambiguates. */
+/** /dm error: several peers share the nickname; the peer list disambiguates. Locale-live. */
 export function dmAmbiguousLine(nickname: string): string {
-  return `Several peers are named "${nickname}": open the conversation from the peer list.`
+  return t('slash.dmAmbiguous', { nickname })
 }
 
 /**
  * Typing indicator line (RF-03): one known nick → 'nick is typing…',
- * several → 'N people are typing…', none → null (bar hidden).
+ * several → 'N people are typing…', none → null (bar hidden). Locale-live.
  */
 export function typingStatusText(nicknames: readonly string[]): string | null {
   if (nicknames.length === 0) return null
-  if (nicknames.length === 1) return `${nicknames[0] as string} is typing…`
-  return `${nicknames.length} people are typing…`
+  return tPlural('feed.typing', nicknames.length, { nickname: nicknames[0] as string })
 }
 
-/** Floating new-messages button label (RF-03: '↓ N new messages'). */
+/** Floating new-messages button label (RF-03: '↓ N new messages'). Locale-live. */
 export function newMessagesButtonText(count: number): string {
-  const noun = count === 1 ? 'new message' : 'new messages'
-  return `↓ ${count} ${noun}`
+  return tPlural('feed.newMessages', count)
 }
 
 // ---------------------------------------------------------------------------
 // DM view texts (RF-04, exact spec wording)
 // ---------------------------------------------------------------------------
 
-/** RF-04 — header state when the peer shares no active room anymore. */
-export const DM_DISCONNECTED_TEXT = 'The peer has disconnected'
+/** RF-04 — header state when the peer shares no active room anymore. The
+ * manual wizard's drop text (§12.2) resolves the same key — one wording.
+ * Legacy shims (module-load resolution; see the module docblock). */
+export const DM_DISCONNECTED_TEXT = t('dm.peerDisconnected')
 
 /**
  * Issue #93 (spec §12.1) — composer hint when the connected peer runs a
  * legacy build (no session-ephemeral `ephkeys` announce): DMs are
  * impossible until it updates, and the honest state replaces the silent
  * message loss of the mixed-version degradation.
+ * Legacy shim (module-load resolution; see the module docblock).
  */
-export const DM_LEGACY_PEER_TEXT =
-  'This peer runs an older version without per-session encrypted DMs'
-
-/** RF-04 — TOFU verification notice shown under the peer's fingerprint. */
-export const DM_VERIFY_NOTICE = 'Compare it with your contact to verify their identity'
+export const DM_LEGACY_PEER_TEXT = t('dm.legacyPeer')
 
 /**
- * Issue #22 — TOFU divergence warning: the peer's live fingerprint differs
- * from the pinned first-seen one. Advisory only (messages keep flowing).
+ * Typing indicator note: the DM-header TOFU texts (`dm.verifyNotice`,
+ * `dm.keyChangedWarning`, `dm.keyChangedHint`) moved to i18n with no shims —
+ * their only consumer is the DmHeader component, which resolves the keys
+ * through `useT()` at render time.
  */
-export const DM_KEY_CHANGED_WARNING = '⚠ The fingerprint changed since your last verification'
 
-/** Issue #22 — explanation shown with the TOFU divergence warning. */
-export const DM_KEY_CHANGED_HINT =
-  'The peer may have reinstalled the app or could be an impersonation: verify their identity through another channel before trusting them.'
-
-/** Accessible label of the DM message feed. */
+/** Accessible label of the DM message feed. Locale-live. */
 export function dmFeedLabel(peerNick: string): string {
-  return `Direct messages with ${peerNick}`
+  return t('dm.feedLabel', { peerNick })
 }

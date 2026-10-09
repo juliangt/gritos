@@ -22,18 +22,18 @@ import {
   FILE_ENC_NOTICE_DM,
   FILE_ENC_NOTICE_ROOM,
   FILE_ENC_WARNING_PUBLIC,
-  FILE_FAILURE_TEXT,
   FILE_NO_PEERS_TEXT,
   FILE_OFFER_PENDING_TEXT,
   FILE_PICK_LABEL,
   FILE_PROGRESS_LABEL,
   FILE_RECIPIENT_LABEL,
-  FILE_REFUSAL_TEXT,
   FILE_SEND_BUTTON,
   FILE_UNKNOWN_MIME_TEXT,
   fileCardLabel,
+  fileFailureText,
   fileOfferText,
   fileRecipientDmText,
+  fileRefusalText,
 } from '../src/components/settings/messages'
 import {
   fakePeerJoins,
@@ -302,7 +302,7 @@ describe('pre-send dialog (issue #103 phase 4)', () => {
     await chooseFile(new File([new ArrayBuffer(files.MAX_FILE_BYTES + 1)], 'grande.bin'))
     fireEvent.click(screen.getByRole('button', { name: FILE_SEND_BUTTON }))
 
-    expect(await screen.findByText(FILE_REFUSAL_TEXT['file-too-big'])).toBeInTheDocument()
+    expect(await screen.findByText(fileRefusalText('file-too-big'))).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: FILE_DIALOG_LABEL })).toBeInTheDocument()
     expect(room.action('file-meta').sends).toHaveLength(0)
   })
@@ -541,7 +541,7 @@ describe('sender flow (real engine, issue #103 phase 4)', () => {
     await waitFor(() =>
       expect(
         within(screen.getByLabelText(fileCardLabel('caida.bin', null))).getByText(
-          FILE_FAILURE_TEXT['peer-drop'],
+          fileFailureText('peer-drop'),
         ),
       ).toBeInTheDocument(),
     )

@@ -1,6 +1,6 @@
 import { Badge } from '../common/Badge'
 import { StatusDot } from '../common/StatusDot'
-import { EMPTY_RECENTS_TEXT } from '../../lib/feed'
+import { useT } from '../../i18n/index'
 import type { Room } from '../../stores/useAppStore'
 import { SUGGESTED_ROOMS } from '../../lib/rooms'
 
@@ -21,6 +21,7 @@ export function RoomList(props: {
   onLeaveRoom: (roomId: string) => void
   onJoinByName: (name: string) => void
 }) {
+  const t = useT()
   const activeNames = new Set(props.rooms.map((room) => room.name))
   const suggested = SUGGESTED_ROOMS.filter((name) => !activeNames.has(name))
   const recents = props.showRecents
@@ -88,7 +89,7 @@ export function RoomList(props: {
       {props.showRecents && props.recentRooms.length === 0 && (
         <section aria-label="Recent rooms" className="flex flex-col gap-1">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recent</h2>
-          <p className="text-xs text-muted">{EMPTY_RECENTS_TEXT}</p>
+          <p className="text-xs text-muted">{t('feed.emptyRecents')}</p>
         </section>
       )}
 

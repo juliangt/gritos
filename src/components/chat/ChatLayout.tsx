@@ -22,14 +22,10 @@ import { useLatency } from '../../hooks/useLatency'
 import { useExpirySweep } from '../../hooks/useExpirySweep'
 import { useFileTransfers } from '../../hooks/useFileTransfers'
 import { useNotifications } from '../../hooks/useNotifications'
-import { dmFeedLabel, EMPTY_DM_FEED_TEXT, EMPTY_ROOM_FEED_TEXT } from '../../lib/feed'
+import { useT } from '../../i18n/index'
 import { clearRoomHash, parseContactHash, parseRoomHash } from '../../lib/shareLinks'
 import { joinRoom, requestHistory } from '../../lib/p2p/roomManager'
-import {
-  CLEAR_FEED_DIALOG_BODY,
-  CLEAR_FEED_DIALOG_CONFIRM,
-  CLEAR_FEED_DIALOG_TITLE,
-} from '../settings/messages'
+import { dmFeedLabel } from '../../lib/feed'
 
 /** Spec §10.1 — at this width the sidebar becomes an overlay drawer. */
 const MOBILE_QUERY = '(max-width: 768px)'
@@ -49,6 +45,9 @@ function RoomLatencyLoop(props: { roomId: string }) {
  * never touches the room connections (RF-02).
  */
 export function ChatLayout() {
+  // Issue #119 — locale subscription: every rendered string resolves through
+  // `t` (live snapshot), so a language switch re-renders the layout.
+  const t = useT()
   const isMobile = useMediaQuery(MOBILE_QUERY)
   // Issue #103 phase 4 — the §12.4 transfer records drive the consent/
   // progress cards; the engine's module map stays the only owner (memory-
@@ -357,7 +356,7 @@ export function ChatLayout() {
               expiredCount={activeDm.expiredCount}
               recoveredCount={0}
               ariaLabel={dmFeedLabel(activeDm.peerNick)}
-              emptyStateText={EMPTY_DM_FEED_TEXT}
+              emptyStateText={t('feed.emptyDm')}
             />
             {/* Issue #103 phase 4 — the transfer strip of the DM view: every
                 record with this peer (an incoming room-kind transfer from
@@ -403,7 +402,7 @@ export function ChatLayout() {
               expiredCount={activeRoom.expiredCount}
               recoveredCount={activeRoom.recoveredCount}
               ariaLabel={`Messages in #${activeRoom.name}`}
-              emptyStateText={EMPTY_ROOM_FEED_TEXT}
+              emptyStateText={t('feed.emptyRoom')}
               historyAsk={historyAsk}
             />
             {/* Issue #103 phase 4 — the transfer strip of the room view: the
@@ -448,9 +447,9 @@ export function ChatLayout() {
           feed; cancel and Esc leave it untouched. */}
       <ConfirmDialog
         open={clearFeedOpen}
-        title={CLEAR_FEED_DIALOG_TITLE}
-        body={CLEAR_FEED_DIALOG_BODY}
-        confirmLabel={CLEAR_FEED_DIALOG_CONFIRM}
+        title={t('slash.clearDialogTitle')}
+        body={t('slash.clearDialogBody')}
+        confirmLabel={t('slash.clearDialogConfirm')}
         onConfirm={() => {
           cancelClearFeed()
           if (activeView?.kind === 'room') useAppStore.getState().clearRoomFeed(activeView.id)

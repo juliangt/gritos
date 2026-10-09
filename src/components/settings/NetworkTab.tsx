@@ -1,16 +1,7 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useRoomManager } from '../../hooks/useRoomManager'
-import {
-  EMPTY_ICE_HINT,
-  EMPTY_TRACKERS_HINT,
-  ICE_ERROR_TEXT,
-  MAX_ROOMS_ERROR_TEXT,
-  RECONNECT_NOTE,
-  TRACKER_ERROR_TEXT,
-  TURN_CREDENTIAL_MEMORY_HINT,
-  TURN_CREDENTIAL_STORAGE_HINT,
-} from './messages'
+import { useT } from '../../i18n/index'
 import { Toggle } from './Toggle'
 
 /**
@@ -67,6 +58,7 @@ function rowsToSettings(rows: readonly IceRow[]): RTCIceServer[] {
 }
 
 export function NetworkTab() {
+  const t = useT()
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   // Never bootstraps an identity; reconnect-all acts on the session only.
@@ -81,11 +73,11 @@ export function NetworkTab() {
 
   const trackerError =
     trackerDraft.some((url) => url.trim() !== '' && !isValidTrackerUrl(url)) === true
-      ? TRACKER_ERROR_TEXT
+      ? t('settings.trackerError')
       : null
   const iceError =
     iceDraft.some((row) => row.url.trim() !== '' && !isValidIceUrl(row.url)) === true
-      ? ICE_ERROR_TEXT
+      ? t('settings.iceError')
       : null
 
   const updateTrackerRow = (index: number, value: string): void => {
@@ -131,7 +123,7 @@ export function NetworkTab() {
     setMaxRoomsDraft(raw)
     const parsed = Number.parseInt(raw, 10)
     if (Number.isNaN(parsed) || parsed < 1 || parsed > 6) {
-      setMaxRoomsError(MAX_ROOMS_ERROR_TEXT)
+      setMaxRoomsError(t('settings.maxRoomsError'))
       return
     }
     setMaxRoomsError(null)
@@ -156,7 +148,9 @@ export function NetworkTab() {
 
       <fieldset className="flex flex-col gap-1">
         <legend className="text-sm font-medium">Custom trackers</legend>
-        {trackerDraft.length === 0 && <p className="text-xs text-muted">{EMPTY_TRACKERS_HINT}</p>}
+        {trackerDraft.length === 0 && (
+          <p className="text-xs text-muted">{t('settings.emptyTrackersHint')}</p>
+        )}
         {trackerDraft.map((url, index) => (
           <div key={index} className="flex items-center gap-1">
             <input
@@ -195,7 +189,7 @@ export function NetworkTab() {
 
       <fieldset className="flex flex-col gap-1">
         <legend className="text-sm font-medium">ICE servers (STUN/TURN)</legend>
-        {iceDraft.length === 0 && <p className="text-xs text-muted">{EMPTY_ICE_HINT}</p>}
+        {iceDraft.length === 0 && <p className="text-xs text-muted">{t('settings.emptyIceHint')}</p>}
         {iceDraft.map((row, index) => (
           <div key={index} className="flex flex-col gap-1 rounded-md border border-border p-2">
             <div className="flex items-center gap-1">
@@ -260,7 +254,7 @@ export function NetworkTab() {
             credential fields; the memory-only wording takes over while the
             remember toggle is off (it then lives under the checkbox). */}
         {settings.rememberTurnCredentials && iceDraft.some((row) => row.kind === 'turn') && (
-          <p className="text-xs text-muted">{TURN_CREDENTIAL_STORAGE_HINT}</p>
+          <p className="text-xs text-muted">{t('settings.turnCredentialStorageHint')}</p>
         )}
         {iceError !== null && (
           <p role="alert" className="text-xs text-accent">
@@ -279,7 +273,7 @@ export function NetworkTab() {
       <Toggle
         label="Remember TURN credentials in this browser"
         checked={settings.rememberTurnCredentials}
-        hint={settings.rememberTurnCredentials ? undefined : TURN_CREDENTIAL_MEMORY_HINT}
+        hint={settings.rememberTurnCredentials ? undefined : t('settings.turnCredentialMemoryHint')}
         onChange={(rememberTurnCredentials) => setSettings({ rememberTurnCredentials })}
       />
 
@@ -306,7 +300,7 @@ export function NetworkTab() {
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">{RECONNECT_NOTE}</p>
+        <p className="text-xs text-muted">{t('settings.reconnectNote')}</p>
         <button
           type="button"
           onClick={() => void reconnectAll()}

@@ -16,7 +16,7 @@ import {
 import {
   FILE_ENC_STATE_CLEAR,
   FILE_ENC_WARNING_PUBLIC,
-  FILE_REFUSAL_TEXT,
+  fileRefusalText,
 } from '../src/components/settings/messages'
 
 /**
@@ -213,6 +213,6 @@ describe('file transfer documentation (issue #103, phases 1 + 5)', () => {
     // The consent card and dialog encryption states are pinned to the exact UI strings.
     expect(qaChecklist).toContain(FILE_ENC_WARNING_PUBLIC)
     expect(qaChecklist).toContain(FILE_ENC_STATE_CLEAR)
-    expect(qaChecklist).toContain(FILE_REFUSAL_TEXT['concurrency-cap'])
+    expect(qaChecklist).toContain(fileRefusalText('concurrency-cap'))
   })
 })

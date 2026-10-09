@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import type { Room } from '../../stores/useAppStore'
-import { PEERLESS_ROOM_HINT_TEXT, roomStatusText } from '../../lib/rooms'
+import { roomStatusText } from '../../lib/rooms'
 import { buildRoomLink } from '../../lib/shareLinks'
+import { useT } from '../../i18n/index'
 import { StatusDot } from '../common/StatusDot'
 import { SettingsModal } from '../settings/SettingsModal'
 import { QrSharePopover } from './QrSharePopover'
-import { QR_BUTTON_LABEL } from '../settings/messages'
 
 /** Issue #41 — how long the 'Link copied' feedback stays visible. */
 const COPIED_FEEDBACK_MS = 2_000
@@ -21,6 +21,7 @@ const COPIED_FEEDBACK_MS = 2_000
  * (issue #100: same link, scannable) and the settings entry (RF-07 modal).
  */
 export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => void }) {
+  const t = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -80,7 +81,7 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
               `searching`: this subordinate line says the room may simply be
               empty (never the error wording; the §10.3 texts stay pinned). */}
           {props.room.peerlessHint === true && (
-            <span className="min-w-0 truncate text-xs text-muted">{PEERLESS_ROOM_HINT_TEXT}</span>
+            <span className="min-w-0 truncate text-xs text-muted">{t('chat.peerlessHint')}</span>
           )}
           <span className="ml-auto shrink-0 text-xs text-muted">
             {props.room.peers.length} {props.room.peers.length === 1 ? 'peer' : 'peers'}
@@ -97,8 +98,8 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
           <button
             type="button"
             onClick={() => setQrOpen(true)}
-            aria-label={QR_BUTTON_LABEL}
-            title={QR_BUTTON_LABEL}
+            aria-label={t('qr.buttonLabel')}
+            title={t('qr.buttonLabel')}
             className="rounded px-1.5 py-1 text-xs font-semibold leading-none hover:bg-bg"
           >
             QR

@@ -3,13 +3,9 @@ import { Modal } from '../common/Modal'
 import { buildQrMatrix } from '../../lib/qr'
 import { QR_ONSCREEN_MODULE_PX, downloadQrPng, paintQr } from '../../lib/qrCanvas'
 import { buildRoomLink } from '../../lib/shareLinks'
+import { useT } from '../../i18n/index'
+import { qrCanvasLabel } from '../settings/messages'
 import type { Room } from '../../stores/useAppStore'
-import {
-  QR_DIALOG_LABEL,
-  QR_DOWNLOAD_BUTTON,
-  QR_SAME_INSTALL_NOTE,
-  qrCanvasLabel,
-} from '../settings/messages'
 
 /**
  * Issue #100 (Phase 2) — the QR invite popover behind the header's 'QR'
@@ -24,6 +20,7 @@ import {
  * purpose — see `lib/qrCanvas.ts` (scannability trumps theme).
  */
 export function QrSharePopover(props: { room: Room; open: boolean; onClose: () => void }) {
+  const t = useT()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   // Exactly the string the share button copies — never any password.
   const link = useMemo(() => buildRoomLink(props.room.name), [props.room.name])
@@ -40,7 +37,7 @@ export function QrSharePopover(props: { room: Room; open: boolean; onClose: () =
   }, [props.open, matrix])
 
   return (
-    <Modal open={props.open} onClose={props.onClose} label={QR_DIALOG_LABEL}>
+    <Modal open={props.open} onClose={props.onClose} label={t('qr.dialogLabel')}>
       <div className="flex flex-col items-center gap-3">
         <canvas
           ref={canvasRef}
@@ -49,13 +46,13 @@ export function QrSharePopover(props: { room: Room; open: boolean; onClose: () =
           className="h-44 w-44 rounded border border-border bg-surface"
         />
         <p className="select-all break-all text-center font-mono text-xs text-muted">{link}</p>
-        <p className="text-center text-xs text-muted">{QR_SAME_INSTALL_NOTE}</p>
+        <p className="text-center text-xs text-muted">{t('qr.sameInstallNote')}</p>
         <button
           type="button"
           onClick={() => downloadQrPng(link, props.room.name)}
           className="rounded bg-accent px-3 py-1.5 text-xs font-semibold text-accent-text"
         >
-          {QR_DOWNLOAD_BUTTON}
+          {t('qr.downloadButton')}
         </button>
       </div>
     </Modal>

@@ -1,6 +1,15 @@
 // jsdom does not implement window.matchMedia; provide a minimal stub so the
 // theme hook can subscribe to prefers-color-scheme in DOM tests.
 import { configure } from '@testing-library/react'
+// Issue #119 — pin the resolved locale to English for every DOM suite: the
+// i18n runtime resolves its boot locale from the persisted `language`
+// setting at module load, and a suite that seeds `gritos:settings` (or a
+// future es* navigator stub) must never shift the exact-text assertions.
+// The i18n suite itself switches locales deliberately — per-file module
+// isolation keeps that safe, and its afterEach restores 'auto'.
+import { setLocale } from '../src/i18n/index'
+
+setLocale('en')
 
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   window.matchMedia = (query: string): MediaQueryList => ({

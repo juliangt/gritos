@@ -2,15 +2,8 @@ import { useEffect, useState } from 'react'
 import { acceptKnock, getPendingKnocks, onKnock, rejectKnock } from '../../lib/p2p/signalChannel'
 import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
-import {
-  KNOCK_ACCEPT_BUTTON,
-  KNOCK_CARDS_REGION_LABEL,
-  KNOCK_MUTE_BUTTON,
-  KNOCK_NOTE_PREFIX,
-  KNOCK_REJECT_BUTTON,
-  knockCardLabel,
-  knockConsentText,
-} from '../settings/messages'
+import { useT } from '../../i18n/index'
+import { knockCardLabel, knockConsentText } from '../settings/messages'
 
 /**
  * Issue #105 phase 3 (spec §12.5) — the inbound-knock consent cards: one
@@ -44,6 +37,7 @@ interface CardKnock {
 }
 
 export function KnockConsentCards() {
+  const t = useT()
   const globalDm = useSettingsStore((state) => state.settings.globalDm)
   // Seeded ONCE at mount from the manager's pending map (covers knocks that
   // landed before the mount). ChatLayout keys this component by the opt-in,
@@ -71,7 +65,7 @@ export function KnockConsentCards() {
 
   return (
     <section
-      aria-label={KNOCK_CARDS_REGION_LABEL}
+      aria-label={t('contact.knockCardsRegionLabel')}
       className="flex flex-col gap-2 border-b border-border bg-surface px-3 py-2"
     >
       {knocks.map((knock) => (
@@ -84,7 +78,7 @@ export function KnockConsentCards() {
           <p className="text-sm font-medium">{knockConsentText(knock.nick)}</p>
           {knock.note !== undefined && (
             <p className="break-words text-xs text-muted">
-              {KNOCK_NOTE_PREFIX}
+              {t('contact.knockNotePrefix')}
               {knock.note}
             </p>
           )}
@@ -99,7 +93,7 @@ export function KnockConsentCards() {
               }}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-text hover:opacity-90"
             >
-              {KNOCK_ACCEPT_BUTTON}
+              {t('common.accept')}
             </button>
             <button
               type="button"
@@ -109,7 +103,7 @@ export function KnockConsentCards() {
               }}
               className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:border-accent"
             >
-              {KNOCK_REJECT_BUTTON}
+              {t('common.decline')}
             </button>
             <button
               type="button"
@@ -122,7 +116,7 @@ export function KnockConsentCards() {
               }}
               className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:border-accent"
             >
-              {KNOCK_MUTE_BUTTON}
+              {t('common.mute')}
             </button>
           </div>
         </div>

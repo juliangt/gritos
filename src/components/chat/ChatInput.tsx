@@ -1,26 +1,11 @@
 import { useCallback, useEffect, useRef, useState, useLayoutEffect, type FormEvent } from 'react'
-import {
-  CHAR_COUNTER_FROM,
-  DM_DISCONNECTED_TEXT,
-  DM_LEGACY_PEER_TEXT,
-  TYPING_IDLE_STOP_MS,
-  TYPING_SIGNAL_THROTTLE_MS,
-  UNKNOWN_COMMAND_HINT,
-} from '../../lib/feed'
+import { CHAR_COUNTER_FROM, TYPING_IDLE_STOP_MS, TYPING_SIGNAL_THROTTLE_MS } from '../../lib/feed'
 import { MAX_MESSAGE_TTL_S, MAX_PLAINTEXT_LENGTH, MIN_MESSAGE_TTL_S } from '../../lib/p2p/protocol'
+import { useT } from '../../i18n/index'
 import type { Room } from '../../stores/useAppStore'
-import {
-  NO_EXPIRY_LABEL,
-  SLASH_POPUP_LABEL,
-  TTL_1H_LABEL,
-  TTL_30S_LABEL,
-  TTL_5M_LABEL,
-  TTL_SELECT_LABEL,
-} from '../settings/messages'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useFileTransfers } from '../../hooks/useFileTransfers'
 import { FileSendDialog } from './FileSendDialog'
-import { FILE_ATTACH_LABEL } from '../settings/messages'
 import {
   SLASH_COMMANDS,
   parseSlashCommand,
@@ -38,13 +23,11 @@ const MAX_TEXTAREA_HEIGHT_PX = 144
 
 /**
  * Issue #96 — per-message expiry choices (seconds). The edges track the
- * protocol bounds; the middle choice is the only free one.
+ * protocol bounds; the middle choice is the only free one. Labels are NOT
+ * stored here: they resolve through `t` at render time (issue #119 — a
+ * module-level label would freeze the boot locale).
  */
-const TTL_CHOICES = [
-  { seconds: MIN_MESSAGE_TTL_S, label: TTL_30S_LABEL },
-  { seconds: 300, label: TTL_5M_LABEL },
-  { seconds: MAX_MESSAGE_TTL_S, label: TTL_1H_LABEL },
-] as const
+const TTL_CHOICES = [MIN_MESSAGE_TTL_S, 300, MAX_MESSAGE_TTL_S] as const
 
 /** DOM id of the slash-candidate listbox (the textarea's aria-controls target). */
 const SLASH_LISTBOX_ID = 'slash-command-listbox'
@@ -127,6 +110,9 @@ export interface DmComposerContext {
  * NO_ACTIVE_ROOM_TEXT line in the focused feed.
  */
 export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
+  // Issue #119 — locale subscription: rendered strings (TTL labels, the
+  // slash popup chrome, hints) resolve through `t` (live snapshot).
+  const t = useT()
   const [value, setValue] = useState('')
   // Issue #96 — the TTL pick is component state on purpose: it persists
   // across consecutive sends (one decision covers a burst of expiring
@@ -300,7 +286,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
     if (parsed.kind === 'unknown') {
       // NEVER sent; the hint sits next to the input, the text stays for
       // fixing (the executor's own unknown branch is the headless path).
-      setHint(UNKNOWN_COMMAND_HINT)
+      setHint(t('slash.unknownCommand'))
       return
     }
     if (parsed.kind === 'error') {
@@ -376,7 +362,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
           <ul
             id={SLASH_LISTBOX_ID}
             role="listbox"
-            aria-label={SLASH_POPUP_LABEL}
+            aria-label={t('slash.popupLabel')}
             className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-md overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-lg"
           >
             {slashCandidates.map((def, index) => (
@@ -473,16 +459,20 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
             hard-blocked together with the composer on a disconnected or
             legacy DM peer, still usable while a room is queueing. */}
           <select
-            aria-label={TTL_SELECT_LABEL}
+            aria-label={t('common.ttlSelectLabel')}
             value={ttlDraft}
             disabled={blocked}
             onChange={(event) => setTtlDraft(event.target.value)}
             className="rounded-md border border-border bg-surface px-1 py-1 text-xs focus:border-accent disabled:opacity-50"
           >
-            <option value="">{NO_EXPIRY_LABEL}</option>
-            {TTL_CHOICES.map((choice) => (
-              <option key={choice.seconds} value={choice.seconds}>
-                {choice.label}
+            <option value="">{t('common.noExpiryLabel')}</option>
+            {TTL_CHOICES.map((seconds) => (
+              <option key={seconds} value={seconds}>
+                {seconds === MIN_MESSAGE_TTL_S
+                  ? t('common.ttl30Seconds')
+                  : seconds === MAX_MESSAGE_TTL_S
+                    ? t('common.ttl1Hour')
+                    : t('common.ttl5Minutes')}
               </option>
             ))}
           </select>
@@ -494,7 +484,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
           {(room !== undefined || dm?.manual !== true) && (
             <button
               type="button"
-              aria-label={FILE_ATTACH_LABEL}
+              aria-label={t('files.attachLabel')}
               disabled={blocked}
               onClick={() => setFileDialogOpen(true)}
               className="rounded-md border border-border px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
@@ -504,12 +494,12 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
           )}
           {disconnected && (
             <span className="text-accent" role="status">
-              {DM_DISCONNECTED_TEXT}
+              {t('dm.peerDisconnected')}
             </span>
           )}
           {legacyPeer && (
             <span className="text-accent" role="status">
-              {DM_LEGACY_PEER_TEXT}
+              {t('dm.legacyPeer')}
             </span>
           )}
           {queued && (

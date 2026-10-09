@@ -1,6 +1,6 @@
 import { Modal } from '../common/Modal'
 import { SLASH_COMMANDS } from '../../lib/slashCommands'
-import { SLASH_HELP_ESCAPE_HINT, SLASH_HELP_LABEL, SLASH_HELP_TITLE } from '../settings/messages'
+import { useT } from '../../i18n/index'
 
 /**
  * /help overlay (issue #99; English copy per issue #112): a small modal
@@ -11,9 +11,10 @@ import { SLASH_HELP_ESCAPE_HINT, SLASH_HELP_LABEL, SLASH_HELP_TITLE } from '../s
  * construction (RNF-05).
  */
 export function SlashHelpModal(props: { open: boolean; onClose: () => void }) {
+  const t = useT()
   return (
-    <Modal open={props.open} onClose={props.onClose} label={SLASH_HELP_LABEL}>
-      <h2 className="text-base font-semibold">{SLASH_HELP_TITLE}</h2>
+    <Modal open={props.open} onClose={props.onClose} label={t('slash.helpLabel')}>
+      <h2 className="text-base font-semibold">{t('slash.helpTitle')}</h2>
       <ul className="mt-3 flex flex-col gap-2">
         {SLASH_COMMANDS.map((command) => (
           <li key={command.verb} className="text-sm">
@@ -22,7 +23,7 @@ export function SlashHelpModal(props: { open: boolean; onClose: () => void }) {
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-xs text-muted">{SLASH_HELP_ESCAPE_HINT}</p>
+      <p className="mt-3 text-xs text-muted">{t('slash.helpEscapeHint')}</p>
     </Modal>
   )
 }

@@ -19,8 +19,10 @@
  * ERROR/FEEDBACK MODEL: every local line goes through
  * `ctx.appendSystemLine` (the issue-#95 mute-line pattern: a local system
  * row in the focused feed, never on the wire). Parse-level errors print the
- * owning libs' wording (NICKNAME_ERROR_TEXT, INVALID_ROOM_NAME_TEXT) plus
- * the row's usage; unknown verbs print UNKNOWN_COMMAND_HINT and never send.
+ * owning libs' wording (`errors.nicknameInvalid`, `settings.invalidRoomName`)
+ * plus the row's usage through the `slash.errorWithUsage` template; unknown
+ * verbs print `slash.unknownCommand` and never send. All lines resolve
+ * through `t()` at call time (issue #119: locale-live).
  *
  * /room AND PASSWORD ROOMS: a room's password-ness is undetectable from the
  * name alone (password rooms derive a different roomId — RF-05; a linked
@@ -34,11 +36,8 @@
  */
 
 import { joinRoom, leaveRoom, openDmChannel, setNickname } from './p2p/roomManager'
-import { INVALID_ROOM_NAME_TEXT } from './rooms'
-import { NICKNAME_ERROR_TEXT } from './nickname'
+import { t } from '../i18n/index'
 import {
-  UNKNOWN_COMMAND_HINT,
-  NO_ACTIVE_ROOM_TEXT,
   activeRoomsLine,
   dmAmbiguousLine,
   dmPeerNotFoundLine,
@@ -105,16 +104,17 @@ export interface SlashExecutorContext {
  * Local-line wording for a parse-level rejection. missing-arg/extra-args
  * print the usage; charset failures lead with the owning lib's validation
  * text (what the settings modal / join popover show inline) and append the
- * usage. Wording reuses the parser's documented owners — never re-worded
- * here.
+ * usage — ONE `slash.errorWithUsage` template so a locale can reorder the
+ * clauses. Wording reuses the parser's documented owners — never re-worded
+ * here. Locale-live (resolves at call time).
  */
 export function slashErrorLine(result: Extract<SlashCommand, { kind: 'error' }>): string {
   const usage = slashUsageText(result.verb)
   switch (result.error) {
     case 'invalid-nick':
-      return `${NICKNAME_ERROR_TEXT} ${usage}`
+      return t('slash.errorWithUsage', { error: t('errors.nicknameInvalid'), usage })
     case 'invalid-room':
-      return `${INVALID_ROOM_NAME_TEXT} ${usage}`
+      return t('slash.errorWithUsage', { error: t('settings.invalidRoomName'), usage })
     case 'missing-arg':
     case 'extra-args':
       return usage
@@ -136,7 +136,7 @@ export async function executeSlashCommand(
       // Escape hatch: the backslash is already stripped by the parser.
       return { type: 'send-chat', text: result.text }
     case 'unknown':
-      ctx.appendSystemLine(UNKNOWN_COMMAND_HINT)
+      ctx.appendSystemLine(t('slash.unknownCommand'))
       return { type: 'none' }
     case 'error':
       ctx.appendSystemLine(slashErrorLine(result))
@@ -156,7 +156,7 @@ export async function executeSlashCommand(
         // Defense in depth: the parser already gates with the same RF-01
         // rules; a NicknameError here can only come from a drift between
         // the two gates — surface the manager's own message.
-        ctx.appendSystemLine(error instanceof Error ? error.message : NICKNAME_ERROR_TEXT)
+        ctx.appendSystemLine(error instanceof Error ? error.message : t('errors.nicknameInvalid'))
       }
       return { type: 'none' }
     }
@@ -205,7 +205,7 @@ export async function executeSlashCommand(
     case 'clear': {
       const room = ctx.activeRoom()
       if (room === null) {
-        ctx.appendSystemLine(NO_ACTIVE_ROOM_TEXT)
+        ctx.appendSystemLine(t('slash.noActiveRoom'))
         return { type: 'none' }
       }
       // Memory-only wipe, behind the ConfirmDialog (the mute-with-DM
@@ -216,7 +216,7 @@ export async function executeSlashCommand(
     case 'leave': {
       const room = ctx.activeRoom()
       if (room === null) {
-        ctx.appendSystemLine(NO_ACTIVE_ROOM_TEXT)
+        ctx.appendSystemLine(t('slash.noActiveRoom'))
         return { type: 'none' }
       }
       // Exactly the sidebar's leave path (RoomList → useRoomManager.leaveRoom

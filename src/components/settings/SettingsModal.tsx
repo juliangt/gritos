@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Modal } from '../common/Modal'
 import { useRoomManager } from '../../hooks/useRoomManager'
-import { isValidNickname, normalizeNickname, NICKNAME_ERROR_TEXT } from '../../lib/nickname'
+import { isValidNickname, normalizeNickname } from '../../lib/nickname'
+import { useT } from '../../i18n/index'
 import { useAppStore } from '../../stores/useAppStore'
 import { AppearanceTab } from './AppearanceTab'
 import { NetworkTab } from './NetworkTab'
@@ -49,6 +50,7 @@ export function SettingsModal(props: {
 }
 
 function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => void }) {
+  const t = useT()
   const identity = useAppStore((state) => state.identity)
   // The settings modal only MUTATES an existing session (nickname,
   // regeneration, reconnect): it must never bootstrap an identity as a
@@ -66,7 +68,7 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
       return
     }
     if (!isValidNickname(normalized)) {
-      setNicknameError(NICKNAME_ERROR_TEXT)
+      setNicknameError(t('errors.nicknameInvalid'))
       return
     }
     setNicknameError(null)

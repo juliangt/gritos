@@ -49,13 +49,36 @@ export function resolveLocale(
 /**
  * The locale store — UI-React-facing (subscribed by `useT`) and holding
  * ONLY the resolved locale; the user's `language` choice lives in the
- * settings store. Resolved once on module load and again per
- * `setLocale` call (the resolver is cheap and pure).
+ * settings store. Resolved once on boot and again per `setLocale` call
+ * (the resolver is cheap and pure).
  */
 const useLocaleStore = create<{ locale: Locale }>()(() => ({ locale: 'en' }))
 
+/** Whether the boot resolution already ran (lazy — see ensureBootLocale). */
+let bootResolved = false
+
+/**
+ * Applies the boot locale from the settings store exactly once, on the
+ * first `t`/`getLocale` call. LAZY on purpose: a module-load init would
+ * import the settings store eagerly and close the import cycle i18n →
+ * settings store → lib/crypto/dm → lib/p2p/protocol → lib/nickname → i18n,
+ * whose partial initialization leaves `useSettingsStore` undefined at
+ * evaluation time (surfaced by tests/settingsValidation.test.ts). Deferred
+ * to first use, every import order works: the settings store rehydrates
+ * synchronously (its PersistStorage.getItem is plain-sync, verified in
+ * tests/settingsPersistence.test.ts), so the first translation already
+ * sees the persisted language — no async gap, no flash of the wrong
+ * language.
+ */
+function ensureBootLocale(): void {
+  if (bootResolved) return
+  bootResolved = true
+  setLocale(useSettingsStore.getState().settings.language)
+}
+
 /** Snapshot of the resolved locale (React-free, for non-component callers). */
 export function getLocale(): Locale {
+  ensureBootLocale()
   return useLocaleStore.getState().locale
 }
 
@@ -68,6 +91,9 @@ export function getLocale(): Locale {
  * (node test runs import the module transitively).
  */
 export function setLocale(language: LanguageSetting): void {
+  // Any explicit resolution — including the test suites' pin — counts as
+  // the boot resolution: a later lazy ensureBootLocale() must never undo it.
+  bootResolved = true
   const navigatorLanguage = typeof navigator !== 'undefined' ? navigator.language : undefined
   const locale = resolveLocale(language, navigatorLanguage)
   useLocaleStore.setState({ locale })
@@ -135,9 +161,7 @@ export function useT(): typeof t {
   return t
 }
 
-// Module-load init: resolve the boot locale from the settings store. The
-// settings store rehydrates synchronously (its PersistStorage.getItem is
-// plain-sync, verified in tests/settingsPersistence.test.ts), so this plain
-// read is safe — no async gap, no flash of the wrong language. Phase 2
-// imports this module from the app entry; until then the module is inert.
-setLocale(useSettingsStore.getState().settings.language)
+// Boot locale: resolved lazily by ensureBootLocale() on the first `t` /
+// `getLocale` call (see its docblock for why this is not a module-load
+// init). Every read path — `t`, `tPlural`, `getLocale`, and therefore
+// `useT`'s subscribed components — funnels through it.

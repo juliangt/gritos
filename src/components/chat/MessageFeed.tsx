@@ -1,18 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageItem } from './MessageItem'
 import { NewMessagesButton } from './NewMessagesButton'
-import {
-  FIFO_SEPARATOR_TEXT,
-  RECOVERED_SEPARATOR_TEXT,
-  expiredSeparatorText,
-  shouldAutoScroll,
-} from '../../lib/feed'
-import {
-  HISTORY_ASK_CONFIRM,
-  HISTORY_ASK_DISMISS,
-  HISTORY_ASK_LABEL,
-  HISTORY_ASK_TEXT,
-} from '../settings/messages'
+import { expiredSeparatorText, shouldAutoScroll } from '../../lib/feed'
+import { useT } from '../../i18n/index'
 import type { Message, Peer } from '../../stores/useAppStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { useMentionCandidates } from '../../hooks/useMentionCandidates'
@@ -51,6 +41,7 @@ export function MessageFeed(props: {
    */
   historyAsk?: { onAsk: () => void; onDismiss: () => void }
 }) {
+  const t = useT()
   const scrollRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
   const previousTailRef = useRef<{ length: number; firstId: string | null; lastId: string | null }>(
@@ -122,7 +113,7 @@ export function MessageFeed(props: {
         className="flex h-full flex-col gap-1 overflow-y-auto px-4 py-3"
       >
         {props.fifoTrimmed && (
-          <p className="my-1 text-center text-xs text-muted">{FIFO_SEPARATOR_TEXT}</p>
+          <p className="my-1 text-center text-xs text-muted">{t('feed.fifoSeparator')}</p>
         )}
         {props.expiredCount > 0 && (
           <p className="my-1 text-center text-xs text-muted">
@@ -130,7 +121,7 @@ export function MessageFeed(props: {
           </p>
         )}
         {props.recoveredCount > 0 && (
-          <p className="my-1 text-center text-xs text-muted">{RECOVERED_SEPARATOR_TEXT}</p>
+          <p className="my-1 text-center text-xs text-muted">{t('feed.recoveredSeparator')}</p>
         )}
         {props.messages.length === 0 && props.emptyStateText !== undefined && (
           <p role="status" className="my-8 text-center text-sm text-muted">
@@ -139,24 +130,24 @@ export function MessageFeed(props: {
         )}
         {props.historyAsk !== undefined && (
           <section
-            aria-label={HISTORY_ASK_LABEL}
+            aria-label={t('settings.historyAskLabel')}
             className="mx-auto my-2 w-full max-w-sm rounded-md border border-border bg-surface px-3 py-2 text-center"
           >
-            <p className="text-sm">{HISTORY_ASK_TEXT}</p>
+            <p className="text-sm">{t('settings.historyAskText')}</p>
             <div className="mt-2 flex justify-center gap-2">
               <button
                 type="button"
                 onClick={props.historyAsk.onAsk}
                 className="rounded bg-accent px-3 py-1.5 text-xs font-semibold text-accent-text hover:opacity-90"
               >
-                {HISTORY_ASK_CONFIRM}
+                {t('settings.historyAskConfirm')}
               </button>
               <button
                 type="button"
                 onClick={props.historyAsk.onDismiss}
                 className="rounded border border-border px-3 py-1.5 text-xs hover:border-accent"
               >
-                {HISTORY_ASK_DISMISS}
+                {t('settings.historyAskDismiss')}
               </button>
             </div>
           </section>

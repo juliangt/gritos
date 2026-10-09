@@ -9,19 +9,8 @@ import { getMutedNickname, useSettingsStore } from '../../stores/useSettingsStor
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { Toggle } from './Toggle'
-import {
-  EMPTY_MUTED_PEERS_TEXT,
-  GLOBAL_DM_TOGGLE_HINT,
-  GLOBAL_DM_TOGGLE_LABEL,
-  MUTED_PEERS_HEADING,
-  MUTED_PEERS_HINT,
-  P2P_IP_EXPOSURE_NOTE,
-  SHARE_HISTORY_HINT,
-  SHARE_HISTORY_LABEL,
-  TURN_CREDENTIAL_STORAGE_HINT,
-  UNMUTE_PEER_ACTION,
-  unmutePeerAction,
-} from './messages'
+import { useT } from '../../i18n/index'
+import { unmutePeerAction } from './messages'
 
 /**
  * Privacy tab (RF-07/RF-08): the notifications toggle with its
@@ -72,6 +61,7 @@ function permissionText(state: NotificationPermissionState): string {
 }
 
 export function PrivacyTab() {
+  const t = useT()
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   // Never bootstraps an identity: regeneration acts on the session only.
@@ -129,9 +119,9 @@ export function PrivacyTab() {
           `gritos:settings`; only an explicit peer request can ever pull
           history, and only while the consent is on. */}
       <Toggle
-        label={SHARE_HISTORY_LABEL}
+        label={t('settings.shareHistoryLabel')}
         checked={settings.shareHistory}
-        hint={SHARE_HISTORY_HINT}
+        hint={t('settings.shareHistoryHint')}
         onChange={(shareHistory) => setSettings({ shareHistory })}
       />
 
@@ -141,9 +131,9 @@ export function PrivacyTab() {
           of the signal-backed channels), so the UI stays declarative. The
           hint is the honest §9.5 exposure disclosure. */}
       <Toggle
-        label={GLOBAL_DM_TOGGLE_LABEL}
+        label={t('contact.toggleLabel')}
         checked={settings.globalDm}
-        hint={GLOBAL_DM_TOGGLE_HINT}
+        hint={t('contact.toggleHint')}
         onChange={(globalDm) => setSettings({ globalDm })}
       />
 
@@ -151,12 +141,12 @@ export function PrivacyTab() {
           `gritos:settings` with their last-seen nickname when known this
           session (the map rides memory-only); each row unmutes. */}
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <h3 className="text-sm font-semibold">{MUTED_PEERS_HEADING}</h3>
+        <h3 className="text-sm font-semibold">{t('settings.mutedPeersHeading')}</h3>
         {settings.mutedFingerprints.length === 0 ? (
-          <p className="text-xs text-muted">{EMPTY_MUTED_PEERS_TEXT}</p>
+          <p className="text-xs text-muted">{t('settings.emptyMutedPeers')}</p>
         ) : (
           <>
-            <p className="text-xs text-muted">{MUTED_PEERS_HINT}</p>
+            <p className="text-xs text-muted">{t('settings.mutedPeersHint')}</p>
             <ul className="flex flex-col gap-1">
               {settings.mutedFingerprints.map((fingerprint) => {
                 const nickname = getMutedNickname(fingerprint)
@@ -173,7 +163,7 @@ export function PrivacyTab() {
                       onClick={() => unmuteFromUi(fingerprint)}
                       className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:border-accent"
                     >
-                      {UNMUTE_PEER_ACTION}
+                      {t('common.unmute')}
                     </button>
                   </li>
                 )
@@ -185,14 +175,11 @@ export function PrivacyTab() {
 
       {/* Issue #35 — P2P transparency: what room peers (and trackers) see. */}
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">{P2P_IP_EXPOSURE_NOTE}</p>
+        <p className="text-xs text-muted">{t('settings.p2pIpExposureNote')}</p>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">
-          {TURN_CREDENTIAL_STORAGE_HINT} They are configured in the Network tab; turn off «Remember
-          TURN credentials in this browser» there so they only live in the session’s memory.
-        </p>
+        <p className="text-xs text-muted">{t('settings.turnCredentialAtRestNote')}</p>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">

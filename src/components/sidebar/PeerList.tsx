@@ -6,13 +6,7 @@ import { disambiguatedNickname } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { ConfirmDialog } from '../common/ConfirmDialog'
-import {
-  MUTE_DM_DIALOG_BODY,
-  MUTE_DM_DIALOG_CONFIRM_LABEL,
-  MUTE_DM_DIALOG_TITLE,
-  MUTE_PEER_ACTION,
-  UNMUTE_PEER_ACTION,
-} from '../settings/messages'
+import { useT } from '../../i18n/index'
 
 /**
  * *Pares* section (RF-06): peers of the active view with nickname and
@@ -28,6 +22,7 @@ import {
  * fingerprint (tooltip and copy) plus a visible rotation warning.
  */
 export function PeerList({ room }: { room: Room | null }) {
+  const t = useT()
   const [menuPeerId, setMenuPeerId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   // Issue #95 — peer waiting for the mute confirmation (open DM channel).
@@ -196,7 +191,7 @@ export function PeerList({ room }: { room: Room | null }) {
                       onClick={() => unmutePeer(peer)}
                       className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
                     >
-                      {UNMUTE_PEER_ACTION}
+                      {t('common.unmute')}
                     </button>
                   ) : (
                     <button
@@ -206,7 +201,7 @@ export function PeerList({ room }: { room: Room | null }) {
                       onClick={() => requestMute(peer)}
                       className="rounded px-2 py-1 text-left hover:bg-bg disabled:text-muted"
                     >
-                      {MUTE_PEER_ACTION}
+                      {t('common.mute')}
                     </button>
                   )}
                 </div>
@@ -221,9 +216,9 @@ export function PeerList({ room }: { room: Room | null }) {
           future DMs will be ignored too (phase 2 receive-path enforcement). */}
       <ConfirmDialog
         open={confirmMutePeer !== null}
-        title={MUTE_DM_DIALOG_TITLE}
-        body={MUTE_DM_DIALOG_BODY}
-        confirmLabel={MUTE_DM_DIALOG_CONFIRM_LABEL}
+        title={t('settings.muteDmDialogTitle')}
+        body={t('settings.muteDmDialogBody')}
+        confirmLabel={t('common.mute')}
         danger
         onConfirm={() => {
           if (confirmMutePeer !== null) applyMute(confirmMutePeer)

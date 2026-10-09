@@ -2,8 +2,12 @@
  * Friendly English nickname generator — spec RF-01: friendly hyphenated
  * nicknames such as 'fox-bold' or 'moon-wary' (noun-adjective, the exact
  * shape of the RF-01/§10.2 examples, English wordlists per issue #121).
- * Two curated lowercase ascii lists (~60 entries each).
+ * Two curated lowercase ascii lists (~60 entries each). The GENERATED
+ * nicknames are protocol data (they travel in envelopes and are matched
+ * case-insensitively), not UI copy — deliberately NOT localized.
  */
+
+import { en } from '../i18n/en'
 
 export const NICKNAME_MIN_LENGTH = 2
 export const NICKNAME_MAX_LENGTH = 24
@@ -202,9 +206,21 @@ export function generateNickname(): string {
   return candidate
 }
 
-/** RF-01 — inline validation message for an invalid nickname (English UI copy, issue #112). */
-export const NICKNAME_ERROR_TEXT =
-  'Use 2 to 24 characters: letters, numbers, spaces, hyphens and underscores.'
+/**
+ * RF-01 — inline validation message for an invalid nickname. Issue #119
+ * phase 2 — i18n: the string lives in `src/i18n/en.ts` under
+ * `errors.nicknameInvalid`; this export is a LEGACY SHIM resolved ONCE at
+ * module load (NOT locale-live), kept for the test suites and the two
+ * not-yet-migrated consumers (OnboardingScreen, DebugPanel — both phase 3).
+ *
+ * It reads the `en` dictionary DIRECTLY (pure data, no imports) instead of
+ * calling `t()`: this module sits on the import cycle i18n → settings
+ * store → lib/crypto/dm → lib/p2p/protocol → lib/nickname → i18n, and a
+ * module-load `t()` here would run while `i18n/index` is still partially
+ * initialized. Module-load time is always pre-boot in every entry order,
+ * so the resolved value is the same English string `t` would return.
+ */
+export const NICKNAME_ERROR_TEXT = en['errors.nicknameInvalid']
 
 /**
  * RF-06 — duplicate-nickname disambiguation: when two or more peers in the

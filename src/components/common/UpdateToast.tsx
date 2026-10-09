@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
 import { onUpdateReady } from '../../lib/pwa/registerSw'
-import {
-  UPDATE_AVAILABLE_TEXT,
-  UPDATE_RELOAD_BUTTON,
-  UPDATE_TOAST_DISMISS_LABEL,
-} from '../settings/messages'
+import { useT } from '../../i18n/index'
 
 /**
  * Update toast (issue #104, phase 4): mounted once at App level, it shows
@@ -22,6 +18,7 @@ import {
  * toast waits in the corner.
  */
 export function UpdateToast() {
+  const t = useT()
   const [visible, setVisible] = useState(false)
 
   // Subscribe for the lifetime of the mount; onUpdateReady returns the
@@ -36,19 +33,19 @@ export function UpdateToast() {
       aria-label="New app version"
       className="fixed bottom-4 right-4 z-50 flex items-center gap-3 border border-border bg-surface px-3 py-2 text-xs shadow-lg"
     >
-      <p className="min-w-0 flex-1 text-muted">{UPDATE_AVAILABLE_TEXT}</p>
+      <p className="min-w-0 flex-1 text-muted">{t('common.updateAvailable')}</p>
       <button
         type="button"
         onClick={() => window.location.reload()}
         className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
       >
-        {UPDATE_RELOAD_BUTTON}
+        {t('common.updateReload')}
       </button>
       <button
         type="button"
         onClick={() => setVisible(false)}
-        aria-label={UPDATE_TOAST_DISMISS_LABEL}
-        title={UPDATE_TOAST_DISMISS_LABEL}
+        aria-label={t('common.updateToastDismiss')}
+        title={t('common.updateToastDismiss')}
         className="shrink-0 rounded px-1 text-muted hover:text-text"
       >
         ✕
