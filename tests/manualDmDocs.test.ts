@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
+import limitations from '../docs/limitations.md?raw'
+import security from '../docs/security.md?raw'
 import spec from '../docs/spec.md?raw'
 import runbook from '../docs/runbook-trackers.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
@@ -24,7 +26,7 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  *     names the shipped surfaces (engine, manager, RF-07 seam),
  *  7. the §9.2 / §8.2 one-line cross-references (ephemeral keys ride the
  *     invite blob; `manual:` pins share the same key and wipe),
- *  8. the README feature bullet + softened limitation 7 + security-model
+ *  8. the features-reference bullet + softened limitations item 7 + security reference
  *     clause, and the runbook's zero-infrastructure pointer,
  *  9. the manual QA-97 matrix in `docs/qa-checklist.md`.
  *
@@ -84,22 +86,22 @@ describe('manual DM phase-4 documentation (issue #97)', () => {
     )
   })
 
-  it('README: features bullet for the trackerless manual DM', () => {
-    expect(readme).toContain('**Trackerless DMs via manual invite (issue #97)**')
-    expect(readme).toContain('zero infrastructure')
-    expect(readme).toContain('TOFU fingerprint comparison surfaced before the first message')
+  it('features reference: bullet for the trackerless manual DM', () => {
+    expect(features).toContain('**Trackerless DMs via manual invite (issue #97)**')
+    expect(features).toContain('zero infrastructure')
+    expect(features).toContain('TOFU fingerprint comparison surfaced before the first message')
   })
 
-  it('README: limitation 7 softened with the manual-path caveat', () => {
-    expect(readme).toContain('7. **DMs usually need a shared room:**')
-    expect(readme).toContain(
+  it('limitations reference: item 7 softened with the manual-path caveat', () => {
+    expect(limitations).toContain('7. **DMs usually need a shared room:**')
+    expect(limitations).toContain(
       'the manual invite wizard (issue #97) is the deliberate zero-infrastructure exception',
     )
   })
 
-  it('README: security-model clause on the blobs and their manual: pins', () => {
-    expect(readme).toContain('never message data')
-    expect(readme).toContain('reserved `manual:` keys')
+  it('security reference: clause on the blobs and their manual: pins', () => {
+    expect(security).toContain('never message data')
+    expect(security).toContain('reserved `manual:` keys')
   })
 
   it('runbook: the zero-infrastructure path when trackers are unreachable', () => {

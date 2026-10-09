@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   computeFingerprint,
   createSessionIdentity,
+  displayFingerprint,
   exportIdentityJwks,
   exportRawPublicKey,
   formatFingerprint,
@@ -60,6 +61,17 @@ describe('fingerprint (spec §9.1, issue #23: 128 bits)', () => {
     const fullDigest = 'a31f09bc77d24e5a51c0ffee12345678' + '99'.repeat(16)
     expect(fullDigest).toHaveLength(64)
     expect(formatFingerprint(fullDigest)).toBe('A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678')
+  })
+
+  // Issue #122 — every surface renders the SAME spaced 8×4 form no matter
+  // which spelling the transport stored (room/manual keep the spaced display
+  // string, the signal path the canonical one).
+  it('displayFingerprint normalizes both stored spellings into the display form', () => {
+    const spaced = 'A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678'
+    expect(displayFingerprint('a31f09bc77d24e5a51c0ffee12345678')).toBe(spaced)
+    expect(displayFingerprint(spaced)).toBe(spaced)
+    expect(displayFingerprint('a31f 09bc 77d2 4e5a 51c0 ffee 1234 5678')).toBe(spaced)
+    expect(displayFingerprint('a31f09bc77d24e5a51c0ffee12345678' + '99'.repeat(16))).toBe(spaced)
   })
 
   it('matches the required format regex for real keys', async () => {

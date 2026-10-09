@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
 import spec from '../docs/spec.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 
@@ -8,7 +8,7 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  * fingerprint). The docs-only phase of the issue, so the guard pins the
  * documentation to the shipped behavior:
  *
- *  1. the README's "Privacy controls" bullet documents the mute feature and
+ *  1. the features reference's "Privacy controls" bullet documents the mute feature and
  *     keeps its five-`gritos:*`-keys claim — the mute list rides inside
  *     `gritos:settings`, it is NOT a sixth key,
  *  2. spec §8.1 grows the `mutedFingerprints` field while §8.2 still lists
@@ -23,14 +23,14 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  */
 
 describe('local moderation documentation (issue #95)', () => {
-  it('documents the mute feature under the README privacy controls bullet', () => {
-    expect(readme).toContain('**Privacy controls**')
-    expect(readme).toContain('mute by identity fingerprint')
-    expect(readme).toContain('no server, no reports')
+  it('documents the mute feature under the features-reference privacy bullet', () => {
+    expect(features).toContain('**Privacy controls**')
+    expect(features).toContain('mute by identity fingerprint')
+    expect(features).toContain('no server, no reports')
   })
 
-  it('keeps the README five-keys claim alongside the new feature', () => {
-    expect(readme).toContain('only five `gritos:*` keys')
+  it('keeps the features-reference five-keys claim alongside the new feature', () => {
+    expect(features).toContain('only five `gritos:*` keys')
   })
 
   it('adds mutedFingerprints to the spec §8.1 Settings shape', () => {

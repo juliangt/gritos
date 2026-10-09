@@ -4,7 +4,7 @@
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | **Audience**   | App users (one page)                                                                                                              |
 | **Symptom**    | Non-blocking banner "No tracker access — check your connection or configure alternative trackers" with the "Open settings" button |
-| **References** | README "Public trackers notice" · `docs/qa-checklist.md` M6-10 · issue #51                                                        |
+| **References** | docs/security.md "Public trackers notice" · `docs/qa-checklist.md` M6-10 · issue #51                                                        |
 
 ---
 
@@ -28,7 +28,7 @@ The notice is fired by a heuristic (an active room with no peers and no signals 
 1. Open **Settings → Network** (or press "Open settings" on the banner itself).
 2. Under "Add tracker", add one or more working `wss://` URLs (your own if you have them; only URLs starting with `wss://` are accepted).
 3. Press **Reconnect all**: network changes are not applied until the active rooms reconnect.
-4. If you leave the list **empty**, Trystero's default trackers are used again (the five embedded in each release; they are listed in the README, section "Public trackers notice").
+4. If you leave the list **empty**, Trystero's default trackers are used again (the five embedded in each release; they are listed in docs/security.md, section "Public trackers notice").
 
 ## What you cannot fix yourself
 

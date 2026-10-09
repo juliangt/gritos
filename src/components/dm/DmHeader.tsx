@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { DmChannel } from '../../stores/useAppStore'
+import { displayFingerprint } from '../../lib/crypto/identity'
 import {
   DM_DISCONNECTED_TEXT,
   DM_KEY_CHANGED_HINT,
@@ -17,7 +18,10 @@ import { SettingsModal } from '../settings/SettingsModal'
  * `keyChanged` (the peer's live fingerprint differs from the pinned
  * first-seen one) a visible warning replaces the verification notice; it is
  * advisory — the pinned fingerprint stays displayed and messages keep
- * flowing.
+ * flowing. Issue #122: whichever form the transport stored (the room and
+ * manual paths keep the spaced display string, the signal path the canonical
+ * one) renders through `displayFingerprint` so every DM header shows the
+ * identical spaced 8×4 groups.
  */
 export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: () => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -49,7 +53,9 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
             </span>
           </div>
           <p className="truncate text-xs text-muted">
-            <span className="font-mono">{channel.peerFingerprint ?? '— — —'}</span>
+            <span className="font-mono">
+              {channel.peerFingerprint === null ? '— — —' : displayFingerprint(channel.peerFingerprint)}
+            </span>
             <span>{' · '}</span>
             <span>{channel.keyChanged ? DM_KEY_CHANGED_WARNING : DM_VERIFY_NOTICE}</span>
           </p>
