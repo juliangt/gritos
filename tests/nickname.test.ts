@@ -12,11 +12,11 @@ import {
   sanitizeRemoteNick,
 } from '../src/lib/nickname'
 
-/** Generated shape: lowercase sustantivo-adjetivo, es charset, one hyphen. */
-const GENERATED_PATTERN = /^[a-záéíóúñü]+-[a-záéíóúñü]+$/
+/** Generated shape: lowercase noun-adjective, ascii charset, one hyphen. */
+const GENERATED_PATTERN = /^[a-z]+-[a-z]+$/
 
 describe('generateNickname (RF-01)', () => {
-  it('produces valid sustantivo-adjetivo nicknames', () => {
+  it('produces valid noun-adjective nicknames', () => {
     for (let i = 0; i < 200; i += 1) {
       const nickname = generateNickname()
       expect(nickname).toMatch(GENERATED_PATTERN)
@@ -33,11 +33,11 @@ describe('generateNickname (RF-01)', () => {
     }
   })
 
-  it('draws from curated ~60-entry lists with the es charset', () => {
+  it('draws from curated ~60-entry ascii lists', () => {
     expect(NICKNAME_NOUNS.length).toBeGreaterThanOrEqual(60)
     expect(NICKNAME_ADJECTIVES.length).toBeGreaterThanOrEqual(60)
     for (const word of [...NICKNAME_NOUNS, ...NICKNAME_ADJECTIVES]) {
-      expect(word).toMatch(/^[a-záéíóúñü]+$/)
+      expect(word).toMatch(/^[a-z]+$/)
     }
   })
 

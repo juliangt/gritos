@@ -63,7 +63,7 @@ Each requirement includes verifiable acceptance criteria. The `RF-xx` prefixes a
 
 ### RF-01 · Onboarding
 
-The user opens the URL and, if there is no local identity, is presented with a centered screen showing the app name, a nickname field and a "surprise me" button that autogenerates a friendly Spanish nickname (format `noun-adjective`, e.g. `zorro-bravo`, `luna-cauta`).
+The user opens the URL and, if there is no local identity, is presented with a centered screen showing the app name, a nickname field and a "surprise me" button that autogenerates a friendly English nickname (format `noun-adjective`, e.g. `fox-bold`, `moon-wary`).
 
 **Acceptance**
 
@@ -138,8 +138,8 @@ A room whose content is encrypted with a key derived from a password and whose *
 - Per room, a list of connected peers with nickname and colored latency dot: 🟢 <150 ms, 🟡 150–400 ms, 🔴 >400 ms, ⚪ no data (no answer yet, or degraded).
 - Measurement: `ping`/`pong` every 5 s per peer and room; 3 consecutive failures → degraded ⚪ state until an answer returns.
 - When a peer connects: nickname, fingerprint and public key are announced (`presence` + `keys` actions).
-- Duplicate nicknames in the same room are shown with a short peerId suffix (`zorro-bravo·a3f1`) to disambiguate.
-- Peer joins/leaves are reflected in the feed with discreet system lines ("— luna-cauta joined —").
+- Duplicate nicknames in the same room are shown with a short peerId suffix (`fox-bold·a3f1`) to disambiguate.
+- Peer joins/leaves are reflected in the feed with discreet system lines ("— moon-wary joined —").
 
 ### RF-07 · Settings
 
@@ -305,7 +305,7 @@ The three actions of the global signal channel (issue #105: `whoami`, `knock`, `
   "id": "uuid-v4", // crypto.randomUUID() — deduplication
   "ts": 1760000000000, // the author's Date.now()
   "from": "peerId-trystero",
-  "nick": "zorro-bravo", // the author's nickname at send time
+  "nick": "fox-bold", // the author's nickname at send time
   "kind": "chat", // "chat" | "dm"
   "to": "peerId", // only in kind:"dm"
   "enc": false, // true if body is base64(IV ‖ ct)
@@ -494,15 +494,15 @@ Aesthetic: minimalist, fast, clean. Moderate information density, system sans ty
 │ SIDEBAR      │ #general 🔒              🟢 5 peers  ⚙    │
 │ (collapsible)├──────────────────────────────────────────┤
 │ ACTIVE       │  message feed                            │
-│  #lobby  ②   │  ┌ zorro-bravo · 12:04                   │
+│  #lobby  ②   │  ┌ fox-bold · 12:04                   │
 │  #general    │  │ hello **world**                       │
 │ SUGGESTED    │  └ ✓✓                                    │
-│  #dev        │  ┌ luna-cauta · 12:05                    │
+│  #dev        │  ┌ moon-wary · 12:05                    │
 │  #random     │  │ `code` _test_                         │
 │ RECENT       │  …                                       │
-│ [+ Join]     │  — luna-cauta is typing… —               │
+│ [+ Join]     │  — moon-wary is typing… —               │
 │ PEERS        ├──────────────────────────────────────────┤
-│  ● luna-cauta│  [ message (Markdown)… ]        [Send]   │
+│  ● moon-wary│  [ message (Markdown)… ]        [Send]   │
 └──────────────┴──────────────────────────────────────────┘
 ```
 
@@ -538,8 +538,8 @@ Discovery on public trackers typically takes 2–6 s; the UI must communicate it
 
 ### 10.5 Notifications
 
-- Title: "gritos — mention in #general" or "gritos — DM from luna-cauta".
-- Body: "zorro-bravo: hello @you…". Click → focus + opening of the originating view.
+- Title: "gritos — mention in #general" or "gritos — DM from moon-wary".
+- Body: "fox-bold: hello @you…". Click → focus + opening of the originating view.
 
 ### 10.6 Themes
 
@@ -633,7 +633,7 @@ The "QR" button (issue #100) opens a popover that encodes **exactly that same li
 {
   "v": 1, // the blob format's version — unrelated to the envelopes' `v` (7.2)
   "role": "invite", // "invite" (offers) | "answer" (answers)
-  "nick": "zorro-bravo", // advisory, never verified: identity is the fingerprint (9.1)
+  "nick": "fox-bold", // advisory, never verified: identity is the fingerprint (9.1)
   "fp": "A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678", // identity fingerprint (9.1)
   "idKey": "<base64>", // the raw identity public key, 65 B (9.1)
   "ephKey": "<base64>", // the raw session-ephemeral public key, 65 B (9.2)

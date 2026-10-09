@@ -94,7 +94,7 @@ src/
 │   ├── p2p/        roomManager (sole Trystero surface), protocol (Envelope §7)
 │   ├── crypto/     identity, keyVault (at-rest wrapping), dm (E2EE), roomKey (PBKDF2), hashes (roomId)
 │   ├── markdown/   safe Markdown-subset renderer (no raw HTML)
-│   └── nickname.ts es-ES 'adjetivo-sustantivo' generator
+│   └── nickname.ts English 'noun-adjective' generator
 ├── stores/         useAppStore (AppState §8.1), useSettingsStore, useUiStore
 ├── hooks/          useRoom · useLatency · useTheme · useNotifications · …
 ├── styles/         Tailwind 4 entry + AA-audited theme tokens (light/dark)
