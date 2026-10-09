@@ -13,9 +13,9 @@
 The browser failed to reach **any** discovery tracker (the public servers that introduce peers to each other by exchanging the initial SDP _handshake_). Consequences:
 
 - Rooms that are **already connected keep working**: messages travel over direct WebRTC channels, not through the trackers.
-- **New peers** cannot be discovered: a freshly opened room stays on "Searching for peers on the torrent network…" indefinitely.
+- **New peers** cannot be discovered: a room left searching never finds anyone, and once a ~15 s expiry finds no tracker socket open it shows the error banner below.
 
-The notice is fired by a heuristic (an active room with no peers and no signals for ~15 s), not by an exact network diagnosis: it can appear without a real failure and be slow to appear if the network drops mid-way. It degrades gracefully: it never blocks the app nor disconnects anyone.
+The notice is not a blind timer: the heuristic behind it re-arms every ~15 s while a room searches, and each expiry consults the live tracker sockets (issue #125). It fires only when an expiry finds **no tracker socket open** — a real outage, not a quiet room. An empty room over healthy trackers is signaling, not breakage: it stays on "Searching for peers on the torrent network…" (the re-armed check still catches a network that drops later, within ~15 s of the drop) and the header adds the subtle hint "Still waiting for peers — the room may be empty" instead of the error. It degrades gracefully: it never blocks the app nor disconnects anyone.
 
 ## First checks
 

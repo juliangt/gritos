@@ -47,4 +47,15 @@ describe('tracker documentation (issue #51)', () => {
   it('runbook names the tracker-error banner', () => {
     expect(runbook).toContain('No tracker access')
   })
+
+  it('runbook pins the socket-check mechanism behind the notice (issue #125)', () => {
+    // The banner fires only when an expiry finds NO open relay socket; the
+    // empty-room and re-arm halves of that contract are both pinned, and the
+    // pre-#125 "no peers and no signals" wording stays dead.
+    expect(runbook).toContain('each expiry consults the live tracker sockets (issue #125)')
+    expect(runbook).toContain('no tracker socket open')
+    expect(runbook).toContain('Still waiting for peers — the room may be empty')
+    expect(runbook).toContain('re-arms every ~15 s')
+    expect(runbook).not.toContain('no peers and no signals')
+  })
 })
