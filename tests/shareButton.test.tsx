@@ -106,7 +106,7 @@ describe('ChatHeader — Share room (issue #41)', () => {
 
     await screen.findByText('Link copied')
     const url = writeText.mock.calls[0]?.[0] as string
-    expect(url).toContain('#sala=secreta')
+    expect(url).toContain('#room=secreta')
     expect(url).not.toContain('password')
   })
 

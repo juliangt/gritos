@@ -30,7 +30,7 @@ const FP_LOWER = 'a31f09bc77d24e5a51c0ffee12345678'
 
 describe('signal channel constants (spec §12.5)', () => {
   it('pins the well-known swarm name literally', () => {
-    expect(SIGNAL_ROOM_NAME).toBe('_gritos/senal/v1')
+    expect(SIGNAL_ROOM_NAME).toBe('_gritos/signal/v1')
     // '/' is outside the RF-02 join charset ([a-z0-9_-]): the name can
     // never be typed into the join popover — only the manager joins it.
     expect(SIGNAL_ROOM_NAME).toContain('/')
@@ -61,10 +61,10 @@ describe('deriveSignalRoomId (spec §9.4/§12.5)', () => {
 
   it('differs from the id of any joinable room (name or password derivation)', async () => {
     const signalId = await deriveSignalRoomId()
-    const names = ['lobby', 'general', 'dev', 'random', 'mi-sala', 'test', 'senal', 'gritos']
+    const names = ['lobby', 'general', 'dev', 'random', 'mi-sala', 'test', 'signal', 'gritos']
     const roomIds = await Promise.all([
       ...names.map((name) => deriveRoomId(name)),
-      deriveRoomId('_gritos/senal/v1', 'password'),
+      deriveRoomId('_gritos/signal/v1', 'password'),
       deriveRoomId('lobby', 'lobby'),
     ])
     for (const roomId of roomIds) {

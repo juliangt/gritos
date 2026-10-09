@@ -1,6 +1,6 @@
 /**
- * Issue #105 (spec §12.5) — the global DM signaling channel ("canal
- * global"): a dedicated, well-known Trystero swarm where peers who opted in
+ * Issue #105 (spec §12.5) — the global DM signaling channel: a dedicated,
+ * well-known Trystero swarm where peers who opted in
  * can be knocked BY IDENTITY FINGERPRINT; an accepted knock opens an E2EE
  * DM backed by that same swarm.
  *
@@ -28,7 +28,7 @@ import { isValidFingerprint } from '../validateSettings'
  * spec §9.4) can ever discover it — the appId is the peer-discovery
  * namespace.
  */
-export const SIGNAL_ROOM_NAME = '_gritos/senal/v1'
+export const SIGNAL_ROOM_NAME = '_gritos/signal/v1'
 
 /**
  * The signal swarm's roomId (spec §9.4/§12.5): hex(SHA-256)[0..31] of
@@ -105,8 +105,8 @@ function sanitizeNote(note: string): string {
  * the canonical fingerprint rule (issue #95: canonicalFingerprint → exactly
  * 32 hex; stored CANONICAL, both the spaced display form and either hex
  * case are accepted) and `from.nick` must survive sanitizeRemoteNick with
- * something legible — the nick IS the consent card («@nick quiere abrir un
- * DM contigo»), no peerId-prefix fallback exists on the signal swarm (same
+ * something legible — the nick IS the consent card («@nick wants to open a
+ * DM with you»), no peerId-prefix fallback exists on the signal swarm (same
  * reasoning as file-meta's `name`, spec §12.4). `note`, when present, must
  * be a string of at most NOTE_MAX_LENGTH RAW characters — oversize is
  * attacker input (honest senders never pad) and drops the whole knock —

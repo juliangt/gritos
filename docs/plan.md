@@ -58,7 +58,7 @@ gritos/
 │   │   │   └── hashes.ts      # SHA-256/uuid/roomId (spec 9.4)
 │   │   ├── markdown/
 │   │   │   └── render.tsx     # safe subset renderer (RF-03)
-│   │   └── nickname.ts        # noun-adjective generator (es-ES)
+│   │   └── nickname.ts        # noun-adjective generator (en)
 │   ├── stores/
 │   │   ├── useAppStore.ts     # the spec's AppState (8.1)
 │   │   └── useSettingsStore.ts
@@ -128,7 +128,7 @@ Covers (spec): 6.3, 6.5, 7 (the full protocol), 9.4, RF-06 partial.
 
 Covers (spec): RF-01, RF-02 (no password), RF-03, RF-06 (peer UI), 10.1–10.4, 10.6, RNF-05 partial.
 
-- [ ] `OnboardingScreen` (RF-01): input + "surprise me" (`nickname.ts` with es-ES lists, tests), basic identity persistence (no keys yet — they arrive in M3).
+- [ ] `OnboardingScreen` (RF-01): input + "surprise me" (`nickname.ts` with English wordlists, tests), basic identity persistence (no keys yet — they arrive in M3).
 - [ ] Layout: collapsible sidebar (`Ctrl/Cmd+B`, mobile drawer), header, feed, input (10.1).
 - [ ] Sidebar: Active (unread badge + status), Suggested (`#lobby #general #dev #random`), Recent (`rememberRooms`), a `[+ Join]` popover with name validation (RF-02), a Peers section with latency dots.
 - [ ] `ChatInput`: Enter/Shift+Enter, auto-resize to 6 lines, the 4000 limit with counter, `typing` throttle, a local queue while `searching`.
@@ -232,7 +232,7 @@ Strict recommended order; M3 and M4 **may** be swapped if validating the encrypt
 | `crypto/identity` | generation → stable fingerprint; regeneration → different fingerprint; persistence/reload restores the pair.                                                                |
 | `markdown/render` | the full subset renders; `<script>`, `<img onerror>`, `[x](javascript:…)`, HTML attributes and entities are escaped; links http/https only; correct length and line breaks. |
 | `p2p/protocol`    | dedup by id; `v≠1` ignored; payloads >64 KB discarded; a `dm` with a foreign `to` filtered; receipt batches ≤50.                                                            |
-| `nickname`        | valid format, no immediate repetition, correct es-ES charset.                                                                                                               |
+| `nickname`        | valid format, no immediate repetition, correct charset.                                                                                                               |
 
 ### 6.2 Manual multi-tab (template per milestone)
 

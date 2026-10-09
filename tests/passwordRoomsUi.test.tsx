@@ -74,7 +74,7 @@ describe('JoinRoomPopover — encrypted room toggle (RF-05)', () => {
     expect(screen.queryByLabelText('Room password')).not.toBeInTheDocument()
   })
 
-  it('requires a non-empty password when the toggle is on (inline Spanish error)', () => {
+  it('requires a non-empty password when the toggle is on (inline error)', () => {
     render(<JoinRoomPopover onJoined={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Room name'), {
@@ -205,7 +205,7 @@ describe('encrypted placeholder rendering (RF-05)', () => {
         fifoTrimmed={false}
         expiredCount={0}
         recoveredCount={0}
-        ariaLabel="Mensajes de la sala"
+        ariaLabel="Room messages"
       />,
     )
     expect(screen.getByText(ENCRYPTED_MESSAGE_PLACEHOLDER)).toBeInTheDocument()

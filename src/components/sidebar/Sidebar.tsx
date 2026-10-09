@@ -11,7 +11,7 @@ import { useRoomManager } from '../../hooks/useRoomManager'
 /**
  * Collapsible sidebar (spec §10.1): *Activas*, *Sugeridas*, *Recientes*
  * (RF-02), [+ Unirse] popover, the *Pares* section of the active view
- * (RF-06) and the *Mensajes directos* channels with their unread badges
+ * (RF-06) and the "Direct messages" channels with their unread badges
  * (RF-04). Visibility/collapse is owned by the layout (desktop persistence
  * under `gritos:ui`; mobile drawer), this component renders the content.
  */
@@ -42,7 +42,7 @@ export function Sidebar(props: {
 
   const roomList = Object.values(rooms)
   // Issue #97 — room-backed and manual channels render as one list; manual
-  // channels are marked «(sin sala)» inside DmList.
+  // channels are marked "(no room)" inside DmList.
   const dmList = [...Object.values(dms), ...Object.values(manualDms)]
   const activeRoomId =
     activeView?.kind === 'room' && rooms[activeView.id] !== undefined ? activeView.id : null

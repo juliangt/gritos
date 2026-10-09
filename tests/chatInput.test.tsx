@@ -14,7 +14,7 @@ import {
 import { NICKNAME_ERROR_TEXT } from '../src/lib/nickname'
 import { SLASH_COMMANDS } from '../src/lib/slashCommands'
 import {
-  SIN_EXPIRY_LABEL,
+  NO_EXPIRY_LABEL,
   SLASH_POPUP_LABEL,
   TTL_1H_LABEL,
   TTL_30S_LABEL,
@@ -232,7 +232,7 @@ describe('ChatInput TTL selector (issue #96)', () => {
   it('renders with an accessible name and the No expiry default in room mode', () => {
     render(<ChatInput room={makeRoom()} />)
     expect(ttlSelect()).toHaveValue('')
-    expect(within(ttlSelect()).getByRole('option', { name: SIN_EXPIRY_LABEL })).toHaveValue('')
+    expect(within(ttlSelect()).getByRole('option', { name: NO_EXPIRY_LABEL })).toHaveValue('')
     expect(within(ttlSelect()).getByRole('option', { name: TTL_30S_LABEL })).toHaveValue('30')
     expect(within(ttlSelect()).getByRole('option', { name: TTL_5M_LABEL })).toHaveValue('300')
     expect(within(ttlSelect()).getByRole('option', { name: TTL_1H_LABEL })).toHaveValue('3600')

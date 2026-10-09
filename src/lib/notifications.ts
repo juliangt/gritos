@@ -76,7 +76,7 @@ export function isNotificationPermissionGranted(): boolean {
 }
 
 /**
- * Requests browser notification permission (RF-07 Privacidad). Never
+ * Requests browser notification permission (RF-07, the Privacy tab). Never
  * throws; resolves to undefined when the API does not exist.
  */
 export function requestNotificationPermission(): Promise<string | undefined> {

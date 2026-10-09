@@ -207,7 +207,7 @@ describe('notifyMention (RF-09 room trigger)', () => {
   })
 })
 
-describe('permission helpers (RF-07 Privacidad)', () => {
+describe('permission helpers (RF-07, the Privacy tab)', () => {
   it('reflects granted / denied / default states', () => {
     stubEnvironment({ permission: 'granted' })
     expect(notificationPermissionState()).toBe('granted')

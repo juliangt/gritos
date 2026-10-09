@@ -10,7 +10,7 @@ import { useRoomManager } from '../../hooks/useRoomManager'
 /**
  * '[+ Unirse]' popover (RF-02/RF-05): free-name join with live normalization
  * preview and inline validation (no error modal). The optional encrypted-
- * room password hides behind the 'sala cifrada' toggle with the one-line
+ * room password hides behind the 'encrypted room' toggle with the one-line
  * explanation; when the toggle is on a non-empty password is required —
  * the room key and the §9.4 roomId both derive from it. Room-cap rejections
  * surface the exact manager message "Active room limit reached (N)":
@@ -57,7 +57,7 @@ export function JoinRoomPopover(props: {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onDismiss])
 
-  // Live normalization preview: '#mi-sala' while typing, '—' when invalid.
+  // Live normalization preview: '#my-room' while typing, '—' when invalid.
   const normalized = normalizeRoomName(name)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {

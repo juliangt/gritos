@@ -10,7 +10,7 @@ import {
 import { MAX_MESSAGE_TTL_S, MAX_PLAINTEXT_LENGTH, MIN_MESSAGE_TTL_S } from '../../lib/p2p/protocol'
 import type { Room } from '../../stores/useAppStore'
 import {
-  SIN_EXPIRY_LABEL,
+  NO_EXPIRY_LABEL,
   SLASH_POPUP_LABEL,
   TTL_1H_LABEL,
   TTL_30S_LABEL,
@@ -479,7 +479,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
             onChange={(event) => setTtlDraft(event.target.value)}
             className="rounded-md border border-border bg-surface px-1 py-1 text-xs focus:border-accent disabled:opacity-50"
           >
-            <option value="">{SIN_EXPIRY_LABEL}</option>
+            <option value="">{NO_EXPIRY_LABEL}</option>
             {TTL_CHOICES.map((choice) => (
               <option key={choice.seconds} value={choice.seconds}>
                 {choice.label}

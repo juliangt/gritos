@@ -208,7 +208,7 @@ describe('ChatHeader QR popover (issue #100, Phase 2)', () => {
     const dialog = openQrPopover({ name: 'secreta', hasPassword: true })
 
     const link = buildRoomLink('secreta')
-    expect(link).toContain('#sala=secreta')
+    expect(link).toContain('#room=secreta')
     expect(within(dialog).getByText(link)).toBeInTheDocument()
     expect(dialog.textContent).not.toContain('password')
 

@@ -20,14 +20,14 @@ import { useMentionCandidates } from '../../hooks/useMentionCandidates'
 /**
  * Message feed (RF-03 / §10.4, reused by rooms and DMs per RF-04): flat
  * bubbles with smart scrolling — auto-scroll only while the user is ≤150 px
- * from the bottom; otherwise a floating '↓ N mensajes nuevos' button
+ * from the bottom; otherwise a floating 'N new messages' button
  * accumulates arrivals and jumps to the bottom on click. The FIFO separator
  * renders once the 500-message cap has trimmed the history, the TTL
  * separator once the expiry sweep has removed messages (issue #96) and the
  * recovered separator once opt-in history gossip has appended rows (issue
  * #102). An empty feed shows a discrete invitation (M6 empty states) and —
  * rooms only, via the optional `historyAsk` prop — the one-tap card that
- * offers to ask the sala for its recent messages (issue #102 phase 3:
+ * offers to ask the room for its recent messages (issue #102 phase 3:
  * nothing automatic, dismissed by either button). `role="log"` + the
  * polite live region announce arrivals to assistive tech without stealing
  * focus (RNF-05).

@@ -63,7 +63,7 @@ Each requirement includes verifiable acceptance criteria. The `RF-xx` prefixes a
 
 ### RF-01 · Onboarding
 
-The user opens the URL and, if there is no local identity, is presented with a centered screen showing the app name, a nickname field and a "surprise me" button that autogenerates a friendly Spanish nickname (format `noun-adjective`, e.g. `zorro-bravo`, `luna-cauta`).
+The user opens the URL and, if there is no local identity, is presented with a centered screen showing the app name, a nickname field and a "surprise me" button that autogenerates a friendly English nickname (format `noun-adjective`, e.g. `fox-bold`, `moon-wary`).
 
 **Acceptance**
 
@@ -138,8 +138,8 @@ A room whose content is encrypted with a key derived from a password and whose *
 - Per room, a list of connected peers with nickname and colored latency dot: 🟢 <150 ms, 🟡 150–400 ms, 🔴 >400 ms, ⚪ no data (no answer yet, or degraded).
 - Measurement: `ping`/`pong` every 5 s per peer and room; 3 consecutive failures → degraded ⚪ state until an answer returns.
 - When a peer connects: nickname, fingerprint and public key are announced (`presence` + `keys` actions).
-- Duplicate nicknames in the same room are shown with a short peerId suffix (`zorro-bravo·a3f1`) to disambiguate.
-- Peer joins/leaves are reflected in the feed with discreet system lines ("— luna-cauta joined —").
+- Duplicate nicknames in the same room are shown with a short peerId suffix (`fox-bold·a3f1`) to disambiguate.
+- Peer joins/leaves are reflected in the feed with discreet system lines ("— moon-wary joined —").
 
 ### RF-07 · Settings
 
@@ -305,7 +305,7 @@ The three actions of the global signal channel (issue #105: `whoami`, `knock`, `
   "id": "uuid-v4", // crypto.randomUUID() — deduplication
   "ts": 1760000000000, // the author's Date.now()
   "from": "peerId-trystero",
-  "nick": "zorro-bravo", // the author's nickname at send time
+  "nick": "fox-bold", // the author's nickname at send time
   "kind": "chat", // "chat" | "dm"
   "to": "peerId", // only in kind:"dm"
   "enc": false, // true if body is base64(IV ‖ ct)
@@ -494,15 +494,15 @@ Aesthetic: minimalist, fast, clean. Moderate information density, system sans ty
 │ SIDEBAR      │ #general 🔒              🟢 5 peers  ⚙    │
 │ (collapsible)├──────────────────────────────────────────┤
 │ ACTIVE       │  message feed                            │
-│  #lobby  ②   │  ┌ zorro-bravo · 12:04                   │
+│  #lobby  ②   │  ┌ fox-bold · 12:04                   │
 │  #general    │  │ hello **world**                       │
 │ SUGGESTED    │  └ ✓✓                                    │
-│  #dev        │  ┌ luna-cauta · 12:05                    │
+│  #dev        │  ┌ moon-wary · 12:05                    │
 │  #random     │  │ `code` _test_                         │
 │ RECENT       │  …                                       │
-│ [+ Join]     │  — luna-cauta is typing… —               │
+│ [+ Join]     │  — moon-wary is typing… —               │
 │ PEERS        ├──────────────────────────────────────────┤
-│  ● luna-cauta│  [ message (Markdown)… ]        [Send]   │
+│  ● moon-wary│  [ message (Markdown)… ]        [Send]   │
 └──────────────┴──────────────────────────────────────────┘
 ```
 
@@ -538,8 +538,8 @@ Discovery on public trackers typically takes 2–6 s; the UI must communicate it
 
 ### 10.5 Notifications
 
-- Title: "gritos — mention in #general" or "gritos — DM from luna-cauta".
-- Body: "zorro-bravo: hello @you…". Click → focus + opening of the originating view.
+- Title: "gritos — mention in #general" or "gritos — DM from moon-wary".
+- Body: "fox-bold: hello @you…". Click → focus + opening of the originating view.
 
 ### 10.6 Themes
 
@@ -569,7 +569,7 @@ Cross-cutting guarantees:
 
 ### 10.8 Room sharing and QR invite code (issues #41 and #100)
 
-The header's "⤴" button shares the room's deep link — `origin + path + #sala=<name>` (built by `buildRoomLink`, consumed by the `#sala=` routing of the onboarding and of `ChatLayout`) — via `navigator.share` with a clipboard fallback ("Link copied"). The link carries **only the name, never the password** (RF-05).
+The header's "⤴" button shares the room's deep link — `origin + path + #room=<name>` (built by `buildRoomLink`, consumed by the `#room=` routing of the onboarding and of `ChatLayout`) — via `navigator.share` with a clipboard fallback ("Link copied"). The link carries **only the name, never the password** (RF-05).
 
 The "QR" button (issue #100) opens a popover that encodes **exactly that same link** as a QR code: scanning it with another device's native camera lands on the join flow with the name prefilled. The QR **never contains the password** — in an encrypted room, the link only opens the join flow and signing in still asks for it (RF-05). The scan surface is **fixed**: near-black modules on white with their quiet zone, in light AND dark — scannability trumps the theme (the AA tokens guarantee contrast to human eyes, not to decoders). "Download PNG" exports the same symbol in high resolution (`gritos-room-<name>.png`), with the link as copyable text below as a fallback. The limit is documented in the popover itself ("The QR links to this same installation."): the link only works within this same installation — same origin and same `VITE_TRYSTERO_APP_ID` (issue #90); a QR from another installation joins nothing.
 
@@ -596,7 +596,7 @@ The "QR" button (issue #100) opens a popover that encodes **exactly that same li
 
 1. P2P file/image transfer over DataChannel (chunking, backpressure, progress, reassembly; issue #103; design note in 12.4): **implemented** — directed 1:1 transfer with the receiver's consent before any byte (the first `file-ack` carrying the credit window IS the acceptance, 7.1), chunks sealed with the conversation's key (a password room or a DM v2; a public room = DTLS only, with a pre-send warning and the state on the card), an 8-chunk credit window with a 30 s stall, a 20 MB cap and 3 concurrent transfers per peer, all memory-only (8.1); the sealed meta and compression remain future work — they would demand a v2 of the file protocol (12.4).
 2. Opt-in history sync between peers (_gossip_): relay of the last N messages to late joiners (issue #102): **implemented** — an explicit request (`hist-req`) plus consent on both ends (8.1), up to 50 messages under the "— messages recovered from peers —" separator (7.3) and no persistence whatsoever; the optional hardening remains future work: envelopes signed at creation (the signature line sketched in 12.1).
-3. Global DM channel (a dedicated signaling room) for DMs with no shared room (issue #105; design note in 12.5): **implemented** — a dedicated, well-known swarm (`SIGNAL_ROOM_NAME = '_gritos/senal/v1'`, only builds with the same appId, 9.4) strictly bound to the opt-in `Settings.globalDm` setting (8.1, default false): `whoami {nick, fp}` presence with an LRU of 100, fingerprint `knock`s (directed, with no content field beyond the ≤ 140 note, 5 per peer per minute, the mute gate before parsing) and `knock-ack {accept}` consent; an accepted knock opens on BOTH sides an E2EE DM backed by the same swarm — the v2 derivation unchanged (9.2) behind the `DmTransport` seam, a fingerprint-keyed channel marked "(global)" in DmList —; turning the setting off leaves the swarm ON THE SPOT and moves its channels to "The peer has disconnected" (RF-04); the channel carries knocks and keys, never content, and is not a presence directory — its only persisted trace is the TOFU pins of contacts with an open channel (8.2).
+3. Global DM channel (a dedicated signaling room) for DMs with no shared room (issue #105; design note in 12.5): **implemented** — a dedicated, well-known swarm (`SIGNAL_ROOM_NAME = '_gritos/signal/v1'`, only builds with the same appId, 9.4) strictly bound to the opt-in `Settings.globalDm` setting (8.1, default false): `whoami {nick, fp}` presence with an LRU of 100, fingerprint `knock`s (directed, with no content field beyond the ≤ 140 note, 5 per peer per minute, the mute gate before parsing) and `knock-ack {accept}` consent; an accepted knock opens on BOTH sides an E2EE DM backed by the same swarm — the v2 derivation unchanged (9.2) behind the `DmTransport` seam, a fingerprint-keyed channel marked "(global)" in DmList —; turning the setting off leaves the swarm ON THE SPOT and moves its channels to "The peer has disconnected" (RF-04); the channel carries knocks and keys, never content, and is not a presence directory — its only persisted trace is the TOFU pins of contacts with an open channel (8.2).
 4. Massive rooms: a relay topology or SFU.
 5. PWA (service worker, icons, offline shell; issue #104): **implemented** — manifest + icons with standalone installation safe under subpaths, an offline shell precached under a content-versioned `gritos-shell-v<digest>` cache, and an update flow with a local toast ("New version available — [Reload]", 10.9) over a worker that never calls `skipWaiting()`; offline is the SHELL ONLY — P2P still needs network (10.3) and there is no push (11.5) —; iOS remains documented partial support (11.10).
 6. i18n and editable/deletable messages.
@@ -633,7 +633,7 @@ The "QR" button (issue #100) opens a popover that encodes **exactly that same li
 {
   "v": 1, // the blob format's version — unrelated to the envelopes' `v` (7.2)
   "role": "invite", // "invite" (offers) | "answer" (answers)
-  "nick": "zorro-bravo", // advisory, never verified: identity is the fingerprint (9.1)
+  "nick": "fox-bold", // advisory, never verified: identity is the fingerprint (9.1)
   "fp": "A31F 09BC 77D2 4E5A 51C0 FFEE 1234 5678", // identity fingerprint (9.1)
   "idKey": "<base64>", // the raw identity public key, 65 B (9.1)
   "ephKey": "<base64>", // the raw session-ephemeral public key, 65 B (9.2)
@@ -721,9 +721,9 @@ Reconnection mid-transfer: **the transfer fails, with no resume** — offsets, w
 
 ### 12.5 Design note: global signaling channel — fingerprint knocks (issue #105)
 
-**Status: implemented (issue #105).** What is sketched here is in production: the constants and payload validators live in `lib/p2p/signalChannelConstants.ts` —their single home, next to no other module—, the swarm manager in `lib/p2p/signalChannel.ts` (join/leave bound to `Settings.globalDm` by subscribing to the settings store — panic RF-08 traverses it when resetting —, the LRU presence, the knock budget, the mute gates and the `dm`/`typing`/`receipt` transport), the `DmTransport` interface in `lib/p2p/dmTransport.ts` — BOTH backends, room and signal, behind the same minimal surface — and the contact flow (phase 3) at the "+ contact" entry of `DmList`: "My contact" (a copyable fingerprint plus the `#contacto=<fp>` QR, #100's machinery) and "Contact by fingerprint" (paste a fingerprint → knock → a cancellable wait), with the consent cards under the chat area. The four points the note left to the phases' interpretation settled thus: the signal-backed channels live in the SAME `dms` slice of the store (8.1) keyed by the canonical fingerprint with the additive `global: true` marker — the "(global)" sibling of the manual "(no room)" —, and they do not collide with the room ones because the keys are disjoint namespaces (Trystero peerIds of ~46 characters versus 32 hex); the TOFU pins (8.2) are only written when a channel is OPENED — accepting, sending or receiving a `dm` —: presence alone never touches `gritos:tofu`, so sweeping the swarm cannot leave behind a persisted stranger directory (the no-directory restriction holds on disk too); the consent cards are NON-blocking — a `role="status"` strip under the chat area, one per distinct knocker (the latest wins), never a modal a spammer could open —; and the `onKnockResolved` seam resolves ONCE per acknowledged knock, AFTER opening the channel — a knock without an ack (the peer left, the ack was lost) never resolves: the wait dialog stays cancellable, with no wire timeout (a documented limitation of the seam) —. What follows is the approved design note the implementation followed. The product constraint that rules over everything else: the channel is dumb — it exists only so that two fingerprints can find each other when BOTH sides opted in, it carries knocks and keys, never conversation content, and it is **not** a global presence directory.
+**Status: implemented (issue #105).** What is sketched here is in production: the constants and payload validators live in `lib/p2p/signalChannelConstants.ts` —their single home, next to no other module—, the swarm manager in `lib/p2p/signalChannel.ts` (join/leave bound to `Settings.globalDm` by subscribing to the settings store — panic RF-08 traverses it when resetting —, the LRU presence, the knock budget, the mute gates and the `dm`/`typing`/`receipt` transport), the `DmTransport` interface in `lib/p2p/dmTransport.ts` — BOTH backends, room and signal, behind the same minimal surface — and the contact flow (phase 3) at the "+ contact" entry of `DmList`: "My contact" (a copyable fingerprint plus the `#contact=<fp>` QR, #100's machinery) and "Contact by fingerprint" (paste a fingerprint → knock → a cancellable wait), with the consent cards under the chat area. The four points the note left to the phases' interpretation settled thus: the signal-backed channels live in the SAME `dms` slice of the store (8.1) keyed by the canonical fingerprint with the additive `global: true` marker — the "(global)" sibling of the manual "(no room)" —, and they do not collide with the room ones because the keys are disjoint namespaces (Trystero peerIds of ~46 characters versus 32 hex); the TOFU pins (8.2) are only written when a channel is OPENED — accepting, sending or receiving a `dm` —: presence alone never touches `gritos:tofu`, so sweeping the swarm cannot leave behind a persisted stranger directory (the no-directory restriction holds on disk too); the consent cards are NON-blocking — a `role="status"` strip under the chat area, one per distinct knocker (the latest wins), never a modal a spammer could open —; and the `onKnockResolved` seam resolves ONCE per acknowledged knock, AFTER opening the channel — a knock without an ack (the peer left, the ack was lost) never resolves: the wait dialog stays cancellable, with no wire timeout (a documented limitation of the seam) —. What follows is the approved design note the implementation followed. The product constraint that rules over everything else: the channel is dumb — it exists only so that two fingerprints can find each other when BOTH sides opted in, it carries knocks and keys, never conversation content, and it is **not** a global presence directory.
 
-**The signaling swarm (phase 2).** A room derived like any other (9.4) from ONE constant, `SIGNAL_ROOM_NAME = '_gritos/senal/v1'`, defined in a single place (`lib/p2p/signalChannelConstants.ts`): `deriveSignalRoomId()` = `deriveRoomId(SIGNAL_ROOM_NAME)`, with the same hash asynchrony. Only the builds sharing the same `VITE_TRYSTERO_APP_ID` (issue #90; 9.4) see it: the appId is the discovery namespace, so forks and self-hostings have disjoint global channels with no new code. The name is unreachable from the rooms UI — RF-02's character set (`[a-z0-9_-]`) excludes the `/`—: nobody enters the channel through the join popover; only the signal manager joins it. Mixed-build degradation does not apply by construction: a build without the setting (or older than #105) never joins — there is no old peer INSIDE the swarm, and an unknown action between channel peers resolves per the 12.3 spike's conclusion (the payload stays parked with no handler, no error).
+**The signaling swarm (phase 2).** A room derived like any other (9.4) from ONE constant, `SIGNAL_ROOM_NAME = '_gritos/signal/v1'`, defined in a single place (`lib/p2p/signalChannelConstants.ts`): `deriveSignalRoomId()` = `deriveRoomId(SIGNAL_ROOM_NAME)`, with the same hash asynchrony. Only the builds sharing the same `VITE_TRYSTERO_APP_ID` (issue #90; 9.4) see it: the appId is the discovery namespace, so forks and self-hostings have disjoint global channels with no new code. The name is unreachable from the rooms UI — RF-02's character set (`[a-z0-9_-]`) excludes the `/`—: nobody enters the channel through the join popover; only the signal manager joins it. Mixed-build degradation does not apply by construction: a build without the setting (or older than #105) never joins — there is no old peer INSIDE the swarm, and an unknown action between channel peers resolves per the 12.3 spike's conclusion (the payload stays parked with no handler, no error).
 
 **Swarm actions (the phase-2 contract).** Three own ones, plus the two key actions reusing the room mold as-is:
 
@@ -746,7 +746,7 @@ Reconnection mid-transfer: **the transfer fails, with no resume** — offsets, w
 
 **Contact flow (the phase-3 contract).** Two entries:
 
-- **"My contact"** shares YOUR fingerprint: clipboard copy from day one, and a QR through #100's machinery (10.8) with a new hash parameter, `#contacto=<fp>` — the SAME discipline as `#sala=`: an optional leading `#`, percent-decoding tolerated, and the value is the fingerprint in canonical form (32 hex; the display form's spaces are tolerated and canonicalized with issue #95's rule) —, never a nickname or a password; a value that does not canonicalize to 32 hex does not route. Like every link of the app, it only works within this same installation (same origin and same appId, 10.8).
+- **"My contact"** shares YOUR fingerprint: clipboard copy from day one, and a QR through #100's machinery (10.8) with a new hash parameter, `#contact=<fp>` — the SAME discipline as `#room=`: an optional leading `#`, percent-decoding tolerated, and the value is the fingerprint in canonical form (32 hex; the display form's spaces are tolerated and canonicalized with issue #95's rule) —, never a nickname or a password; a value that does not canonicalize to 32 hex does not route. Like every link of the app, it only works within this same installation (same origin and same appId, 10.8).
 - **"Contact by fingerprint"**: paste a fingerprint → look it up in the channel's presence → `knock` → a consent card at the destination: "@nick wants to open a DM with you — [Accept] [Decline] [Mute]". Accepting answers `knock-ack {accept: true}` and BOTH sides open the signal-backed channel. Declining answers `accept: false` and **does not remember the rejected sender** — no contact store: per-session state, consistent with ephemerality (D2); the mute list (issue #95) DOES persist and mutes the knocker (12.4's gate: a muted peer's knock is discarded before parsing). "Mute" does both at once: `accept: false` plus the persistent mute.
 
 **§9.5 (the threat model's honesty).** Recorded IN 9.5: joining the global channel exposes IP, fingerprint and nickname to every opt-in peer; the default-off is the documented mitigation, and a knock reveals the knocker's interest — inherent.

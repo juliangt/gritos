@@ -157,7 +157,7 @@ export function reactionChipTooltip(nicknames: readonly string[]): string {
 export const TTL_SELECT_LABEL = 'Message expiry'
 
 /** Default option: the message lives for the session (no ttl on the wire). */
-export const SIN_EXPIRY_LABEL = 'No expiry'
+export const NO_EXPIRY_LABEL = 'No expiry'
 
 /** Per-message expiry choices offered by the selector. */
 export const TTL_30S_LABEL = '30 seconds'
@@ -181,10 +181,10 @@ export const MANUAL_DM_INVITE_ENTRY_TITLE =
 export const MANUAL_DM_BANNER_SHORTCUT = 'or connect without trackers'
 
 /** DmList marker on manual channels (spec §12.2: «(no room)»). */
-export const MANUAL_DM_NO_SALA_MARKER = '(no room)'
+export const MANUAL_DM_NO_ROOM_MARKER = '(no room)'
 
 /** Tooltip explaining the DmList marker. */
-export const MANUAL_DM_NO_SALA_TITLE =
+export const MANUAL_DM_NO_ROOM_TITLE =
   'Manually created conversation via invitation, without a room'
 
 /** DmList marker on signal-swarm channels (issue #105, spec §12.5: «(global)»). */

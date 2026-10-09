@@ -15,8 +15,8 @@ import {
 /**
  * Issue #105 phase 3 (spec §12.5) — the inbound-knock consent cards: one
  * non-blocking card per sender, rendered at the top of the chat area so the
- * request is answerable wherever the user is (the issue's «@nick quiere
- * abrir un DM contigo — [Aceptar] [Rechazar] [Silenciar]»). Inline cards
+ * request is answerable wherever the user is (the issue's "@nick wants to
+ * open a DM with you — [Accept] [Decline] [Mute]"). Inline cards
  * rather than a Modal on purpose: knocks are session-only, may queue (one
  * card per DISTINCT sender fingerprint, stacked; the manager already
  * collapses re-knocks from the same sender to the latest), and must never
@@ -24,10 +24,10 @@ import {
  * (5/min/peer) and the mute gate are the spam mitigation, the card stays a
  * status region (role="status", politely announced), not a focus trap.
  *
- * Actions: [Aceptar] answers knock-ack(true) and opens the DM view (the
- * manager opens the «(global)» channel on both sides' convention); [Rechazar]
+ * Actions: [Accept] answers knock-ack(true) and opens the DM view (the
+ * manager opens the «(global)» channel on both sides' convention); [Decline]
  * answers knock-ack(false) and forgets the sender (per-session state, no
- * contact store); [Silenciar] rejects AND persists the fingerprint into the
+ * contact store); [Mute] rejects AND persists the fingerprint into the
  * issue #95 mute list, whose gate drops every future knock from that sender
  * before any parse — the card simply never appears again.
  *

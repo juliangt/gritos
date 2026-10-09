@@ -22,7 +22,7 @@ import { HISTORY_ASK_TEXT, SHARE_HISTORY_LABEL } from '../src/components/setting
  * documentation to the shipped behavior:
  *
  *  1. the features reference bullet documents the two-sided consent (the
- *     request card plus the Privacidad toggle, off by default), the 50-cap,
+ *     request card plus the Privacy toggle, off by default), the 50-cap,
  *     the separator with its dimmed provenance rows, the replay guarantees
  *     (freshness bypass only, dedup both directions, zero arrival side
  *     effects), the password-room re-seal and the trust note,

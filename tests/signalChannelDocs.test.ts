@@ -14,7 +14,7 @@ import { DM_DISCONNECTED_TEXT } from '../src/lib/feed'
  *  1. the §12.5 subsection heading exists, is marked IMPLEMENTED, and the
  *     §12 roadmap item 3 carries its shipped summary,
  *  2. the single home of the constants and the well-known swarm name
- *     (`SIGNAL_ROOM_NAME = '_gritos/senal/v1'` → deriveSignalRoomId()),
+ *     (`SIGNAL_ROOM_NAME = '_gritos/signal/v1'` → deriveSignalRoomId()),
  *     with the #90 appId-namespace citation,
  *  3. the three signal actions and their exact envelopes (knock directed,
  *     no content field beyond the optional ≤140 note; whoami; knock-ack
@@ -30,8 +30,8 @@ import { DM_DISCONNECTED_TEXT } from '../src/lib/feed'
  *  7. the §9.5 addition (joining exposes IP + fingerprint + nickname to
  *     every opted-in peer; default-off is the mitigation; knocks reveal the
  *     knocker's interest),
- *  8. the phase 3 contact flow: `#contacto=<fp>` deep link (same
- *     discipline as `#sala=`), the exact consent card, rejected senders not
+ *  8. the phase 3 contact flow: `#contact=<fp>` deep link (same
+ *     discipline as `#room=`), the exact consent card, rejected senders not
  *     remembered, the mute gate before parsing, and the «(global)» DmList
  *     marker,
  *  9. mixed-version: the swarm is unreachable for old builds (they never
@@ -58,7 +58,7 @@ describe('global signal channel design note (issue #105)', () => {
 
   it('pins the single home of the constants and the well-known swarm name', () => {
     expect(spec).toContain('`lib/p2p/signalChannelConstants.ts`')
-    expect(spec).toContain("SIGNAL_ROOM_NAME = '_gritos/senal/v1'")
+    expect(spec).toContain("SIGNAL_ROOM_NAME = '_gritos/signal/v1'")
     expect(spec).toContain('deriveSignalRoomId()')
     expect(spec).toContain('deriveRoomId(SIGNAL_ROOM_NAME)')
   })
@@ -113,9 +113,9 @@ describe('global signal channel design note (issue #105)', () => {
     expect(spec).toContain("reveals the knocker's interest")
   })
 
-  it('pins the #contacto deep-link parameter and its parse rules', () => {
-    expect(spec).toContain('`#contacto=<fp>`')
-    expect(spec).toContain('SAME discipline as `#sala=`')
+  it('pins the #contact deep-link parameter and its parse rules', () => {
+    expect(spec).toContain('`#contact=<fp>`')
+    expect(spec).toContain('SAME discipline as `#room=`')
     expect(spec).toContain('does not canonicalize to 32 hex does not route')
   })
 
@@ -128,7 +128,7 @@ describe('global signal channel design note (issue #105)', () => {
     expect(spec).toContain('is discarded before parsing')
   })
 
-  it('pins the (global) DmList marker next to the manual (sin sala) precedent', () => {
+  it('pins the (global) DmList marker next to the manual (no room) precedent', () => {
     expect(spec).toContain('"(global)"')
     expect(spec).toContain('"(no room)"')
   })

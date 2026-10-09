@@ -9,24 +9,24 @@ import {
   GLOBAL_DM_MARKER_TITLE,
   MANUAL_DM_INVITE_ENTRY,
   MANUAL_DM_INVITE_ENTRY_TITLE,
-  MANUAL_DM_NO_SALA_MARKER,
-  MANUAL_DM_NO_SALA_TITLE,
+  MANUAL_DM_NO_ROOM_MARKER,
+  MANUAL_DM_NO_ROOM_TITLE,
 } from '../settings/messages'
 
 /**
- * *Mensajes directos* section (RF-04, §10.1): one row per open DM channel
+ * "Direct messages" section (RF-04, §10.1): one row per open DM channel
  * with the unread badge; clicking focuses the conversation, which clears
  * its badge. Channels whose peer left every shared room stay listed (their
  * history lives in memory) with a disconnected marker. With no channels the
  * section stays visible with a discrete empty state (M6) so the entry point
  * to DMs is discoverable. Issue #97 (§12.2): the header carries the
- * «+ invitación» entry to the manual-connection wizard, and trackerless
- * manual channels (room-backed rooms untouched) list with the «(sin sala)»
+ * "+ invite" entry to the manual-connection wizard, and trackerless
+ * manual channels (room-backed rooms untouched) list with the "(no room)"
  * marker. Issue #105 (§12.5): signal-swarm channels list with the sibling
- * «(global)» marker, and the header carries the «+ contacto» entry to the
+ * «(global)» marker, and the header carries the "+ contact" entry to the
  * contact flow — visible ONLY while the global-DM opt-in (`Settings.globalDm`)
  * is on, with the enabling toggle reachable from the entry's hint in
- * Ajustes → Privacidad.
+ * Settings → Privacy.
  */
 export function DmList(props: {
   channels: DmChannel[]
@@ -88,8 +88,8 @@ export function DmList(props: {
               >
                 <span className="truncate">{channel.peerNick}</span>
                 {channel.manual === true && (
-                  <span className="shrink-0 text-[10px] text-muted" title={MANUAL_DM_NO_SALA_TITLE}>
-                    {MANUAL_DM_NO_SALA_MARKER}
+                  <span className="shrink-0 text-[10px] text-muted" title={MANUAL_DM_NO_ROOM_TITLE}>
+                    {MANUAL_DM_NO_ROOM_MARKER}
                   </span>
                 )}
                 {channel.global === true && (

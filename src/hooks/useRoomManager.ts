@@ -108,7 +108,7 @@ export interface UseRoomManagerOptions {
   /**
    * Bootstraps an ephemeral session identity on mount. The onboarding
    * screen opts OUT: its identity (nickname + fresh keypair) is created on
-   * 'Entrar' and must not be replaced by an anonymous ephemeral one.
+   * 'Enter' and must not be replaced by an anonymous ephemeral one.
    */
   ensureIdentity?: boolean
 }

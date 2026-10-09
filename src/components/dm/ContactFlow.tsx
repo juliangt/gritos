@@ -37,12 +37,12 @@ import {
  * «+ contacto» entry (the manual-wizard entry precedent: one sidebar entry
  * opening one dialog with a pick screen). Two flows:
  *
- * - «Mi contacto»: the own fingerprint in the 8×4 display form, copyable
+ * "My contact": the own fingerprint in the 8×4 display form, copyable
  *   (clipboard with the readonly-textarea fallback), plus a QR encoding the
- *   `#contacto=<fp>` deep link — the #100 QR machinery reused
+ *   `#contact=<fp>` deep link — the #100 QR machinery reused
  *   (`buildQrMatrix`/`paintQr`/PNG download over `buildContactLink`) with
  *   the same-install caveat.
- * - «Contacto por huella»: paste a fingerprint → the local canonical-form
+ * - "Contact by fingerprint": paste a fingerprint → the local canonical-form
  *   check → `knockPeer` (the manager validates presence and throws the typed
  *   `KnockError`, surfaced as its inline line) → waiting → resolved through
  *   the manager's `onKnockResolved` seam: an accept lands the user in the
@@ -67,13 +67,13 @@ type KnockStatus = 'form' | 'waiting' | 'rejected'
 export function ContactFlow(props: {
   open: boolean
   onClose: () => void
-  /** Canonical fingerprint prefilled into the knock form (the `#contacto=` deep link). */
+  /** Canonical fingerprint prefilled into the knock form (the `#contact=` deep link). */
   initialFp?: string | null
 }) {
   const { open, onClose } = props
   const identity = useAppStore((state) => state.identity)
 
-  // A '#contacto=' prefill arrives at MOUNT time only (ChatLayout consumes
+  // A '#contact=' prefill arrives at MOUNT time only (ChatLayout consumes
   // the hash before the first render), so these lazy initializers seed the
   // knock screen directly. Every close path routes through handleClose —
   // which resets the dialog — so no reset-on-open effect is needed.

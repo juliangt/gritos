@@ -13,7 +13,7 @@ import { installFakeTrystero, type FakeTrysteroRoom } from './fakeTrystero'
 
 /**
  * RF-06 regression (validation audit): the ping/pong loop measures latency
- * "por par y sala" — EVERY active room must run its own 5 s loop, not just
+ * — per peer and room: must run its own 5 s loop, not just
  * the focused one, so background rooms keep fresh latency data and the
  * degraded ⚪ marking works there too.
  */

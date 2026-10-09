@@ -143,7 +143,7 @@ export function downloadQrPng(link: string, roomName: string): void {
 }
 
 /**
- * Issue #105 phase 3 — exports the contact QR (`#contacto=<fp>` link) as a
+ * Issue #105 phase 3 — exports the contact QR (`#contact=<fp>` link) as a
  * PNG download (`gritos-contact.png`). Same painting, same degrade-quietly
  * contract as the room export above.
  */
