@@ -104,12 +104,12 @@ export function paintQr(
  * filesystem-safe without extra escaping.
  */
 export function qrPngFilename(roomName: string): string {
-  return `gritos-sala-${roomName}.png`
+  return `gritos-room-${roomName}.png`
 }
 
 /** Issue #105 phase 3 — the contact QR's PNG filename (no variable part). */
 export function qrContactPngFilename(): string {
-  return 'gritos-contacto.png'
+  return 'gritos-contact.png'
 }
 
 /** Shared exporter: paints `link` offscreen and fires an `<a download>`. */
@@ -132,7 +132,7 @@ function exportQrPng(link: string, filename: string): void {
 }
 
 /**
- * Exports the QR of `link` as a PNG download (`gritos-sala-<name>.png`):
+ * Exports the QR of `link` as a PNG download (`gritos-room-<name>.png`):
  * paints an offscreen canvas at the export scale, `toBlob`s a PNG and fires
  * an `<a download>` click on an object URL. No-ops silently when the 2D
  * context is missing (jsdom) or the blob comes back null — same degrade-
@@ -144,7 +144,7 @@ export function downloadQrPng(link: string, roomName: string): void {
 
 /**
  * Issue #105 phase 3 — exports the contact QR (`#contacto=<fp>` link) as a
- * PNG download (`gritos-contacto.png`). Same painting, same degrade-quietly
+ * PNG download (`gritos-contact.png`). Same painting, same degrade-quietly
  * contract as the room export above.
  */
 export function downloadContactQrPng(link: string): void {

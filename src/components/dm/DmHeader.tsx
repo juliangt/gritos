@@ -28,8 +28,8 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
       <button
         type="button"
         onClick={props.onToggleSidebar}
-        aria-label="Mostrar u ocultar la barra lateral"
-        title="Mostrar u ocultar la barra lateral (Ctrl/Cmd+B)"
+        aria-label="Show or hide the sidebar"
+        title="Show or hide the sidebar (Ctrl/Cmd+B)"
         className="rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
       >
         ☰
@@ -45,7 +45,7 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
               className={`shrink-0 text-xs ${channel.available ? 'text-muted' : 'text-accent'}`}
               role="status"
             >
-              {channel.available ? '1 par' : DM_DISCONNECTED_TEXT}
+              {channel.available ? '1 peer' : DM_DISCONNECTED_TEXT}
             </span>
           </div>
           <p className="truncate text-xs text-muted">
@@ -64,8 +64,8 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
       <button
         type="button"
         onClick={() => setSettingsOpen(true)}
-        aria-label="Ajustes"
-        title="Ajustes"
+        aria-label="Settings"
+        title="Settings"
         className="ml-auto rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
       >
         ⚙

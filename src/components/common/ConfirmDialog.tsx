@@ -26,7 +26,7 @@ export function ConfirmDialog(props: {
           onClick={props.onCancel}
           className="rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent"
         >
-          {props.cancelLabel ?? 'Cancelar'}
+          {props.cancelLabel ?? 'Cancel'}
         </button>
         <button
           type="button"

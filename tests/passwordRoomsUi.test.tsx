@@ -19,7 +19,7 @@ import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { installFakeTrystero } from './fakeTrystero'
 
 /**
- * M4 UI (RF-05): the join popover's 'sala cifrada' toggle and password
+ * M4 UI (RF-05): the join popover's 'encrypted room' toggle and password
  * field, the not-found status text in the room header, the 🔒 indicators
  * and the encrypted-placeholder feed rendering.
  */
@@ -57,31 +57,31 @@ function room(overrides: Partial<Room> = {}): Room {
   }
 }
 
-describe('JoinRoomPopover — sala cifrada toggle (RF-05)', () => {
+describe('JoinRoomPopover — encrypted room toggle (RF-05)', () => {
   it('hides the password field until the toggle is on, then shows it with the exact hint', () => {
     render(<JoinRoomPopover onJoined={vi.fn()} />)
 
-    expect(screen.queryByLabelText('Contraseña de la sala')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Room password')).not.toBeInTheDocument()
     expect(screen.queryByText(ENCRYPTED_ROOM_HINT)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText('sala cifrada'))
-    expect(screen.getByLabelText('Contraseña de la sala')).toBeEnabled()
+    fireEvent.click(screen.getByLabelText('encrypted room'))
+    expect(screen.getByLabelText('Room password')).toBeEnabled()
     expect(screen.getByText(ENCRYPTED_ROOM_HINT)).toHaveTextContent(
-      'Quien no tenga la contraseña no encontrará esta sala.',
+      'Whoever lacks the password will not find this room.',
     )
 
-    fireEvent.click(screen.getByLabelText('sala cifrada'))
-    expect(screen.queryByLabelText('Contraseña de la sala')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('encrypted room'))
+    expect(screen.queryByLabelText('Room password')).not.toBeInTheDocument()
   })
 
   it('requires a non-empty password when the toggle is on (inline Spanish error)', () => {
     render(<JoinRoomPopover onJoined={vi.fn()} />)
 
-    fireEvent.change(screen.getByLabelText('Nombre de la sala'), {
+    fireEvent.change(screen.getByLabelText('Room name'), {
       target: { value: 'secreta' },
     })
-    fireEvent.click(screen.getByLabelText('sala cifrada'))
-    fireEvent.submit(screen.getByRole('form', { name: 'Unirse por nombre' }))
+    fireEvent.click(screen.getByLabelText('encrypted room'))
+    fireEvent.submit(screen.getByRole('form', { name: 'Join by name' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(EMPTY_ROOM_PASSWORD_TEXT)
     expect(fake.joinRoomFn).not.toHaveBeenCalled()
@@ -91,14 +91,14 @@ describe('JoinRoomPopover — sala cifrada toggle (RF-05)', () => {
     const onJoined = vi.fn()
     render(<JoinRoomPopover onJoined={onJoined} />)
 
-    fireEvent.change(screen.getByLabelText('Nombre de la sala'), {
+    fireEvent.change(screen.getByLabelText('Room name'), {
       target: { value: 'Mi Sala' },
     })
-    fireEvent.click(screen.getByLabelText('sala cifrada'))
-    fireEvent.change(screen.getByLabelText('Contraseña de la sala'), {
+    fireEvent.click(screen.getByLabelText('encrypted room'))
+    fireEvent.change(screen.getByLabelText('Room password'), {
       target: { value: 'clave-secreta' },
     })
-    fireEvent.submit(screen.getByRole('form', { name: 'Unirse por nombre' }))
+    fireEvent.submit(screen.getByRole('form', { name: 'Join by name' }))
 
     const expectedRoomId = await deriveRoomId('mi-sala', 'clave-secreta')
     await waitFor(() => {
@@ -113,10 +113,10 @@ describe('JoinRoomPopover — sala cifrada toggle (RF-05)', () => {
     const onJoined = vi.fn()
     render(<JoinRoomPopover onJoined={onJoined} />)
 
-    fireEvent.change(screen.getByLabelText('Nombre de la sala'), {
+    fireEvent.change(screen.getByLabelText('Room name'), {
       target: { value: 'publica' },
     })
-    fireEvent.submit(screen.getByRole('form', { name: 'Unirse por nombre' }))
+    fireEvent.submit(screen.getByRole('form', { name: 'Join by name' }))
 
     const expectedRoomId = await deriveRoomId('publica')
     await waitFor(() => {
@@ -136,13 +136,13 @@ describe('🔒 indicators and not-found status (RF-05)', () => {
         onToggleSidebar={vi.fn()}
       />,
     )
-    expect(screen.getByRole('img', { name: 'sala cifrada' })).toHaveTextContent('🔒')
+    expect(screen.getByRole('img', { name: 'encrypted room' })).toHaveTextContent('🔒')
     expect(screen.getByText(/#secreta/)).toBeInTheDocument()
   })
 
   it('ChatHeader keeps the plain name for public rooms', () => {
     render(<ChatHeader room={room({ id: 'room-x', name: 'lobby' })} onToggleSidebar={vi.fn()} />)
-    expect(screen.queryByRole('img', { name: 'sala cifrada' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'encrypted room' })).not.toBeInTheDocument()
   })
 
   it('a password room that exhausts the heuristic shows the single not-found message', () => {
@@ -152,9 +152,7 @@ describe('🔒 indicators and not-found status (RF-05)', () => {
         onToggleSidebar={vi.fn()}
       />,
     )
-    expect(
-      screen.getByText('No se ha encontrado la sala #secreta con esa contraseña'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Room #secreta not found with that password')).toBeInTheDocument()
   })
 
   it('a public room in error keeps the exact §10.3 tracker text', () => {
@@ -166,7 +164,7 @@ describe('🔒 indicators and not-found status (RF-05)', () => {
     )
     expect(
       screen.getByText(
-        'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos',
+        'No tracker access — check your connection or configure alternative trackers',
       ),
     ).toBeInTheDocument()
   })
@@ -183,7 +181,7 @@ describe('🔒 indicators and not-found status (RF-05)', () => {
         onJoinByName={vi.fn()}
       />,
     )
-    expect(screen.getByRole('img', { name: 'sala cifrada' })).toHaveTextContent('🔒')
+    expect(screen.getByRole('img', { name: 'encrypted room' })).toHaveTextContent('🔒')
   })
 })
 

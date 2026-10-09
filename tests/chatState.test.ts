@@ -137,7 +137,7 @@ describe('FIFO cap + separator flag (RF-03)', () => {
     const room = useAppStore.getState().rooms['room-1']
     expect(room?.messages).toHaveLength(500)
     expect(room?.fifoTrimmed).toBe(true)
-    expect(FIFO_SEPARATOR_TEXT).toBe('— mensajes anteriores descartados —')
+    expect(FIFO_SEPARATOR_TEXT).toBe('— earlier messages discarded —')
   })
 })
 
@@ -449,11 +449,11 @@ describe('arrival order + 2 s ts-window (spec §7.3)', () => {
 
 describe('connection status texts (spec §10.3 exact)', () => {
   it('uses the exact spec strings', () => {
-    expect(connectionStatusText('searching', 0)).toBe('Buscando pares en la red torrent…')
-    expect(connectionStatusText('searching', 3)).toBe('Conectando (3 pares encontrados)…')
-    expect(connectionStatusText('connected', 5)).toBe('Canal P2P establecido · 5 pares')
+    expect(connectionStatusText('searching', 0)).toBe('Searching for peers on the torrent network…')
+    expect(connectionStatusText('searching', 3)).toBe('Connecting (3 peers found)…')
+    expect(connectionStatusText('connected', 5)).toBe('P2P channel established · 5 peers')
     expect(connectionStatusText('error', 0)).toBe(
-      'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos',
+      'No tracker access — check your connection or configure alternative trackers',
     )
   })
 })
@@ -483,7 +483,7 @@ describe('room-name normalization (RF-02)', () => {
     expect(normalizeRoomName('a'.repeat(32))).toBe('a'.repeat(32))
     expect(normalizeRoomName('a'.repeat(33))).toBeNull()
     expect(INVALID_ROOM_NAME_TEXT).toBe(
-      'Solo minúsculas, números, guiones y guion bajo (1–32 caracteres)',
+      'Only lowercase letters, numbers, hyphens and underscores (1–32 characters)',
     )
     expect(SUGGESTED_ROOMS).toEqual(['lobby', 'general', 'dev', 'random'])
   })
@@ -504,25 +504,25 @@ describe('feed presentation helpers', () => {
   })
 
   it('builds the system lines (RF-06)', () => {
-    expect(joinSystemLine('luna-cauta')).toBe('— luna-cauta se ha unido —')
-    expect(leaveSystemLine('luna-cauta')).toBe('— luna-cauta ha salido —')
+    expect(joinSystemLine('luna-cauta')).toBe('— luna-cauta joined —')
+    expect(leaveSystemLine('luna-cauta')).toBe('— luna-cauta left —')
   })
 
   it('builds the typing line (RF-03)', () => {
     expect(typingStatusText([])).toBeNull()
-    expect(typingStatusText(['luna-cauta'])).toBe('luna-cauta está escribiendo…')
-    expect(typingStatusText(['a', 'b'])).toBe('2 personas están escribiendo…')
-    expect(typingStatusText(['a', 'b', 'c'])).toBe('3 personas están escribiendo…')
+    expect(typingStatusText(['luna-cauta'])).toBe('luna-cauta is typing…')
+    expect(typingStatusText(['a', 'b'])).toBe('2 people are typing…')
+    expect(typingStatusText(['a', 'b', 'c'])).toBe('3 people are typing…')
   })
 
   it('builds the new-messages button label (RF-03)', () => {
-    expect(newMessagesButtonText(1)).toBe('↓ 1 mensaje nuevo')
-    expect(newMessagesButtonText(7)).toBe('↓ 7 mensajes nuevos')
+    expect(newMessagesButtonText(1)).toBe('↓ 1 new message')
+    expect(newMessagesButtonText(7)).toBe('↓ 7 new messages')
   })
 
   it('builds the expiry separator line (issue #96, FIFO-separator wording)', () => {
-    expect(expiredSeparatorText(1)).toBe('— 1 mensaje expirado —')
-    expect(expiredSeparatorText(3)).toBe('— 3 mensajes expirados —')
+    expect(expiredSeparatorText(1)).toBe('— 1 expired message —')
+    expect(expiredSeparatorText(3)).toBe('— 3 expired messages —')
   })
 })
 
@@ -628,6 +628,6 @@ describe('recovered append + history-ask dismissal (issue #102 phase 3)', () => 
   })
 
   it('builds the recovered separator line (issue #102, exact string)', () => {
-    expect(RECOVERED_SEPARATOR_TEXT).toBe('— mensajes recuperados de pares —')
+    expect(RECOVERED_SEPARATOR_TEXT).toBe('— messages recovered from peers —')
   })
 })

@@ -14,13 +14,13 @@ import {
 import { Toggle } from './Toggle'
 
 /**
- * Red tab (RF-07): auto-join, custom trackers (wss://), ICE servers
+ * Network tab (RF-07): auto-join, custom trackers (wss://), ICE servers
  * (stun:/turn: with TURN credentials), the 1–6 active-room cap and the
- * "Reconectar todo" note + button that applies the settings via
+ * "Reconnect all" note + button that applies the settings via
  * reconnectAll(). Valid values persist instantly; invalid ones show the
- * inline Spanish error and are not saved. Issue #30: a toggle decides
+ * inline English error and are not saved. Issue #30: a toggle decides
  * whether TURN credentials persist in this browser — off keeps them
- * session-only (memory), and both states carry a Spanish disclosure.
+ * session-only (memory), and both states carry a disclosure.
  */
 
 /** wss:// scheme + something after it. */
@@ -33,8 +33,7 @@ function isValidTrackerUrl(value: string): boolean {
 function isValidIceUrl(value: string): boolean {
   const trimmed = value.trim()
   return (
-    (trimmed.startsWith('stun:') || trimmed.startsWith('turn:')) &&
-    trimmed.length > 'stun:'.length
+    (trimmed.startsWith('stun:') || trimmed.startsWith('turn:')) && trimmed.length > 'stun:'.length
   )
 }
 
@@ -150,20 +149,20 @@ export function NetworkTab() {
   return (
     <div className="flex flex-col gap-4">
       <Toggle
-        label="Auto-unirse a #lobby al iniciar"
+        label="Auto-join #lobby on start"
         checked={settings.autoJoinLobby}
         onChange={(autoJoinLobby) => setSettings({ autoJoinLobby })}
       />
 
       <fieldset className="flex flex-col gap-1">
-        <legend className="text-sm font-medium">Trackers personalizados</legend>
+        <legend className="text-sm font-medium">Custom trackers</legend>
         {trackerDraft.length === 0 && <p className="text-xs text-muted">{EMPTY_TRACKERS_HINT}</p>}
         {trackerDraft.map((url, index) => (
           <div key={index} className="flex items-center gap-1">
             <input
               type="url"
               value={url}
-              placeholder="wss://tracker.ejemplo:443"
+              placeholder="wss://tracker.example:443"
               aria-label={`Tracker ${index + 1}`}
               aria-invalid={url.trim() !== '' && !isValidTrackerUrl(url)}
               onChange={(event) => updateTrackerRow(index, event.target.value)}
@@ -171,8 +170,8 @@ export function NetworkTab() {
             />
             <button
               type="button"
-              aria-label={`Eliminar tracker ${index + 1}`}
-              title="Eliminar tracker"
+              aria-label={`Remove tracker ${index + 1}`}
+              title="Remove tracker"
               onClick={() => removeTrackerRow(index)}
               className="rounded px-1.5 py-1 text-xs text-muted hover:bg-bg hover:text-text"
             >
@@ -190,19 +189,19 @@ export function NetworkTab() {
           onClick={addTrackerRow}
           className="self-start rounded-md border border-border px-2 py-1 text-xs hover:border-accent"
         >
-          Añadir tracker
+          Add tracker
         </button>
       </fieldset>
 
       <fieldset className="flex flex-col gap-1">
-        <legend className="text-sm font-medium">Servidores ICE (STUN/TURN)</legend>
+        <legend className="text-sm font-medium">ICE servers (STUN/TURN)</legend>
         {iceDraft.length === 0 && <p className="text-xs text-muted">{EMPTY_ICE_HINT}</p>}
         {iceDraft.map((row, index) => (
           <div key={index} className="flex flex-col gap-1 rounded-md border border-border p-2">
             <div className="flex items-center gap-1">
               <select
                 value={row.kind}
-                aria-label={`Tipo de servidor ICE ${index + 1}`}
+                aria-label={`ICE server type ${index + 1}`}
                 onChange={(event) =>
                   updateIceRow(index, {
                     kind: event.target.value === 'turn' ? 'turn' : 'stun',
@@ -217,16 +216,16 @@ export function NetworkTab() {
               <input
                 type="text"
                 value={row.url}
-                placeholder="stun:host:puerto"
-                aria-label={`URL del servidor ICE ${index + 1}`}
+                placeholder="stun:host:port"
+                aria-label={`ICE server URL ${index + 1}`}
                 aria-invalid={row.url.trim() !== '' && !isValidIceUrl(row.url)}
                 onChange={(event) => updateIceRow(index, { url: event.target.value })}
                 className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs focus:border-accent"
               />
               <button
                 type="button"
-                aria-label={`Eliminar servidor ICE ${index + 1}`}
-                title="Eliminar servidor ICE"
+                aria-label={`Remove ICE server ${index + 1}`}
+                title="Remove ICE server"
                 onClick={() => removeIceRow(index)}
                 className="rounded px-1.5 py-1 text-xs text-muted hover:bg-bg hover:text-text"
               >
@@ -238,8 +237,8 @@ export function NetworkTab() {
                 <input
                   type="text"
                   value={row.username}
-                  placeholder="usuario"
-                  aria-label={`Usuario TURN ${index + 1}`}
+                  placeholder="username"
+                  aria-label={`TURN username ${index + 1}`}
                   autoComplete="off"
                   onChange={(event) => updateIceRow(index, { username: event.target.value })}
                   className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs focus:border-accent"
@@ -247,8 +246,8 @@ export function NetworkTab() {
                 <input
                   type="password"
                   value={row.credential}
-                  placeholder="contraseña"
-                  aria-label={`Contraseña TURN ${index + 1}`}
+                  placeholder="password"
+                  aria-label={`TURN password ${index + 1}`}
                   autoComplete="new-password"
                   onChange={(event) => updateIceRow(index, { credential: event.target.value })}
                   className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs focus:border-accent"
@@ -273,12 +272,12 @@ export function NetworkTab() {
           onClick={addIceRow}
           className="self-start rounded-md border border-border px-2 py-1 text-xs hover:border-accent"
         >
-          Añadir servidor ICE
+          Add ICE server
         </button>
       </fieldset>
 
       <Toggle
-        label="Recordar credenciales TURN en este navegador"
+        label="Remember TURN credentials in this browser"
         checked={settings.rememberTurnCredentials}
         hint={settings.rememberTurnCredentials ? undefined : TURN_CREDENTIAL_MEMORY_HINT}
         onChange={(rememberTurnCredentials) => setSettings({ rememberTurnCredentials })}
@@ -286,7 +285,7 @@ export function NetworkTab() {
 
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium" htmlFor="max-active-rooms">
-          Límite de salas activas
+          Active room limit
         </label>
         <input
           id="max-active-rooms"
@@ -313,7 +312,7 @@ export function NetworkTab() {
           onClick={() => void reconnectAll()}
           className="self-start rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-text hover:opacity-90"
         >
-          Reconectar todo
+          Reconnect all
         </button>
       </div>
     </div>

@@ -1,44 +1,44 @@
-# Gritos — Runbook: «Sin acceso a trackers»
+# Gritos — Runbook: "No tracker access"
 
-|                 |                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Audiencia**   | Usuarios de la app (una página)                                                                                                  |
-| **Síntoma**     | Banner no bloqueante «Sin acceso a trackers — revisa tu conexión o configura trackers alternativos» con el botón «Abrir ajustes» |
-| **Referencias** | README «Public trackers notice» · `docs/qa-checklist.md` M6-10 · issue #51                                                       |
+|                |                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Audience**   | App users (one page)                                                                                                              |
+| **Symptom**    | Non-blocking banner "No tracker access — check your connection or configure alternative trackers" with the "Open settings" button |
+| **References** | README "Public trackers notice" · `docs/qa-checklist.md` M6-10 · issue #51                                                        |
 
 ---
 
-## Qué significa
+## What it means
 
-El navegador no consigue contactar **ningún tracker** de descubrimiento (los servidores públicos que presentan a los pares entre sí intercambiando el _handshake_ SDP inicial). Consecuencias:
+The browser failed to reach **any** discovery tracker (the public servers that introduce peers to each other by exchanging the initial SDP _handshake_). Consequences:
 
-- Las salas **ya conectadas siguen funcionando**: los mensajes viajan por canales WebRTC directos, no por los trackers.
-- No se pueden descubrir **pares nuevos**: una sala recién abierta se queda en «Buscando pares en la red torrent…» indefinidamente.
+- Rooms that are **already connected keep working**: messages travel over direct WebRTC channels, not through the trackers.
+- **New peers** cannot be discovered: a freshly opened room stays on "Searching for peers on the torrent network…" indefinitely.
 
-El aviso lo dispara una heurística (una sala activa sin pares ni señales durante ~15 s), no un diagnóstico exacto de red: puede aparecer sin avería real y tardar en aparecer si la red cae a medias. Degrada con elegancia: nunca bloquea la app ni desconecta a nadie.
+The notice is fired by a heuristic (an active room with no peers and no signals for ~15 s), not by an exact network diagnosis: it can appear without a real failure and be slow to appear if the network drops mid-way. It degrades gracefully: it never blocks the app nor disconnects anyone.
 
-## Primeras comprobaciones
+## First checks
 
-1. **Conexión general**: ¿carga otra pestaña? ¿tienes WiFi o datos?
-2. **Cortafuegos o red corporativa/escolar**: los trackers hablan `wss://` (WebSocket cifrado, puerto 443). Algunas redes filtran WebSockets o dominios que no sean de su proxy. Prueba con otra red (p. ej. datos móviles).
-3. **VPN o ISP**: algunos proveedores, VPNs o filtros parentales bloquean el tráfico _torrent_ en general, incluidos los trackers WebSocket. Prueba a desactivar la VPN o cambiar de nodo.
+1. **General connectivity**: does another tab load? Do you have WiFi or mobile data?
+2. **Firewall or corporate/school network**: trackers speak `wss://` (encrypted WebSocket, port 443). Some networks filter WebSockets or any domain outside their proxy. Try another network (e.g. mobile data).
+3. **VPN or ISP**: some providers, VPNs or parental filters block _torrent_ traffic in general, WebSocket trackers included. Try disabling the VPN or switching nodes.
 
-## Autoayuda: trackers alternativos
+## Self-help: alternative trackers
 
-1. Abre **Ajustes → Red** (o pulsa «Abrir ajustes» en el propio banner).
-2. En «Añadir tracker», añade una o varias URLs `wss://` operativas (las tuyas propias si las tienes; solo se aceptan URLs que empiecen por `wss://`).
-3. Pulsa **Reconectar todo**: los cambios de red no se aplican hasta que las salas activas se reconectan.
-4. Si dejas la lista **vacía**, se vuelven a usar los trackers por defecto de Trystero (los cinco embebidos en cada release; están listados en el README, sección «Public trackers notice»).
+1. Open **Settings → Network** (or press "Open settings" on the banner itself).
+2. Under "Add tracker", add one or more working `wss://` URLs (your own if you have them; only URLs starting with `wss://` are accepted).
+3. Press **Reconnect all**: network changes are not applied until the active rooms reconnect.
+4. If you leave the list **empty**, Trystero's default trackers are used again (the five embedded in each release; they are listed in the README, section "Public trackers notice").
 
-## Lo que no puedes arreglar tú
+## What you cannot fix yourself
 
-- La lista por defecto **viaja dentro de la release**: si los trackers embebidos dejan de existir, ninguna configuración local los resucita. Abre un issue en el repositorio — el PR de Dependabot que actualice `@trystero-p2p/torrent` es el punto natural para revisar y renovar la lista.
-- No hay ningún tracker «de respaldo» oculto: sin trackers accesibles no hay descubrimiento. La app lo aguanta (la heurística y el banner degradan con gracia) y los pares ya conectados no se pierden por ello.
+- The default list **ships inside the release**: if the embedded trackers cease to exist, no local configuration resurrects them. Open an issue in the repository — the Dependabot PR that bumps `@trystero-p2p/torrent` is the natural checkpoint to review and renew the list.
+- There is no hidden "backup" tracker: without reachable trackers there is no discovery. The app endures it (the heuristic and the banner degrade gracefully) and the already-connected peers are not lost because of it.
 
-## El camino sin infraestructura: DM por invitación manual
+## The zero-infrastructure path: DM via manual invite
 
-Sin trackers no hay descubrimiento, pero un DM 1:1 sigue siendo posible: el asistente de invitación manual — «+ invitación» en la sección de mensajes directos, o el atajo del propio banner («o conéctate sin trackers») — establece un canal directo intercambiando dos blobs de invitación por copiar/pegar con la otra persona, por el canal que ya tengáis (correo, otro mensajero…). Es señalización con infraestructura literalmente cero: ni trackers ni servidor participan en el handshake, y el cifrado y la verificación por huella son los mismos que en cualquier DM (spec §12.2).
+Without trackers there is no discovery, but a 1:1 DM is still possible: the manual invite wizard — "+ invite" in the direct-messages section, or the shortcut on the banner itself ("or connect without trackers") — establishes a direct channel by exchanging two invite blobs copy/paste with the other person, over whatever channel you already share (email, another messenger…). It is signaling with literally zero infrastructure: neither trackers nor a server take part in the handshake, and the encryption and the fingerprint verification are the same as in any DM (spec §12.2).
 
-## Recordatorio
+## Reminder
 
-El tráfico P2P real (mensajes, DMs, presencia) **nunca pasa por los trackers**: solo el descubrimiento inicial y el intercambio SDP. Con la sala ya conectada puedes seguir chateando aunque todos los trackers caigan a la vez.
+The real P2P traffic (messages, DMs, presence) **never passes through the trackers**: only the initial discovery and the SDP exchange do. With the room already connected you can keep chatting even if every tracker falls at once.

@@ -279,7 +279,7 @@ describe('typing and system lines (issue #95)', () => {
     await fakePeerJoins(room, C, { nick: 'luna-cauta' })
     await flushMicrotasks()
     expect(storedRoom(roomId).messages.map((message) => message.text)).toEqual([
-      '— luna-cauta se ha unido —',
+      '— luna-cauta joined —',
     ])
 
     // Unmuted, the deferred join announcement goes through on the next
@@ -288,8 +288,8 @@ describe('typing and system lines (issue #95)', () => {
     await fakePeerJoins(room, A, { nick: 'zorro-bravo' })
     await flushMicrotasks()
     expect(storedRoom(roomId).messages.map((message) => message.text)).toEqual([
-      '— luna-cauta se ha unido —',
-      '— zorro-bravo se ha unido —',
+      '— luna-cauta joined —',
+      '— zorro-bravo joined —',
     ])
   })
 })
@@ -328,7 +328,7 @@ describe('receipts and ping/pong stay honest (issue #95)', () => {
     useSettingsStore.getState().muteFingerprint(A.fingerprint, 'zorro-bravo')
 
     // Receipts flip own messages to ✓✓ regardless of the mute.
-    const envelope = manager.sendChat(roomId, 'mía')
+    const envelope = manager.sendChat(roomId, 'mine')
     expect(envelope).not.toBeNull()
     room.receive('receipt', { ids: [envelope?.id] }, A.id)
     expect(storedRoom(roomId).messages[0]?.status).toBe('delivered')

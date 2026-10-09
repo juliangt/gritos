@@ -67,7 +67,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const textarea = () => screen.getByLabelText('Escribe un mensaje') as HTMLTextAreaElement
+const textarea = () => screen.getByLabelText('Write a message') as HTMLTextAreaElement
 
 describe('ChatInput (RF-03)', () => {
   it('sends on Enter and clears the field', () => {
@@ -80,20 +80,20 @@ describe('ChatInput (RF-03)', () => {
 
   it('inserts a newline on Shift+Enter without sending', () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: 'línea 1' } })
+    fireEvent.change(textarea(), { target: { value: 'line 1' } })
     fireEvent.keyDown(textarea(), { key: 'Enter', shiftKey: true })
     expect(sendChat).not.toHaveBeenCalled()
 
-    fireEvent.change(textarea(), { target: { value: 'línea 1\nlínea 2' } })
-    expect(textarea().value).toBe('línea 1\nlínea 2')
+    fireEvent.change(textarea(), { target: { value: 'line 1\nline 2' } })
+    expect(textarea().value).toBe('line 1\nline 2')
     expect(sendChat).not.toHaveBeenCalled()
   })
 
-  it('also sends via the Enviar button', () => {
+  it('also sends via the Send button', () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: 'por botón' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }))
-    expect(sendChat).toHaveBeenCalledWith('room-1', 'por botón')
+    fireEvent.change(textarea(), { target: { value: 'via button' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'via button')
   })
 
   it('blocks sending above 4000 chars and shows the counter', () => {
@@ -102,9 +102,9 @@ describe('ChatInput (RF-03)', () => {
     fireEvent.change(textarea(), { target: { value: long } })
     expect(screen.getByText('4001/4000')).toBeInTheDocument()
     fireEvent.keyDown(textarea(), { key: 'Enter' })
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(sendChat).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
   })
 
   it('shows the counter from 3800 chars onward only', () => {
@@ -164,13 +164,13 @@ describe('ChatInput (RF-03)', () => {
 
   it('shows the queue hint while the room is searching/error (§10.3)', () => {
     const { rerender } = render(<ChatInput room={makeRoom({ status: 'searching' })} />)
-    expect(screen.getByText('En cola hasta conectar…')).toBeInTheDocument()
+    expect(screen.getByText('Queued until connected…')).toBeInTheDocument()
 
     rerender(<ChatInput room={makeRoom({ status: 'error' })} />)
-    expect(screen.getByText('En cola hasta conectar…')).toBeInTheDocument()
+    expect(screen.getByText('Queued until connected…')).toBeInTheDocument()
 
     rerender(<ChatInput room={makeRoom({ status: 'connected' })} />)
-    expect(screen.queryByText('En cola hasta conectar…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Queued until connected…')).not.toBeInTheDocument()
   })
 
   it('sends while disconnected too (the manager queues it)', () => {
@@ -203,7 +203,7 @@ describe('ChatInput DM composer (RF-04, issue #93)', () => {
     render(<ChatInput dm={{ peerId: 'peer-9', available: true, legacyPeer: true }} />)
 
     expect(textarea()).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
     expect(screen.getByText(DM_LEGACY_PEER_TEXT)).toBeInTheDocument()
     // The peer IS connected: the disconnected text must not appear too.
     expect(screen.queryByText(DM_DISCONNECTED_TEXT)).not.toBeInTheDocument()
@@ -216,7 +216,7 @@ describe('ChatInput DM composer (RF-04, issue #93)', () => {
 
 // ---------------------------------------------------------------------------
 // Issue #96 — per-message TTL selector: a memory-only combobox offered in
-// both room and DM modes. 'Sin caducidad' (the default) omits the ttl
+// both room and DM modes. 'No expiry' (the default) omits the ttl
 // argument entirely; the picks map to whole seconds (30/300/3600) on the
 // sendChat/sendDm seam. The selection survives consecutive sends until
 // changed and resets on remount (never persisted).
@@ -229,7 +229,7 @@ function pickTtl(value: string): void {
 }
 
 describe('ChatInput TTL selector (issue #96)', () => {
-  it('renders with an accessible name and the Sin caducidad default in room mode', () => {
+  it('renders with an accessible name and the No expiry default in room mode', () => {
     render(<ChatInput room={makeRoom()} />)
     expect(ttlSelect()).toHaveValue('')
     expect(within(ttlSelect()).getByRole('option', { name: SIN_EXPIRY_LABEL })).toHaveValue('')
@@ -250,9 +250,9 @@ describe('ChatInput TTL selector (issue #96)', () => {
   ])('picking %s sends ttl %i through sendChat', (_label, raw, ttl) => {
     render(<ChatInput room={makeRoom()} />)
     pickTtl(raw)
-    fireEvent.change(textarea(), { target: { value: 'expírame' } })
+    fireEvent.change(textarea(), { target: { value: 'send me' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
-    expect(sendChat).toHaveBeenCalledWith('room-1', 'expírame', ttl)
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'send me', ttl)
   })
 
   it('sends a DM with the picked ttl through sendDm', () => {
@@ -263,7 +263,7 @@ describe('ChatInput TTL selector (issue #96)', () => {
     expect(sendDm).toHaveBeenCalledWith('peer-9', 'hola dm', 30)
   })
 
-  it('Sin caducidad keeps the two-argument call (no ttl reaches the envelope)', () => {
+  it('No expiry keeps the two-argument call (no ttl reaches the envelope)', () => {
     const room = render(<ChatInput room={makeRoom()} />)
     fireEvent.change(textarea(), { target: { value: 'sin ttl' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
@@ -289,18 +289,18 @@ describe('ChatInput TTL selector (issue #96)', () => {
     expect(sendChat).toHaveBeenNthCalledWith(2, 'room-1', 'dos', 300)
   })
 
-  it('resets to Sin caducidad on remount (memory-only state)', () => {
+  it('resets to No expiry on remount (memory-only state)', () => {
     const first = render(<ChatInput room={makeRoom()} />)
     pickTtl('30')
-    fireEvent.change(textarea(), { target: { value: 'primera sesión' } })
+    fireEvent.change(textarea(), { target: { value: 'first session' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
-    expect(sendChat).toHaveBeenCalledWith('room-1', 'primera sesión', 30)
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'first session', 30)
     first.unmount()
 
     sendChat.mockClear() // Judge only the second mount's calls.
     render(<ChatInput room={makeRoom()} />)
     expect(ttlSelect()).toHaveValue('')
-    fireEvent.change(textarea(), { target: { value: 'segunda sesión' } })
+    fireEvent.change(textarea(), { target: { value: 'second session' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
     expect(sendChat.mock.calls[0]).toHaveLength(2)
   })
@@ -329,7 +329,7 @@ describe('ChatInput TTL selector (issue #96)', () => {
 // sendDm in a DM), unknown verbs and parse errors show the inline hint and
 // send nothing. These tests use real timers: the executor is async (the
 // directive resolves a microtask after Enter), and the useUiStore is reset
-// because real commands flip its seams (/ayuda, /limpiar).
+// because real commands flip its seams (/help, /clear).
 // ---------------------------------------------------------------------------
 
 const slashListbox = () => screen.getByRole('listbox', { name: SLASH_POPUP_LABEL })
@@ -372,16 +372,16 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
     }
   })
 
-  it('filters by verb prefix ("/n" → /nick, "/ay" → /ayuda)', () => {
+  it('filters by verb prefix ("/n" → /nick, "/h" → /help)', () => {
     render(<ChatInput room={makeRoom()} />)
 
     fireEvent.change(textarea(), { target: { value: '/n' } })
     expect(within(slashListbox()).getAllByRole('option')).toHaveLength(1)
     expect(within(slashListbox()).getByRole('option', { name: /\/nick/ })).toBeInTheDocument()
 
-    fireEvent.change(textarea(), { target: { value: '/ay' } })
+    fireEvent.change(textarea(), { target: { value: '/h' } })
     expect(within(slashListbox()).getAllByRole('option')).toHaveLength(1)
-    expect(within(slashListbox()).getByRole('option', { name: /\/ayuda/ })).toBeInTheDocument()
+    expect(within(slashListbox()).getByRole('option', { name: /\/help/ })).toBeInTheDocument()
   })
 
   it('never opens for the escape hatch or once arguments begin', () => {
@@ -410,7 +410,7 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
     expect(textarea()).toHaveAttribute('aria-expanded', 'false')
 
     // Esc is dismissal, not destruction: the next keystroke re-opens.
-    fireEvent.change(textarea(), { target: { value: '/s' } })
+    fireEvent.change(textarea(), { target: { value: '/r' } })
     expect(slashListbox()).toBeInTheDocument()
   })
 
@@ -434,7 +434,7 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
 
   it('Enter on a zero-arg candidate executes it at once and clears the input', async () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: '/ay' } })
+    fireEvent.change(textarea(), { target: { value: '/h' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     expect(textarea()).toHaveValue('')
@@ -470,7 +470,7 @@ describe('ChatInput slash popup (issue #99 Phase 3)', () => {
     render(<ChatInput room={makeRoom()} />)
     textarea().focus()
     fireEvent.change(textarea(), { target: { value: '/' } })
-    fireEvent.click(within(slashListbox()).getByRole('option', { name: /\/ayuda/ }))
+    fireEvent.click(within(slashListbox()).getByRole('option', { name: /\/help/ }))
 
     expect(textarea()).toHaveValue('')
     await flushExecutor()
@@ -517,7 +517,7 @@ describe('ChatInput slash submit (issue #99 Phase 3)', () => {
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      `${NICKNAME_ERROR_TEXT} Uso: /nick <nombre>`,
+      `${NICKNAME_ERROR_TEXT} Usage: /nick <name>`,
     )
     expect(sendChat).not.toHaveBeenCalled()
     expect(textarea()).toHaveValue('/nick x!')
@@ -567,7 +567,7 @@ describe('ChatInput slash submit (issue #99 Phase 3)', () => {
 
   it('a typed zero-arg command executes, clears and never sends', async () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: '/salas' } })
+    fireEvent.change(textarea(), { target: { value: '/rooms' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     await flushExecutor()
@@ -577,7 +577,7 @@ describe('ChatInput slash submit (issue #99 Phase 3)', () => {
 
   it('room-scoped commands in a DM run the executor naturally (no send, no crash)', async () => {
     render(<ChatInput dm={{ peerId: 'peer-9', available: true }} />)
-    fireEvent.change(textarea(), { target: { value: '/salir' } })
+    fireEvent.change(textarea(), { target: { value: '/leave' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     await flushExecutor()

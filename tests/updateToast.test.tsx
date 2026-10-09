@@ -71,14 +71,12 @@ describe('UpdateToast (issue #104, phase 4)', () => {
     render(<UpdateToast />)
     registerServiceWorker({ PROD: true })
 
-    // The issue's exact toast: «Nueva versión disponible — [Recargar]».
-    expect(UPDATE_AVAILABLE_TEXT).toBe('Nueva versión disponible')
-    expect(
-      await screen.findByRole('status', { name: 'Nueva versión de la app' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Nueva versión disponible')).toBeInTheDocument()
+    // The issue's exact toast: «New version available — [Recargar]».
+    expect(UPDATE_AVAILABLE_TEXT).toBe('New version available')
+    expect(await screen.findByRole('status', { name: 'New app version' })).toBeInTheDocument()
+    expect(screen.getByText('New version available')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: UPDATE_RELOAD_BUTTON })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: UPDATE_RELOAD_BUTTON })).toHaveTextContent('Recargar')
+    expect(screen.getByRole('button', { name: UPDATE_RELOAD_BUTTON })).toHaveTextContent('Reload')
   })
 
   it('Recargar calls location.reload so the waiting worker activates', async () => {

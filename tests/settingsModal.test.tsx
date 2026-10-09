@@ -79,48 +79,48 @@ function rawSettings(): Record<string, unknown> {
 describe('SettingsModal shell (RF-07, RNF-05)', () => {
   it('opens from the header gear and shows the three tabs', () => {
     render(<ChatHeader room={null} onToggleSidebar={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Ajustes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
 
-    expect(screen.getByRole('dialog', { name: 'Ajustes' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Red' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'Privacidad' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Apariencia' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Network' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Privacy' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Appearance' })).toBeInTheDocument()
   })
 
   it('closes on the ✕ button, Escape and the backdrop', () => {
     const onClose = vi.fn()
     render(<SettingsModal open onClose={onClose} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar ajustes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
     expect(onClose).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(2)
 
-    const dialog = screen.getByRole('dialog', { name: 'Ajustes' })
+    const dialog = screen.getByRole('dialog', { name: 'Settings' })
     fireEvent.mouseDown(dialog.parentElement as HTMLElement, { target: dialog.parentElement })
     expect(onClose).toHaveBeenCalledTimes(3)
   })
 
   it('switching tabs shows each tab panel', () => {
     renderModal()
-    expect(screen.getByText('Auto-unirse a #lobby al iniciar')).toBeInTheDocument()
+    expect(screen.getByText('Auto-join #lobby on start')).toBeInTheDocument()
 
-    openTab('Privacidad')
-    expect(screen.getByText('Notificaciones de escritorio')).toBeInTheDocument()
+    openTab('Privacy')
+    expect(screen.getByText('Desktop notifications')).toBeInTheDocument()
 
-    openTab('Apariencia')
-    expect(screen.getByRole('radio', { name: 'Sistema' })).toBeChecked()
+    openTab('Appearance')
+    expect(screen.getByRole('radio', { name: 'System' })).toBeChecked()
 
-    openTab('Red')
-    expect(screen.getByText('Auto-unirse a #lobby al iniciar')).toBeInTheDocument()
+    openTab('Network')
+    expect(screen.getByText('Auto-join #lobby on start')).toBeInTheDocument()
   })
 })
 
 describe('Red tab (RF-07)', () => {
   it('persists autoJoinLobby instantly to the store and gritos:settings', () => {
     renderModal()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Auto-unirse a #lobby al iniciar' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Auto-join #lobby on start' }))
     expect(useSettingsStore.getState().settings.autoJoinLobby).toBe(false)
     expect(rawSettings().autoJoinLobby).toBe(false)
   })
@@ -128,56 +128,56 @@ describe('Red tab (RF-07)', () => {
   it('shows the defaults hint and validates the wss:// scheme on trackers', () => {
     renderModal()
     expect(
-      screen.getByText('Lista vacía: se usan los trackers por defecto de Trystero.'),
+      screen.getByText('Empty list: Trystero’s default trackers are used.'),
     ).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Añadir tracker' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add tracker' }))
     const input = screen.getByLabelText('Tracker 1')
     fireEvent.change(input, { target: { value: 'http://no' } })
     expect(screen.getByRole('alert')).toHaveTextContent(TRACKER_ERROR_TEXT)
     expect(useSettingsStore.getState().settings.trackers).toEqual([])
 
-    fireEvent.change(input, { target: { value: 'wss://tracker.ejemplo:443' } })
+    fireEvent.change(input, { target: { value: 'wss://tracker.example:443' } })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(useSettingsStore.getState().settings.trackers).toEqual(['wss://tracker.ejemplo:443'])
-    expect(rawSettings().trackers).toEqual(['wss://tracker.ejemplo:443'])
+    expect(useSettingsStore.getState().settings.trackers).toEqual(['wss://tracker.example:443'])
+    expect(rawSettings().trackers).toEqual(['wss://tracker.example:443'])
   })
 
   it('removes tracker rows and the list returns to defaults (empty)', () => {
     useSettingsStore.getState().setSettings({ trackers: ['wss://uno.ejemplo'] })
     renderModal()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Eliminar tracker 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove tracker 1' }))
     expect(useSettingsStore.getState().settings.trackers).toEqual([])
     expect(
-      screen.getByText('Lista vacía: se usan los trackers por defecto de Trystero.'),
+      screen.getByText('Empty list: Trystero’s default trackers are used.'),
     ).toBeInTheDocument()
   })
 
   it('adds STUN and TURN ICE servers with credentials', () => {
     renderModal()
     expect(
-      screen.getByText('Lista vacía: se usa la configuración ICE por defecto de Trystero.'),
+      screen.getByText('Empty list: Trystero’s default ICE configuration is used.'),
     ).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Añadir servidor ICE' }))
-    fireEvent.change(screen.getByLabelText('URL del servidor ICE 1'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Add ICE server' }))
+    fireEvent.change(screen.getByLabelText('ICE server URL 1'), {
       target: { value: 'stun:stun.ejemplo:19302' },
     })
     expect(useSettingsStore.getState().settings.iceServers).toEqual([
       { urls: 'stun:stun.ejemplo:19302' },
     ])
 
-    fireEvent.change(screen.getByLabelText('Tipo de servidor ICE 1'), {
+    fireEvent.change(screen.getByLabelText('ICE server type 1'), {
       target: { value: 'turn' },
     })
-    expect(screen.getByLabelText('Usuario TURN 1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Contraseña TURN 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('TURN username 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('TURN password 1')).toBeInTheDocument()
     // Issue #30: the persistent-storage disclosure sits next to the fields.
     expect(screen.getByText(TURN_CREDENTIAL_STORAGE_HINT)).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Usuario TURN 1'), { target: { value: 'ana' } })
-    fireEvent.change(screen.getByLabelText('Contraseña TURN 1'), { target: { value: 'secreta' } })
-    fireEvent.change(screen.getByLabelText('URL del servidor ICE 1'), {
+    fireEvent.change(screen.getByLabelText('TURN username 1'), { target: { value: 'ana' } })
+    fireEvent.change(screen.getByLabelText('TURN password 1'), { target: { value: 'secreta' } })
+    fireEvent.change(screen.getByLabelText('ICE server URL 1'), {
       target: { value: 'turn:turn.ejemplo:3478' },
     })
 
@@ -190,15 +190,15 @@ describe('Red tab (RF-07)', () => {
     useSettingsStore.getState().setSettings({ rememberTurnCredentials: false })
     renderModal()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Añadir servidor ICE' }))
-    fireEvent.change(screen.getByLabelText('Tipo de servidor ICE 1'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Add ICE server' }))
+    fireEvent.change(screen.getByLabelText('ICE server type 1'), {
       target: { value: 'turn' },
     })
-    fireEvent.change(screen.getByLabelText('URL del servidor ICE 1'), {
+    fireEvent.change(screen.getByLabelText('ICE server URL 1'), {
       target: { value: 'turn:turn.ejemplo:3478' },
     })
-    fireEvent.change(screen.getByLabelText('Usuario TURN 1'), { target: { value: 'ana' } })
-    fireEvent.change(screen.getByLabelText('Contraseña TURN 1'), { target: { value: 'secreta' } })
+    fireEvent.change(screen.getByLabelText('TURN username 1'), { target: { value: 'ana' } })
+    fireEvent.change(screen.getByLabelText('TURN password 1'), { target: { value: 'secreta' } })
 
     // The credential lives in the store for the session...
     expect(useSettingsStore.getState().settings.iceServers).toEqual([
@@ -212,7 +212,7 @@ describe('Red tab (RF-07)', () => {
   it('remembers TURN credentials by default and goes memory-only when unchecked (issue #30)', () => {
     renderModal()
     const toggle = screen.getByRole('checkbox', {
-      name: 'Recordar credenciales TURN en este navegador',
+      name: 'Remember TURN credentials in this browser',
     })
     expect(toggle).toBeChecked()
     expect(useSettingsStore.getState().settings.rememberTurnCredentials).toBe(true)
@@ -231,7 +231,7 @@ describe('Red tab (RF-07)', () => {
     useSettingsStore.getState().setSettings({ iceServers: [{ urls: 'stun:ok.ejemplo' }] })
     renderModal()
 
-    fireEvent.change(screen.getByLabelText('URL del servidor ICE 1'), {
+    fireEvent.change(screen.getByLabelText('ICE server URL 1'), {
       target: { value: 'http:' },
     })
     expect(screen.getByRole('alert')).toHaveTextContent(ICE_ERROR_TEXT)
@@ -241,7 +241,7 @@ describe('Red tab (RF-07)', () => {
 
   it('clamps the room limit to 1–6 and reports out-of-range values', () => {
     renderModal()
-    const input = screen.getByLabelText('Límite de salas activas')
+    const input = screen.getByLabelText('Active room limit')
 
     fireEvent.change(input, { target: { value: '9' } })
     expect(screen.getByRole('alert')).toHaveTextContent(MAX_ROOMS_ERROR_TEXT)
@@ -258,14 +258,14 @@ describe('Red tab (RF-07)', () => {
     expect(useSettingsStore.getState().settings.maxActiveRooms).toBe(1)
   })
 
-  it('Reconectar todo re-joins every active room with the new settings', async () => {
+  it('Reconnect all re-joins every active room with the new settings', async () => {
     await manager.joinRoom('lobby')
     const firstRoom = fake.rooms[0]
     expect(fake.joinRoomFn).toHaveBeenCalledTimes(1)
 
     useSettingsStore.getState().setSettings({ trackers: ['wss://nuevo.ejemplo'] })
     renderModal()
-    fireEvent.click(screen.getByRole('button', { name: 'Reconectar todo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect all' }))
 
     await waitFor(() => expect(fake.joinRoomFn).toHaveBeenCalledTimes(2))
     expect(firstRoom.leave).toHaveBeenCalledTimes(1)
@@ -280,35 +280,35 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
   it('shows the permission states and enables the toggle only when granted', async () => {
     stubNotification('default')
     const { unmount } = render(<SettingsModal open onClose={() => {}} />)
-    openTab('Privacidad')
+    openTab('Privacy')
 
-    const toggle = screen.getByRole('checkbox', { name: 'Notificaciones de escritorio' })
+    const toggle = screen.getByRole('checkbox', { name: 'Desktop notifications' })
     expect(toggle).toBeDisabled()
-    expect(screen.getByText('Permiso no solicitado.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Permitir notificaciones' })).toBeEnabled()
+    expect(screen.getByText('Permission not requested.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Allow notifications' })).toBeEnabled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Permitir notificaciones' }))
-    await waitFor(() => expect(screen.getByText('Permiso concedido.')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }))
+    await waitFor(() => expect(screen.getByText('Permission granted.')).toBeInTheDocument())
     expect(toggle).toBeEnabled()
     unmount()
 
     // Denied: the explanatory line, toggle disabled, button disabled.
     stubNotification('denied')
     render(<SettingsModal open onClose={() => {}} />)
-    openTab('Privacidad')
+    openTab('Privacy')
     expect(
-      screen.getByText('Permiso denegado. Actívalo desde la configuración del navegador.'),
+      screen.getByText('Permission denied. Enable it from the browser settings.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Notificaciones de escritorio' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Permitir notificaciones' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'Desktop notifications' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Allow notifications' })).toBeDisabled()
   })
 
   it('toggles desktop notifications only behind a granted permission', () => {
     stubNotification('granted')
     renderModal()
-    openTab('Privacidad')
+    openTab('Privacy')
 
-    const toggle = screen.getByRole('checkbox', { name: 'Notificaciones de escritorio' })
+    const toggle = screen.getByRole('checkbox', { name: 'Desktop notifications' })
     expect(toggle).toBeEnabled()
     fireEvent.click(toggle)
     expect(useSettingsStore.getState().settings.notifications).toBe(true)
@@ -317,15 +317,15 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
 
   it('persists rememberRooms', () => {
     renderModal()
-    openTab('Privacidad')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Recordar salas recientes' }))
+    openTab('Privacy')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Remember recent rooms' }))
     expect(useSettingsStore.getState().settings.rememberRooms).toBe(false)
     expect(rawSettings().rememberRooms).toBe(false)
   })
 
   it('renders the history-gossip consent off by default with its disclosure (issue #102)', () => {
     renderModal()
-    openTab('Privacidad')
+    openTab('Privacy')
 
     // The exact issue string, with the explanatory hint next to it.
     expect(screen.getByText(SHARE_HISTORY_LABEL)).toBeInTheDocument()
@@ -346,18 +346,18 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
 
   it('discloses that TURN credentials are stored unencrypted (issue #30)', () => {
     renderModal()
-    openTab('Privacidad')
-    expect(screen.getByText(/se guardan sin cifrar en este navegador/)).toBeInTheDocument()
-    expect(screen.getByText(/Recordar credenciales TURN en este navegador/)).toBeInTheDocument()
+    openTab('Privacy')
+    expect(screen.getByText(/stored unencrypted in this browser/)).toBeInTheDocument()
+    expect(screen.getByText(/Remember TURN credentials in this browser/)).toBeInTheDocument()
   })
 
   it('discloses the P2P IP exposure to room peers (issue #35)', () => {
     renderModal()
-    openTab('Privacidad')
+    openTab('Privacy')
     expect(screen.getByText(P2P_IP_EXPOSURE_NOTE)).toBeInTheDocument()
   })
 
-  it('Regenerar identidad confirms with the exact warning and swaps the keypair', async () => {
+  it('Regenerate identity confirms with the exact warning and swaps the keypair', async () => {
     stubNotification('granted')
     // A real session with a persisted identity (like after onboarding).
     const { createSessionIdentity, exportIdentityJwks, persistIdentity } =
@@ -381,13 +381,13 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     const fingerprintBefore = useAppStore.getState().identity?.fingerprint
 
     renderModal()
-    openTab('Privacidad')
-    fireEvent.click(screen.getByRole('button', { name: 'Regenerar identidad' }))
+    openTab('Privacy')
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate identity' }))
 
     // The exact RF-07 warning, inside a dialog.
     expect(
       screen.getByText(
-        'Se generará un nuevo par de claves: tu fingerprint cambiará y los canales DM con tus pares dejarán de coincidir. ¿Continuar?',
+        'A new key pair will be generated: your fingerprint will change and the DM channels with your peers will stop matching. Continue?',
       ),
     ).toBeInTheDocument()
 
@@ -409,7 +409,7 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     // this test already waited for — wait for it explicitly.
     await waitFor(() => expect(fake.rooms[0].action('keys').sends.length).toBe(keysBefore + 1))
     // The dialog is gone afterwards.
-    expect(screen.queryByRole('dialog', { name: 'Regenerar identidad' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Regenerate identity' })).not.toBeInTheDocument()
   })
 
   it('the panic button asks twice and wipes everything on the final confirm', async () => {
@@ -420,19 +420,19 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     localStorage.setItem('other-app:data', 'keep-me')
 
     renderModal()
-    openTab('Privacidad')
-    fireEvent.click(screen.getByRole('button', { name: 'Borrar todo y salir' }))
+    openTab('Privacy')
+    fireEvent.click(screen.getByRole('button', { name: 'Wipe everything and leave' }))
 
     // First confirmation, exact RF-08 text, red confirm.
     expect(
-      screen.getByText('Se borrarán apodo, claves, ajustes y todo rastro local. ¿Continuar?'),
+      screen.getByText('Nickname, keys, settings and every local trace will be wiped. Continue?'),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('confirm-dialog-confirm'))
 
     // Second confirmation before anything is destroyed.
     expect(
       screen.getByText(
-        'Esta acción es definitiva: se cerrarán todas las conexiones y la aplicación se recargará para empezar de cero.',
+        'This action is definitive: every connection will be closed and the app will reload to start from scratch.',
       ),
     ).toBeInTheDocument()
     expect(localStorage.getItem('gritos:identity')).not.toBeNull()
@@ -449,9 +449,9 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
     stubNotification('default')
     localStorage.setItem('gritos:identity', '{"nickname":"zorro-bravo"}')
     renderModal()
-    openTab('Privacidad')
-    fireEvent.click(screen.getByRole('button', { name: 'Borrar todo y salir' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    openTab('Privacy')
+    fireEvent.click(screen.getByRole('button', { name: 'Wipe everything and leave' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(localStorage.getItem('gritos:identity')).not.toBeNull()
   })
@@ -464,9 +464,9 @@ describe('Privacidad mute list (issue #95)', () => {
 
   it('shows the empty state until a peer is muted', () => {
     renderModal()
-    openTab('Privacidad')
-    expect(screen.getByText('No has silenciado a ningún par.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Dejar de silenciar/ })).not.toBeInTheDocument()
+    openTab('Privacy')
+    expect(screen.getByText('You have not muted any peer.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Unmute/ })).not.toBeInTheDocument()
   })
 
   it('lists muted peers with nickname and truncated fingerprint, and unmutes per row', () => {
@@ -476,21 +476,21 @@ describe('Privacidad mute list (issue #95)', () => {
     // its row degrades to the truncated fingerprint.
     useSettingsStore.getState().setSettings({ mutedFingerprints: [CANONICAL_FP, OTHER_FP] })
     renderModal()
-    openTab('Privacidad')
+    openTab('Privacy')
 
-    expect(screen.getByRole('heading', { name: 'Pares silenciados' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Muted peers' })).toBeInTheDocument()
     expect(screen.getByText('luna-cauta')).toBeInTheDocument()
     expect(screen.getByText('A31F 09BC…')).toBeInTheDocument()
     expect(screen.getByText('B31F 09BC…')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dejar de silenciar a @luna-cauta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute @luna-cauta' }))
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([OTHER_FP])
     expect(screen.queryByText('A31F 09BC…')).not.toBeInTheDocument()
 
     // The nickname-less row's button is identified by its fingerprint.
-    fireEvent.click(screen.getByRole('button', { name: 'Dejar de silenciar a B31F 09BC…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute B31F 09BC…' }))
     expect(useSettingsStore.getState().settings.mutedFingerprints).toEqual([])
-    expect(screen.getByText('No has silenciado a ningún par.')).toBeInTheDocument()
+    expect(screen.getByText('You have not muted any peer.')).toBeInTheDocument()
   })
 
   it('unmuting from the list appends the local system line to the active room (issue #95)', async () => {
@@ -499,12 +499,12 @@ describe('Privacidad mute list (issue #95)', () => {
     expect(useSettingsStore.getState().muteFingerprint(PEER_FP, 'luna-cauta')).toBe(true)
 
     renderModal()
-    openTab('Privacidad')
-    fireEvent.click(screen.getByRole('button', { name: 'Dejar de silenciar a @luna-cauta' }))
+    openTab('Privacy')
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute @luna-cauta' }))
 
     const messages = useAppStore.getState().rooms[connection.roomId]?.messages ?? []
     expect(
-      messages.some((m) => m.kind === 'system' && m.text === '@luna-cauta ya no está silenciado'),
+      messages.some((m) => m.kind === 'system' && m.text === '@luna-cauta is no longer muted'),
     ).toBe(true)
   })
 })
@@ -512,22 +512,22 @@ describe('Privacidad mute list (issue #95)', () => {
 describe('Apariencia tab (RF-07/RF-10)', () => {
   it('the theme radio group drives the settings store (single source of truth)', () => {
     renderModal()
-    openTab('Apariencia')
+    openTab('Appearance')
 
-    expect(screen.getByRole('radio', { name: 'Sistema' })).toBeChecked()
-    fireEvent.click(screen.getByRole('radio', { name: 'Oscuro' }))
+    expect(screen.getByRole('radio', { name: 'System' })).toBeChecked()
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark' }))
     expect(useSettingsStore.getState().settings.theme).toBe('dark')
     expect(rawSettings().theme).toBe('dark')
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Claro' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Light' }))
     expect(useSettingsStore.getState().settings.theme).toBe('light')
   })
 
   it('the sidebar collapse toggle binds to gritos:ui', () => {
     renderModal()
-    openTab('Apariencia')
+    openTab('Appearance')
 
-    const toggle = screen.getByRole('checkbox', { name: 'Colapsar barra lateral al iniciar' })
+    const toggle = screen.getByRole('checkbox', { name: 'Collapse sidebar on start' })
     fireEvent.click(toggle)
     expect(useUiStore.getState().sidebarCollapsed).toBe(true)
     expect(JSON.parse(localStorage.getItem('gritos:ui') as string)).toEqual({
@@ -554,7 +554,7 @@ describe('nickname change from the modal (RF-01/RF-07)', () => {
     const presenceBefore = fake.rooms[0].action('presence').sends.length
 
     renderModal()
-    const input = screen.getByLabelText('Tu apodo')
+    const input = screen.getByLabelText('Your nickname')
     expect(input).toHaveValue('zorro-bravo')
 
     fireEvent.change(input, { target: { value: 'luna-cauta' } })
@@ -578,7 +578,7 @@ describe('nickname change from the modal (RF-01/RF-07)', () => {
 
   it('rejects invalid nicknames with the RF-01 inline error', () => {
     renderModal()
-    const input = screen.getByLabelText('Tu apodo')
+    const input = screen.getByLabelText('Your nickname')
     fireEvent.change(input, { target: { value: 'a' } })
     fireEvent.blur(input)
 

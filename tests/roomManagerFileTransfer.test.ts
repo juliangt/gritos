@@ -175,7 +175,7 @@ describe('resolveTransferKey — dm context (§12.4: DMs are always sealed)', ()
     const legacy = await makeFakeRemotePeer('peer-legacy')
     await joinPublicRoomWithA()
     const room = lastRoom()
-    await fakePeerJoins(room, legacy, { nick: 'par-viejo', announceEphemeral: false })
+    await fakePeerJoins(room, legacy, { nick: 'peer-viejo', announceEphemeral: false })
     await flushCrypto()
     // Open the channel so the resolver passes the availability guard and
     // hits the real legacy gate (no announced ephemeral key), not the

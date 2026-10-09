@@ -803,15 +803,15 @@ describe('end-to-end over the fake pair (§12.2 wire)', () => {
       callbacks: { onDmMessage: (_envelope, text) => received.push(text) },
     })
 
-    await handshake.a.sendDm('única')
+    await handshake.a.sendDm('single')
     await flushCrypto()
-    expect(received).toEqual(['única'])
+    expect(received).toEqual(['single'])
 
     // Replay the EXACT same frame (same id, still fresh): dropped.
     const frame = handshake.pair.pcA.localChannel?.sent[0] as string
     handshake.pair.pcB.remoteChannel?.receive(frame)
     await flushCrypto()
-    expect(received).toEqual(['única'])
+    expect(received).toEqual(['single'])
   })
 
   it('drops a stale dm envelope (freshness window reuses MAX_ENVELOPE_AGE_MS)', async () => {
@@ -851,7 +851,7 @@ describe('end-to-end over the fake pair (§12.2 wire)', () => {
 
     // After the exchange but before the channel opens, still nothing.
     await a.acceptAnswer(answerBlob)
-    await expect(a.sendDm('aún no')).rejects.toMatchObject({ code: 'not-connected' })
+    await expect(a.sendDm('not yet')).rejects.toMatchObject({ code: 'not-connected' })
     expect(pair.pcA.localChannel?.sent).toEqual([])
   })
 
@@ -930,7 +930,7 @@ describe('connection drop and dispose', () => {
     expect(handshake.a.currentState).toBe('disconnected')
     expect(handshake.b.currentState).toBe('disconnected')
     expect(handshake.a.remoteFingerprint).toBe(sessionB.identity.fingerprint)
-    await expect(handshake.a.sendDm('¿ahí?')).rejects.toMatchObject({ code: 'not-connected' })
+    await expect(handshake.a.sendDm('there?')).rejects.toMatchObject({ code: 'not-connected' })
   })
 
   it('dispose clears every timer (fake timers) and detaches every listener', async () => {

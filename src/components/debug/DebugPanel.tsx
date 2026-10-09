@@ -1,9 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import {
-  connectionStatusText,
-  latencyDot,
-  useAppStore,
-} from '../../stores/useAppStore'
+import { connectionStatusText, latencyDot, useAppStore } from '../../stores/useAppStore'
 import { getSelfPeerId, sendTestChat } from '../../lib/p2p/roomManager'
 import { NICKNAME_ERROR_TEXT } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
@@ -46,21 +42,19 @@ export function DebugPanel() {
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6 text-sm">
       <header>
         <h1 className="text-2xl font-bold">gritos</h1>
-        <p className="text-muted">
-          Panel de depuración M1 — P2P sin UI. Se sustituye en M2.
-        </p>
+        <p className="text-muted">M1 debug panel — P2P without UI. Replaced in M2.</p>
       </header>
 
-      <section aria-label="identidad" className="flex flex-col gap-2">
-        <h2 className="font-semibold">Identidad</h2>
+      <section aria-label="identity" className="flex flex-col gap-2">
+        <h2 className="font-semibold">Identity</h2>
         {identity === null ? (
-          <p className="text-muted">Generando identidad efímera…</p>
+          <p className="text-muted">Generating ephemeral identity…</p>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <label>
-              Apodo:{' '}
+              Nickname:{' '}
               <input
-                aria-label="apodo"
+                aria-label="nickname"
                 value={nickValue}
                 onChange={(event) => setNickDraft(event.target.value)}
                 onBlur={() => {
@@ -87,29 +81,26 @@ export function DebugPanel() {
       </section>
 
       <form
-        aria-label="unirse a sala"
+        aria-label="join a room"
         onSubmit={onJoin}
         className="flex flex-wrap items-center gap-2"
       >
         <input
-          aria-label="nombre de sala"
-          placeholder="nombre de sala"
+          aria-label="room name"
+          placeholder="room name"
           value={name}
           onChange={(event) => setName(event.target.value)}
           className="rounded border border-border bg-surface px-2 py-1"
         />
         <input
-          aria-label="contraseña de sala"
-          placeholder="contraseña (opcional)"
+          aria-label="room password"
+          placeholder="password (optional)"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="rounded border border-border bg-surface px-2 py-1"
         />
-        <button
-          type="submit"
-          className="rounded bg-accent px-3 py-1 text-accent-text"
-        >
-          Unirse
+        <button type="submit" className="rounded bg-accent px-3 py-1 text-accent-text">
+          Join
         </button>
         {error !== null && (
           <span role="alert" className="text-accent">
@@ -118,14 +109,10 @@ export function DebugPanel() {
         )}
       </form>
 
-      <section aria-label="salas activas" className="flex flex-col gap-4">
-        <h2 className="font-semibold">
-          Salas activas ({Object.keys(rooms).length})
-        </h2>
+      <section aria-label="active rooms" className="flex flex-col gap-4">
+        <h2 className="font-semibold">Active rooms ({Object.keys(rooms).length})</h2>
         {Object.keys(rooms).length === 0 && (
-          <p className="text-muted">
-            Ninguna sala. Únete a una para buscar pares en la red.
-          </p>
+          <p className="text-muted">No rooms. Join one to search for peers on the network.</p>
         )}
         {Object.values(rooms).map((room) => (
           <DebugRoom
@@ -146,7 +133,7 @@ function DebugRoom(props: {
   onSendTestChat: (text: string) => void
 }) {
   const room = useAppStore((state) => state.rooms[props.roomId])
-  const [draft, setDraft] = useState('prueba')
+  const [draft, setDraft] = useState('test')
   useLatency(room !== undefined ? room.id : null)
 
   if (room === undefined) return null
@@ -158,50 +145,46 @@ function DebugRoom(props: {
           #{room.name}
           {room.hasPassword ? ' 🔒' : ''}
         </h3>
-        <span className="text-muted">
-          {connectionStatusText(room.status, room.peers.length)}
-        </span>
+        <span className="text-muted">{connectionStatusText(room.status, room.peers.length)}</span>
         <span className="ml-auto flex gap-2">
           <button
             type="button"
-            aria-label={`enviar chat de prueba en ${room.name}`}
+            aria-label={`send test chat in ${room.name}`}
             onClick={() => props.onSendTestChat(draft)}
             className="rounded border border-border px-2 py-1"
           >
-            Enviar chat de prueba
+            Send test chat
           </button>
           <button
             type="button"
-            aria-label={`abandonar ${room.name}`}
+            aria-label={`leave ${room.name}`}
             onClick={props.onLeave}
             className="rounded border border-border px-2 py-1"
           >
-            Abandonar
+            Leave
           </button>
         </span>
       </header>
 
       <div>
         <input
-          aria-label={`texto de prueba ${room.name}`}
+          aria-label={`test text ${room.name}`}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           className="w-full rounded border border-border bg-surface px-2 py-1"
         />
       </div>
 
-      <section aria-label={`pares de ${room.name}`} className="flex flex-col gap-1">
+      <section aria-label={`peers of ${room.name}`} className="flex flex-col gap-1">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Pares ({room.peers.length})
+          Peers ({room.peers.length})
         </h4>
-        {room.peers.length === 0 && (
-          <p className="text-xs text-muted">Sin pares todavía.</p>
-        )}
+        {room.peers.length === 0 && <p className="text-xs text-muted">No peers yet.</p>}
         <ul>
           {room.peers.map((peer) => (
             <li key={peer.id} className="font-mono text-xs">
               {latencyDot(peer.latencyMs, peer.degraded)} {peer.nickname}
-              <span className="text-muted"> · {peer.fingerprint ?? 'sin fp'}</span>
+              <span className="text-muted"> · {peer.fingerprint ?? 'no fp'}</span>
               <span className="text-muted">
                 {' '}
                 · {peer.latencyMs === null ? '—' : `${peer.latencyMs} ms`}
@@ -211,16 +194,15 @@ function DebugRoom(props: {
         </ul>
       </section>
 
-      <section aria-label={`mensajes de ${room.name}`} className="flex flex-col gap-1">
+      <section aria-label={`messages of ${room.name}`} className="flex flex-col gap-1">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Mensajes ({room.messages.length})
+          Messages ({room.messages.length})
         </h4>
         <ul className="max-h-48 overflow-auto">
           {room.messages.map((message) => (
             <li key={message.id} className="font-mono text-xs">
               [{new Date(message.ts).toLocaleTimeString()}]{' '}
-              {message.authorId === 'self' ? 'yo' : message.authorNick}:{' '}
-              {message.text}
+              {message.authorId === 'self' ? 'me' : message.authorNick}: {message.text}
               {message.status === 'delivered' ? ' ✓✓' : ' ✓'}
             </li>
           ))}

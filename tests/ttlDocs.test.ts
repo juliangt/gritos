@@ -37,27 +37,27 @@ describe('self-destructing messages documentation (issue #96)', () => {
   it('documents the ttl field and its bounds in spec §7.2', () => {
     expect(spec).toContain('"ttl": 300')
     expect(spec).toContain('30–3600 inclusive')
-    expect(spec).toContain('ausente = el mensaje vive toda la sesión')
+    expect(spec).toContain('absent = the message lives for the whole session')
     // An invalid ttl drops the WHOLE envelope, never just the field.
-    expect(spec).toContain('invalida el **sobre entero**')
+    expect(spec).toContain('invalidates the **whole envelope**')
   })
 
   it('keeps the envelope version per-kind with no bump for ttl', () => {
-    expect(spec).toContain('no estrena versión')
-    expect(spec).toContain('ignora el campo en silencio y **conserva el mensaje toda la sesión**')
+    expect(spec).toContain('introduces no new version')
+    expect(spec).toContain('ignores the field silently and **keeps the message for the whole session**')
   })
 
   it('pins the §7.3 enforcement rule: receiver clock, sweep, separator, guards', () => {
-    expect(spec).toContain('Caducidad por mensaje (issue #96)')
+    expect(spec).toContain('Per-message expiry (issue #96)')
     expect(spec).toContain('expiresAt = receivedAt + ttl·1000')
-    expect(spec).toContain('jamás se usa para expirar')
-    expect(spec).toContain('— N mensajes expirados —')
+    expect(spec).toContain('is never used to expire')
+    expect(spec).toContain('— N expired messages —')
     // No resurrection: bounded expired-ids guard on the receive paths.
-    expect(spec).toContain('no resurrección')
+    expect(spec).toContain('no resurrection')
     // Receipts, unread and notifications are never retro-touched.
-    expect(spec).toContain('no retrotoque')
+    expect(spec).toContain('no retro-touch')
     // Expired messages free FIFO slots before the 500 cap.
-    expect(spec).toContain('libera su hueco')
+    expect(spec).toContain('frees its slot')
   })
 
   it('grows the spec §8.1 state shape: Message.expiresAt? and both expiredCount counters', () => {

@@ -350,7 +350,7 @@ describe('incoming DM (RF-04, §9.2, §12.1 v2)', () => {
     const mine = await myRawKeyAndFingerprint(room)
 
     const stranger = await makeFakeRemotePeer('peer-x')
-    const envelope = await sealFromX(stranger, '¿quién eres?', mine)
+    const envelope = await sealFromX(stranger, 'who are you?', mine)
     room.receive('dm', envelope, stranger.id)
     await flushMicrotasks()
 
@@ -452,7 +452,7 @@ describe('outgoing DM (RF-04, §9.2, §12.1 v2)', () => {
     const { room } = await joinWithPeerA()
     manager.openDmChannel(A.id)
 
-    const envelope = await manager.sendDm(A.id, 'secreto efímero', 60)
+    const envelope = await manager.sendDm(A.id, 'ephemeral secret', 60)
     expect(envelope).not.toBeNull()
     // Test guard: ttl rides the CURRENT dm version (v2) — no v bump — and
     // the receiving parser accepts the wire form whole.
@@ -496,7 +496,7 @@ describe('outgoing DM (RF-04, §9.2, §12.1 v2)', () => {
     await flushMicrotasks()
     expect(dmChannel(A.id).available).toBe(false)
     expect(dmChannel(A.id).messages.length).toBeGreaterThan(0)
-    expect(await manager.sendDm(A.id, '¿sigues ahí?')).toBeNull()
+    expect(await manager.sendDm(A.id, 'still there?')).toBeNull()
 
     // Back into a shared room, announcing identity AND ephemeral keys →
     // available again.
@@ -556,7 +556,7 @@ describe('legacy peers and version gates (issue #93, spec §12.1)', () => {
     await flushMicrotasks()
     expect(dmChannel(A.id).legacyPeer).toBe(false)
 
-    const envelope = await manager.sendDm(A.id, 'hola ahora sí')
+    const envelope = await manager.sendDm(A.id, 'hello again')
     expect(envelope).not.toBeNull()
     expect(envelope?.v).toBe(DM_PROTOCOL_VERSION)
     expect(room.lastSend('dm').options).toEqual({ target: A.id })
@@ -739,20 +739,20 @@ describe('DM freshness and replay (issue #19)', () => {
     const { room } = await joinWithPeerA()
     const mine = await myRawKeyAndFingerprint(room)
 
-    const envelope = await sealFromA('al límite', manager.getSelfPeerId(), mine)
+    const envelope = await sealFromA('at the limit', manager.getSelfPeerId(), mine)
     // 30s of slack inside the window, same real-timer reasoning as above.
     room.receive('dm', { ...envelope, ts: Date.now() - MAX_ENVELOPE_AGE_MS + 30_000 }, A.id)
     await flushMicrotasks()
 
     expect(dmChannel(A.id).messages).toHaveLength(1)
-    expect(dmChannel(A.id).messages[0]?.text).toBe('al límite')
+    expect(dmChannel(A.id).messages[0]?.text).toBe('at the limit')
   })
 
   it('drops a still-fresh replay delivered through a fresh connection (session-wide dedup)', async () => {
     const first = await joinWithPeerA('lobby')
     const mine = await myRawKeyAndFingerprint(first.room)
 
-    const envelope = await sealFromA('única', manager.getSelfPeerId(), mine)
+    const envelope = await sealFromA('single', manager.getSelfPeerId(), mine)
     first.room.receive('dm', envelope, A.id)
     await flushMicrotasks()
     expect(dmChannel(A.id).messages).toHaveLength(1)

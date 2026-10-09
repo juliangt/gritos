@@ -47,64 +47,64 @@ describe('emoji reactions documentation (issue #98)', () => {
   })
 
   it('adds the react action to the §7.1 table, between receipt and ping', () => {
-    expect(spec).toContain('Reacción emoji (issue #98)')
+    expect(spec).toContain('Emoji reaction (issue #98)')
     // Payload shape: batched ids, whitelisted emo, toggle, optional directed to.
     expect(spec).toContain('`{ids: string[], emo: string, on: boolean, to?: string}`')
     // Batch cap mirrors the receipt discipline.
-    expect(spec).toContain('lote de 1–50 ids de mensaje (mismo molde que `receipt`)')
+    expect(spec).toContain('a batch of 1–50 message ids (the same mold as `receipt`)')
     // The whitelist is pinned by its exact seven emojis.
-    expect(spec).toContain('lista blanca fija (👍 ❤️ 😂 😮 😢 🎉 👎)')
+    expect(spec).toContain('fixed whitelist (👍 ❤️ 😂 😮 😢 🎉 👎)')
     // Broadcast vs directed `to` semantics.
-    expect(spec).toContain('Sin `to` es difusión a toda la sala')
-    expect(spec).toContain('el resto de la sala no la ve')
-    expect(spec).toContain('jamás la retransmite (7.3)')
+    expect(spec).toContain('Without `to` it is a broadcast to the whole room')
+    expect(spec).toContain('the rest of the room never sees it')
+    expect(spec).toContain('never relays it (7.3)')
     // Receive-path caps: rate cap and content-keyed dedup.
-    expect(spec).toContain('tope de 30 payloads por par y minuto')
-    expect(spec).toContain('deduplicación por contenido')
+    expect(spec).toContain('a cap of 30 payloads per peer per minute')
+    expect(spec).toContain('content-keyed deduplication')
     // Cosmetic class: no notifications, no unread, no persistence.
-    expect(spec).toContain('Jamás notifica, marca no leídos ni persiste')
+    expect(spec).toContain('never notifies, never marks unread, never persists')
     // Row order mirrors the code: receipt, then react, then ping.
-    expect(spec.indexOf('Acuse de recibo (batch, máx. 50 ids).')).toBeLessThan(
-      spec.indexOf('Reacción emoji (issue #98)'),
+    expect(spec.indexOf('Delivery receipt (batch, max 50 ids).')).toBeLessThan(
+      spec.indexOf('Emoji reaction (issue #98)'),
     )
-    expect(spec.indexOf('Reacción emoji (issue #98)')).toBeLessThan(spec.indexOf('| `ping`'))
+    expect(spec.indexOf('Emoji reaction (issue #98)')).toBeLessThan(spec.indexOf('| `ping`'))
   })
 
   it('grows the spec §8.1 state shape: Message.reactions with caps and normalization', () => {
     expect(spec).toContain('reactions?: Partial<Record<ReactEmoji, string[]>>')
     // ≤7 keys (the whole whitelist) and ≤50 peerIds per emoji, refuse-not-evict.
-    expect(spec).toContain('Tope de 7 claves')
-    expect(spec).toContain('el 51.º se rechaza, jamás se expulsa')
+    expect(spec).toContain('A cap of 7 keys')
+    expect(spec).toContain('the 51st is rejected, never evicted')
     // Emptied keys normalize away: no ghost state after an unreact.
-    expect(spec).toContain('el mapa vacío vuelve a undefined')
+    expect(spec).toContain('the emptied map reverts to undefined')
     // Cosmetic class: memory-only, dies with its message row.
-    expect(spec).toContain('Clase cosmética (9.5): solo memoria')
+    expect(spec).toContain('Cosmetic class (9.5): memory only')
   })
 
   it('folds reactions into the §9.5 unauthenticated control-plane note', () => {
     // Forgeable, same class as receipts/typing/system lines/pongs.
-    expect(spec).toContain('reacciones emoji (`react`, issue #98)')
-    expect(spec).toContain('hinchar los conteos de reacciones de mensajes ajenos')
+    expect(spec).toContain('emoji reactions (`react`, issue #98)')
+    expect(spec).toContain("inflate the reaction counts of other people's messages")
     // Bounded by the shipped caps.
     expect(spec).toContain(
-      'lista blanca de 7 emojis, lote ≤50 ids, tope de 30 payloads por par y minuto',
+      'a 7-emoji whitelist, batches ≤50 ids, a cap of 30 payloads per peer per minute',
     )
     // Mute gates them (issue #95 parity).
-    expect(spec).toContain('las líneas de sistema y las reacciones (issue #98) del par silenciado')
+    expect(spec).toContain('the system lines and reactions (issue #98) of the muted peer')
   })
 
   it('records the mixed-build spike in spec §12.3 with the fallback verdict', () => {
-    expect(spec).toContain('### 12.3 Nota: spike mixed-build de la acción `react` (issue #98)')
+    expect(spec).toContain('### 12.3 Note: mixed-build spike for the `react` action (issue #98)')
     // Source analysis of the pinned transport.
     expect(spec).toContain('`@trystero-p2p/core` 0.25.4')
     expect(spec).toContain('action-wire.mjs')
     // Actions route by name: chunks embed the zero-padded 32-byte action name.
-    expect(spec).toContain('relleno a cero hasta 32 bytes')
+    expect(spec).toContain('zero-padded to 32 bytes')
     // Unregistered names are reassembled then parked: old builds ignore react.
     expect(spec).toContain('`pendingActionPayloads`')
-    expect(spec).toContain('un build antiguo ignora el tráfico `react` en silencio')
+    expect(spec).toContain('an old build ignores `react` traffic silently')
     // The issue's feared receipt-channel fallback is unneeded.
-    expect(spec).toContain('dirigir las reacciones por el canal `receipt` — se descarta')
+    expect(spec).toContain('directing the reactions through the `receipt` channel')
   })
 
   it('ships the manual reactions matrix in docs/qa-checklist.md', () => {

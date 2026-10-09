@@ -148,7 +148,7 @@ export async function fakePeerJoins(
   options: { nick?: string; announceEphemeral?: boolean } = {},
 ): Promise<void> {
   room.peerJoin(peer.id)
-  room.receive('presence', { nick: options.nick ?? 'par', fp: peer.fingerprint }, peer.id)
+  room.receive('presence', { nick: options.nick ?? 'peer', fp: peer.fingerprint }, peer.id)
   room.receive('keys', peer.rawPublicKey, peer.id)
   if (options.announceEphemeral !== false) {
     room.receive('ephkeys', peer.ephRawKey, peer.id)

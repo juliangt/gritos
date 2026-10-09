@@ -102,7 +102,7 @@ describe('clean rows (no reactions, closed bar)', () => {
     expect(screen.getByRole('button', { name: REACTION_ADD_LABEL })).toBeInTheDocument()
     expect(screen.queryByRole('group', { name: REACTIONS_ROW_LABEL })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: REACTION_BAR_LABEL })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Reaccionar con/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /React con/ })).not.toBeInTheDocument()
   })
 
   it('system lines carry no affordance at all', () => {
@@ -192,7 +192,7 @@ describe('quick-pick bar', () => {
     fireEvent.click(screen.getByRole('button', { name: REACTION_ADD_LABEL }))
     expect(screen.getByRole('group', { name: REACTION_BAR_LABEL })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reaccionar con 🎉' }))
+    fireEvent.click(screen.getByRole('button', { name: 'React with 🎉' }))
 
     expect(toggleReaction).toHaveBeenCalledWith('room-1', 'm0', '🎉')
     // A pick dismisses the bar.
@@ -203,7 +203,7 @@ describe('quick-pick bar', () => {
     renderFeed([makeMessage({ roomId: 'dm:peer-9' })])
 
     fireEvent.click(screen.getByRole('button', { name: REACTION_ADD_LABEL }))
-    fireEvent.click(screen.getByRole('button', { name: 'Reaccionar con ❤️' }))
+    fireEvent.click(screen.getByRole('button', { name: 'React with ❤️' }))
 
     expect(toggleReaction).toHaveBeenCalledWith('dm:peer-9', 'm0', '❤️', 'peer-9')
   })
@@ -243,7 +243,7 @@ describe('keyboard reachability (RNF-05)', () => {
     const opener = screen.getByRole('button', { name: REACTION_ADD_LABEL })
 
     fireEvent.focus(opener)
-    fireEvent.click(screen.getByRole('button', { name: 'Reaccionar con 👍' }))
+    fireEvent.click(screen.getByRole('button', { name: 'React with 👍' }))
 
     expect(toggleReaction).toHaveBeenCalledWith('room-1', 'm0', '👍')
   })

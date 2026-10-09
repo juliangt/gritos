@@ -40,12 +40,12 @@ describe('local moderation documentation (issue #95)', () => {
   it('keeps spec §8.2 at exactly five gritos:* keys with the mute-list note', () => {
     const storageKeyRows = spec.match(/^\| `gritos:/gm) ?? []
     expect(storageKeyRows).toHaveLength(5)
-    expect(spec).toContain('no estrena clave')
+    expect(spec).toContain('introduces no new key')
   })
 
   it('pins the enforcement semantics and §9.5 cross-reference', () => {
-    expect(spec).toContain('Silenciado local (issue #95)')
-    expect(spec).toContain('silenciar pares por fingerprint')
+    expect(spec).toContain('Local mute (issue #95)')
+    expect(spec).toContain('muting peers by fingerprint')
   })
 
   it('ships the manual mute matrix in docs/qa-checklist.md', () => {

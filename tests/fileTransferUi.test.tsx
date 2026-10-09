@@ -324,7 +324,7 @@ describe('pre-send dialog (issue #103 phase 4)', () => {
 // ---------------------------------------------------------------------------
 
 describe('receiver consent flow (real engine, issue #103 phase 4)', () => {
-  it('offer card renders and NOTHING flows until Aceptar; then image inline', async () => {
+  it('offer card renders and NOTHING flows until Accept; then image inline', async () => {
     const { room } = await joinRoomWithA(PUBLIC_ROOM)
     render(<ChatLayout />)
 
@@ -336,7 +336,7 @@ describe('receiver consent flow (real engine, issue #103 phase 4)', () => {
     expect(within(card).getByText(fileOfferText(NICK))).toBeInTheDocument()
     expect(within(card).getByText('500 B')).toBeInTheDocument()
     expect(within(card).getByText('image/png')).toBeInTheDocument()
-    expect(within(card).getByText('Sin cifrado E2E — solo DTLS.')).toBeInTheDocument()
+    expect(within(card).getByText('No E2E encryption — DTLS only.')).toBeInTheDocument()
     // Not even a byte of control flows for an offer (§12.4).
     expect(acksOf(room)).toHaveLength(0)
     expect(room.action('file-chunk').sends).toHaveLength(0)
@@ -399,7 +399,7 @@ describe('receiver consent flow (real engine, issue #103 phase 4)', () => {
     expect(link).toHaveAttribute('download', 'notas.txt')
   })
 
-  it('Declinar refuses before any byte: explicit file-abort, honest card', async () => {
+  it('Decline refuses before any byte: explicit file-abort, honest card', async () => {
     const { room } = await joinRoomWithA(PUBLIC_ROOM)
     render(<ChatLayout />)
 
@@ -414,7 +414,7 @@ describe('receiver consent flow (real engine, issue #103 phase 4)', () => {
     expect(acksOf(room)).toHaveLength(0)
 
     const rejectedCard = cardOf('intruso.bin')
-    expect(within(rejectedCard).getByText('Rechazado')).toBeInTheDocument()
+    expect(within(rejectedCard).getByText('Declined')).toBeInTheDocument()
     fireEvent.click(within(rejectedCard).getByRole('button', { name: FILE_DISMISS_BUTTON }))
     await waitFor(() =>
       expect(screen.queryByLabelText(fileCardLabel('intruso.bin', NICK))).not.toBeInTheDocument(),
@@ -453,14 +453,14 @@ describe('receiver consent flow (real engine, issue #103 phase 4)', () => {
       expect(bar).toHaveAttribute('aria-valuemax', String(chunks))
       expect(bar).toHaveAttribute('aria-valuenow', '1')
     })
-    expect(within(cardOf('grande.bin')).getByText('Recibiendo… 1/3')).toBeInTheDocument()
+    expect(within(cardOf('grande.bin')).getByText('Receiving… 1/3')).toBeInTheDocument()
 
     // Receiver cancel mid-transfer: file-abort to the sender, honest card.
     fireEvent.click(within(cardOf('grande.bin')).getByRole('button', { name: FILE_CANCEL_BUTTON }))
     await waitFor(() => expect(abortsOf(room)).toHaveLength(1))
     expect(abortsOf(room)[0]?.data).toEqual({ id: meta.id })
     const cancelled = cardOf('grande.bin')
-    expect(within(cancelled).getByText('Cancelado')).toBeInTheDocument()
+    expect(within(cancelled).getByText('Cancelled')).toBeInTheDocument()
     expect(within(cancelled).queryByRole('progressbar')).not.toBeInTheDocument()
   })
 })
@@ -503,23 +503,23 @@ describe('sender flow (real engine, issue #103 phase 4)', () => {
       room.receive('file-ack', { id: meta.id, nextSeq: 9, grant: 8 }, A.id)
     })
     await waitFor(() => {
-      expect(within(cardOf('grande.bin')).getByText('Enviando… 8/20')).toBeInTheDocument()
+      expect(within(cardOf('grande.bin')).getByText('Sending… 8/20')).toBeInTheDocument()
     })
 
     fireEvent.click(within(cardOf('grande.bin')).getByRole('button', { name: FILE_CANCEL_BUTTON }))
     await waitFor(() => expect(abortsOf(room)).toHaveLength(1))
     expect(abortsOf(room)[0]?.data).toEqual({ id: meta.id })
-    expect(within(cardOf('grande.bin')).getByText('Cancelado')).toBeInTheDocument()
+    expect(within(cardOf('grande.bin')).getByText('Cancelled')).toBeInTheDocument()
   })
 
-  it('a peer rejection during the offer shows Rechazado', async () => {
+  it('a peer rejection during the offer shows Declined', async () => {
     const { room } = await joinRoomWithA(PUBLIC_ROOM)
     const meta = await sendFromDialog(room, new File([patternBytes(10)], 'rechazado.bin'))
     act(() => {
       room.receive('file-abort', { id: meta.id }, A.id)
     })
     await waitFor(() =>
-      expect(within(cardOf('rechazado.bin')).getByText('Rechazado')).toBeInTheDocument(),
+      expect(within(cardOf('rechazado.bin')).getByText('Declined')).toBeInTheDocument(),
     )
   })
 
@@ -598,7 +598,7 @@ describe('DM file dialog (issue #103 phase 4)', () => {
       useAppStore.getState().setActiveView({ kind: 'room', id: roomId })
     })
     expect(screen.queryByLabelText(fileCardLabel('secreto.bin', NICK))).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Transferencias de archivos')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('File transfers')).not.toBeInTheDocument()
   })
 
   it('manual (trackerless) channels offer no attachment: no file host there', () => {
@@ -606,7 +606,7 @@ describe('DM file dialog (issue #103 phase 4)', () => {
       manualDms: {
         'manual:abc': {
           peerId: 'manual:abc',
-          peerNick: 'par-manual',
+          peerNick: 'peer-manual',
           peerFingerprint: null,
           messages: [],
           unread: 0,
@@ -622,7 +622,7 @@ describe('DM file dialog (issue #103 phase 4)', () => {
     useAppStore.getState().setActiveView({ kind: 'dm', peerId: 'manual:abc' })
     render(<ChatLayout />)
 
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: FILE_ATTACH_LABEL })).not.toBeInTheDocument()
   })
 })

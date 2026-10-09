@@ -50,8 +50,8 @@ function renderMobileApp() {
 }
 
 function openDrawer() {
-  fireEvent.click(screen.getAllByRole('button', { name: 'Mostrar u ocultar la barra lateral' })[0])
-  return screen.getByRole('dialog', { name: 'Barra lateral' })
+  fireEvent.click(screen.getAllByRole('button', { name: 'Show or hide the sidebar' })[0])
+  return screen.getByRole('dialog', { name: 'Sidebar' })
 }
 
 describe('Responsive ≤768 px (mobile drawer layout)', () => {
@@ -59,16 +59,16 @@ describe('Responsive ≤768 px (mobile drawer layout)', () => {
     await renderMobileApp()
 
     // Drawer closed: no overlay dialog and no sidebar content.
-    expect(screen.queryByRole('dialog', { name: 'Barra lateral' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Salas activas' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Sidebar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Active rooms' })).not.toBeInTheDocument()
 
     const drawer = openDrawer()
     // The backdrop sits inside the overlay and is hidden from AT.
     const backdrop = drawer.firstElementChild as HTMLElement
     expect(backdrop).toHaveAttribute('aria-hidden', 'true')
     // Sidebar content is reachable inside the drawer.
-    expect(within(drawer).getByRole('region', { name: 'Salas activas' })).toBeInTheDocument()
-    expect(within(drawer).getByRole('button', { name: '[+ Unirse]' })).toBeInTheDocument()
+    expect(within(drawer).getByRole('region', { name: 'Active rooms' })).toBeInTheDocument()
+    expect(within(drawer).getByRole('button', { name: '[+ Join]' })).toBeInTheDocument()
   })
 
   it('opening a room from the drawer closes it', async () => {
@@ -78,19 +78,19 @@ describe('Responsive ≤768 px (mobile drawer layout)', () => {
     // #general is suggested (only #lobby is active).
     fireEvent.click(within(drawer).getByRole('button', { name: '#general' }))
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Barra lateral' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: 'Sidebar' })).not.toBeInTheDocument()
     })
   })
 
   it('keeps the composer usable: enabled textarea, send button and compact header', async () => {
     await renderMobileApp()
 
-    const textarea = screen.getByLabelText('Escribe un mensaje')
+    const textarea = screen.getByLabelText('Write a message')
     expect(textarea).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Enviar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
     // Markdown help is hidden on small screens (hidden sm:inline).
-    expect(screen.getByText('**negrita** · *cursiva* · `código`')).toHaveClass('hidden')
+    expect(screen.getByText('**bold** · *italic* · `code`')).toHaveClass('hidden')
     // Compact header: room name plus the settings entry stay available.
-    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 })

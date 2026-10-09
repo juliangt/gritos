@@ -1,7 +1,7 @@
 {
   "name": "Gritos",
   "short_name": "Gritos",
-  "description": "gritos — chat P2P sin servidor: sin cuentas, cifrado de extremo a extremo y efímero. Los mensajes viajan directos entre navegadores.",
+  "description": "gritos — serverless P2P chat: no accounts, end-to-end encryption, ephemeral. Messages travel directly between browsers.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

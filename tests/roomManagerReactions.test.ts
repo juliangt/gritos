@@ -197,7 +197,7 @@ describe('issue #98 phase 2 — inbound reactions land in the right slice', () =
 describe('issue #98 phase 2 — optimistic local toggle (toggleReaction)', () => {
   it('applies the local peerId immediately, sends a broadcast, and echoes cannot double-add', async () => {
     const { roomId, room } = await joinWithPeer()
-    const own = manager.sendChat(roomId, 'mío')
+    const own = manager.sendChat(roomId, 'mine')
     expect(own).not.toBeNull()
 
     expect(manager.toggleReaction(roomId, own?.id ?? '', '👍')).toBe(true)
@@ -223,7 +223,7 @@ describe('issue #98 phase 2 — optimistic local toggle (toggleReaction)', () =>
 
   it('lists the own peerId once on an own sent message (send + toggle compose)', async () => {
     const { roomId } = await joinWithPeer()
-    const own = manager.sendChat(roomId, 'autoreacción')
+    const own = manager.sendChat(roomId, 'self-reaction')
 
     manager.toggleReaction(roomId, own?.id ?? '', '🎉')
 

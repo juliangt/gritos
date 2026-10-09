@@ -86,48 +86,48 @@ describe('history gossip documentation (issue #102)', () => {
     expect(spec).toContain('`{batch: Envelope[]}`')
     // Ask-side bounds: n ≤ 50, 1 req/min, parked-until-peer-join.
     expect(spec).toContain(`1..${MAX_HISTORY_REQUEST} (\`MAX_HISTORY_REQUEST\`)`)
-    expect(spec).toContain(`${HISTORY_REQ_RATE_CAP} petición/minuto`)
-    expect(spec).toContain('se ESTACIONA y sale con la primera unión de par')
+    expect(spec).toContain(`${HISTORY_REQ_RATE_CAP} request/minute`)
+    expect(spec).toContain('is PARKED and leaves with the first peer join')
     // Receive bounds: 6 batches/min → ≤ 120 msgs/min/peer.
-    expect(spec).toContain(`${HISTORY_RATE_CAP} lotes por par y minuto`)
-    expect(spec).toContain(`≤ ${HISTORY_RATE_CAP * MAX_HISTORY_BATCH} mensajes/min/par`)
+    expect(spec).toContain(`${HISTORY_RATE_CAP} batches per peer per minute`)
+    expect(spec).toContain(`≤ ${HISTORY_RATE_CAP * MAX_HISTORY_BATCH} messages/min/peer`)
     // Chunking: ≤ 20 envelopes AND ≤ 48 KiB measured per batch.
-    expect(spec).toContain(`1–${MAX_HISTORY_BATCH} sobres`)
+    expect(spec).toContain(`1–${MAX_HISTORY_BATCH} \`chat\` envelopes`)
     expect(spec).toContain(`≤ ${MAX_HISTORY_BATCH_BYTES / 1024} KiB`)
     expect(spec).toContain('`chunkHistBatches`')
-    expect(spec).toContain('re-sella los cuerpos con la clave de la sala')
-    expect(spec).toContain('Cero efectos de transporte')
+    expect(spec).toContain('re-seals the bodies with the room key')
+    expect(spec).toContain('Zero transport effects')
   })
 
   it('pins the §7.3 replay rules: bypass only, shape re-validation, dedup, silence, caps', () => {
-    expect(spec).toContain('Chisme de historial opt-in (issue #102)')
-    expect(spec).toContain('la validación de forma es completa (`parseEnvelope`')
+    expect(spec).toContain('Opt-in history gossip (issue #102)')
+    expect(spec).toContain('the shape validation is complete (`parseEnvelope`')
     // Freshness: the AGE window is bypassed, the future-skew check stays.
-    expect(spec).toContain('bypass deliberado')
-    expect(spec).toContain('sesgo de futuro de ±90 s se conserva')
+    expect(spec).toContain('deliberate bypass')
+    expect(spec).toContain('the ±90 s future skew is kept')
     expect(spec).toContain('`isWithinFutureSkew`')
     // Dedup both directions; zero arrival side effects.
-    expect(spec).toContain('La deduplicación vale en ambas direcciones')
-    expect(spec).toContain('Cero efectos de llegada')
-    expect(spec).toContain('el ✓✓ significa entrega en vivo')
+    expect(spec).toContain('Deduplication holds in both directions')
+    expect(spec).toContain('Zero arrival effects')
+    expect(spec).toContain('✓✓ means live delivery')
     // Recipient cap, arrival order, muted-author fail-open.
-    expect(spec).toContain(`${MAX_RECOVERED_PER_JOIN} recuperados por sesión de unión`)
-    expect(spec).toContain('NO aplica a lo reenviado')
-    expect(spec).toContain('falla en abierto')
+    expect(spec).toContain(`${MAX_RECOVERED_PER_JOIN} recovered per join session`)
+    expect(spec).toContain('does NOT apply to replayed rows')
+    expect(spec).toContain('fails open')
     // TTL on the receiver clock; no resurrection.
     expect(spec).toContain('`expiresAt = Date.now() + ttl·1000`')
-    expect(spec).toContain('no resucita jamás por chisme')
+    expect(spec).toContain('never resurrects through gossip')
     // Password rooms: ciphertext never lands as text; keyless drop.
-    expect(spec).toContain('el ciphertext crudo jamás aterriza como texto')
+    expect(spec).toContain('the raw ciphertext never lands as text')
   })
 
   it('labels provenance with the exact separator and cross-references the §9.5 trust note', () => {
-    expect(RECOVERED_SEPARATOR_TEXT).toBe('— mensajes recuperados de pares —')
-    expect(spec).toContain(`«${RECOVERED_SEPARATOR_TEXT}»`)
-    expect(spec).toContain('mismo nivel de confianza que el chat en vivo')
-    expect(spec).toContain('(9.5, plano de control sin autenticar)')
-    expect(spec).toContain('Nada se persiste')
-    expect(spec).toContain('el botón de pánico (RF-08) no necesita nada especial')
+    expect(RECOVERED_SEPARATOR_TEXT).toBe('— messages recovered from peers —')
+    expect(spec).toContain(`"${RECOVERED_SEPARATOR_TEXT}"`)
+    expect(spec).toContain('same level of trust as live chat')
+    expect(spec).toContain('(9.5, unauthenticated control plane)')
+    expect(spec).toContain('Nothing is persisted')
+    expect(spec).toContain('the panic button (RF-08) needs nothing special')
   })
 
   it('grows the spec §8.1 state shape with the consent flag and the recovered fields', () => {
@@ -141,10 +141,10 @@ describe('history gossip documentation (issue #102)', () => {
 
   it('marks roadmap item 2 implemented and folds forged history into the §9.5 control plane', () => {
     expect(spec).toContain(
-      'retransmisión de últimos N mensajes a nuevos participantes (issue #102): **implementado**',
+      'relay of the last N messages to late joiners (issue #102): **implemented**',
     )
-    expect(spec).toContain('el chisme de historial opt-in reenvía')
-    expect(spec).toContain('etiqueta la procedencia, no la veracidad')
+    expect(spec).toContain('the opt-in history gossip relays')
+    expect(spec).toContain('labels provenance, not veracity')
   })
 
   it('ships the manual history-gossip matrix in docs/qa-checklist.md', () => {

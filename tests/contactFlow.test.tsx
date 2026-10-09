@@ -69,8 +69,8 @@ import {
 /**
  * Issue #105 phase 3 (spec §12.5) — the contact flow UI over the REAL
  * signal-channel manager and the fake transport: the Privacidad toggle
- * joins/leaves the swarm, «Mi contacto» shares the fingerprint (copy + QR +
- * PNG + caveat), «Contacto por huella» knocks out and lands in the DM view
+ * joins/leaves the swarm, «My contact» shares the fingerprint (copy + QR +
+ * PNG + caveat), «Contact by fingerprint» knocks out and lands in the DM view
  * on the accept ack (one E2EE round trip through the manager), the inbound
  * consent card accepts/rejects/mutes, the note is capped at input, the
  * `#contacto=` deep link prefills the flow, and toggling off mid-flow hides
@@ -189,7 +189,7 @@ function openContactFlow(pick: 'share' | 'knock'): HTMLElement {
   const dialog = screen.getByRole('dialog', { name: CONTACT_DIALOG_LABEL })
   fireEvent.click(
     within(dialog).getByRole('button', {
-      name: pick === 'share' ? 'Mi contacto' : CONTACT_KNOCK_ENTRY_BUTTON,
+      name: pick === 'share' ? 'My contact' : CONTACT_KNOCK_ENTRY_BUTTON,
     }),
   )
   return dialog
@@ -293,7 +293,7 @@ describe('PrivacyTab globalDm toggle (spec §12.5)', () => {
     expect(useSettingsStore.getState().settings.globalDm).toBe(false)
   })
 
-  it('the «+ contacto» sidebar entry exists only while the toggle is on', () => {
+  it('the «+ contact» sidebar entry exists only while the toggle is on', () => {
     useAppStore.getState().setIdentity(IDENTITY)
     renderLayout()
     expect(screen.queryByRole('button', { name: CONTACT_ENTRY })).not.toBeInTheDocument()
@@ -311,12 +311,12 @@ describe('PrivacyTab globalDm toggle (spec §12.5)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// «Mi contacto» — fingerprint share (copy + QR + PNG + caveat)
+// «My contact» — fingerprint share (copy + QR + PNG + caveat)
 // ---------------------------------------------------------------------------
 
-describe('Mi contacto (share your fingerprint)', () => {
+describe('My contact (share your fingerprint)', () => {
   beforeEach(() => {
-    // The «+ contacto» entry (and the whole flow) exists only while the
+    // The «+ contact» entry (and the whole flow) exists only while the
     // global-DM opt-in is on.
     act(() => {
       setGlobalDmEnabled(true)
@@ -361,7 +361,7 @@ describe('Mi contacto (share your fingerprint)', () => {
     expect(await screen.findByText(CONTACT_COPIED_FEEDBACK)).toBeInTheDocument()
   })
 
-  it('downloads the QR as a PNG named gritos-contacto.png (stubs)', () => {
+  it('downloads the QR as a PNG named gritos-contact.png (stubs)', () => {
     const toBlobCanvases: HTMLCanvasElement[] = []
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (
       this: HTMLCanvasElement,
@@ -393,10 +393,10 @@ describe('Mi contacto (share your fingerprint)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// «Contacto por huella» — knock out, accept, E2EE round trip
+// «Contact by fingerprint» — knock out, accept, E2EE round trip
 // ---------------------------------------------------------------------------
 
-describe('Contacto por huella (knock out)', () => {
+describe('Contact by fingerprint (knock out)', () => {
   it('happy path: knock → peer accepts → both land in the (global) DM view and messages flow', async () => {
     const room = await enableSwarm()
     const peer = await makeFakeRemotePeer('peer-b')
@@ -433,7 +433,7 @@ describe('Contacto por huella (knock out)', () => {
     expect(channel?.global).toBe(true)
     expect(channel?.available).toBe(true)
     expect(screen.getByRole('heading', { name: 'zorro-b' })).toBeInTheDocument()
-    const dmSection = within(screen.getByRole('region', { name: 'Mensajes directos' }))
+    const dmSection = within(screen.getByRole('region', { name: 'Direct messages' }))
     expect(dmSection.getByText('(global)')).toBeInTheDocument()
 
     // One E2EE round trip through the real manager — B's sealed message:
@@ -447,7 +447,7 @@ describe('Contacto por huella (knock out)', () => {
       peer.ephFingerprint,
       canon(await computeFingerprint(myEphRaw)),
     )
-    const sealed = await encryptDm(sharedKey, 'hola señal')
+    const sealed = await encryptDm(sharedKey, 'hello signal')
     room.receive(
       'dm',
       createEnvelope({
@@ -464,15 +464,15 @@ describe('Contacto por huella (knock out)', () => {
     )
     await flushCrypto()
     await waitFor(() => {
-      expect(channelMessages(canon(peer.fingerprint)).some((m) => m.text === 'hola señal')).toBe(
+      expect(channelMessages(canon(peer.fingerprint)).some((m) => m.text === 'hello signal')).toBe(
         true,
       )
     })
 
     // …and our answer through the composer (routed by the `global` flag).
-    const textarea = screen.getByLabelText('Escribe un mensaje')
+    const textarea = screen.getByLabelText('Write a message')
     fireEvent.change(textarea, { target: { value: 'hola de vuelta' } })
-    fireEvent.submit(screen.getByRole('form', { name: 'Mensaje' }))
+    fireEvent.submit(screen.getByRole('form', { name: 'Message' }))
 
     await waitFor(() => {
       const sends = room.action('dm').sends
@@ -511,7 +511,7 @@ describe('Contacto por huella (knock out)', () => {
     fireEvent.change(pasteField(), { target: { value: 'esto no es una huella' } })
     fireEvent.click(screen.getByRole('button', { name: CONTACT_KNOCK_SEND_BUTTON }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/no es una huella válida/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/not a valid fingerprint/)
     expect(room.action('knock').sends).toHaveLength(0)
   })
 
@@ -523,7 +523,7 @@ describe('Contacto por huella (knock out)', () => {
     fireEvent.change(pasteField(), { target: { value: 'A31F09BC77D24E5A0F1E2D3C4B5A6978' } })
     fireEvent.click(screen.getByRole('button', { name: CONTACT_KNOCK_SEND_BUTTON }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/no está presente en el canal global/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/not present on the global channel/)
   })
 
   it('the note is capped at 140 characters at the input', async () => {
@@ -690,7 +690,7 @@ describe('#contacto deep link', () => {
 
     expect(screen.queryByRole('dialog', { name: CONTACT_DIALOG_LABEL })).not.toBeInTheDocument()
     expect(window.location.hash).toBe('')
-    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 })
 

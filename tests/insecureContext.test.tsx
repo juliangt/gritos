@@ -74,7 +74,7 @@ describe('insecure context on the returning-visitor path (issue #43)', () => {
     render(<App />)
 
     expect(screen.getByText(INSECURE_CONTEXT_BANNER_TEXT)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Descartar el aviso' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss the notice' }))
     expect(screen.queryByText(INSECURE_CONTEXT_BANNER_TEXT)).not.toBeInTheDocument()
   })
 })

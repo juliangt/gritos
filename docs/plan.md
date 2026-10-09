@@ -1,76 +1,77 @@
-# Gritos — Plan de desarrollo (v1)
+# Gritos — Development plan (v1)
 
-| | |
-|---|---|
-| **Estado** | Borrador v1.0 — aprobado |
-| **Fecha** | 2026-10-03 |
-| **Especificación de referencia** | `docs/spec.md` (los IDs `RF-xx` / `RNF-xx` citados aquí están definidos allí) |
-| **Fuente original** | `docs/wishlist.md` + decisiones cerradas D1–D5 (spec, sección 2) |
+|                             |                                                                          |
+| --------------------------- | ------------------------------------------------------------------------ |
+| **Status**                  | Draft v1.0 — approved                                                    |
+| **Date**                    | 2026-10-03                                                               |
+| **Reference specification** | `docs/spec.md` (the `RF-xx` / `RNF-xx` IDs cited here are defined there) |
+| **Original source**         | `docs/wishlist.md` + closed decisions D1–D5 (spec, section 2)            |
 
 ---
 
-## 1. Resumen ejecutivo
+## 1. Executive summary
 
-Desarrollo de **Gritos**, chat P2P sin servidor (React + Vite + TypeScript + Tailwind + Zustand + Trystero/torrent), organizado en **7 milestones secuenciales (M0–M6)**, cada uno con un entregable demostrable, tareas concretas y criterios de conclusión verificables. Cada milestone termina en estado *"shippable parcial"*: la app arranca y las funcionalidades ya construidas funcionan de extremo a extremo.
+Development of **Gritos**, a serverless P2P chat (React + Vite + TypeScript + Tailwind + Zustand + Trystero/torrent), organized into **7 sequential milestones (M0–M6)**, each with a demonstrable deliverable, concrete tasks and verifiable completion criteria. Every milestone ends in a _"partially shippable"_ state: the app boots and the features already built work end to end.
 
-Regla transversal: **nada se marca como done sin verificación manual en ≥2 pestañas del navegador** (dos pestañas = dos pares reales), además de tests unitarios donde aplique.
+Cross-cutting rule: **nothing is marked as done without manual verification in ≥2 browser tabs** (two tabs = two real peers), plus unit tests where applicable.
 
-## 2. Pre-requisitos y entregables
+## 2. Pre-requisites and deliverables
 
-**Pre-requisitos**: Node.js LTS (≥20) y npm (o pnpm). Navegador evergreen con DevTools. No hay ninguna infraestructura externa que aprovisionar.
+**Pre-requisites**: Node.js LTS (≥20) and npm (or pnpm). An evergreen browser with DevTools. There is no external infrastructure to provision.
 
-**Entregable final**: build estático en `dist/` desplegable en cualquier hosting de ficheros (RNF-06), más este repositorio con tests y documentación.
+**Final deliverable**: a static build in `dist/` deployable to any file host (RNF-06), plus this repository with tests and documentation.
 
-**Definition of Done global** (aplica a cada milestone):
-- `npm run build` pasa sin errores ni warnings de TS.
-- `npm run lint` limpio; `npm test` en verde.
-- Checklist manual del milestone ejecutado y anotado (plantilla en sección 7).
-- Sin `console.log` de depuración en código de producción (los logs de red quedan tras flag `debug`).
+**Global Definition of Done** (applies to every milestone):
 
-## 3. Estructura de carpetas objetivo
+- `npm run build` passes with no errors or TS warnings.
+- `npm run lint` clean; `npm test` green.
+- The milestone's manual checklist executed and annotated (template in section 7).
+- No debug `console.log` in production code (network logs live behind the `debug` flag).
+
+## 3. Target folder structure
 
 ```
 gritos/
 ├── docs/                      # spec.md, plan.md, wishlist.md
-├── index.html                 # incluye script anti-flash de tema y meta CSP (M6)
+├── index.html                 # includes the anti-flash theme script and the CSP meta (M6)
 ├── public/
 │   └── favicon.svg
 ├── src/
 │   ├── main.tsx
-│   ├── App.tsx                # enrutado de vistas: onboarding | app
+│   ├── App.tsx                # view routing: onboarding | app
 │   ├── components/
 │   │   ├── onboarding/        # OnboardingScreen, NicknameInput
 │   │   ├── sidebar/           # Sidebar, RoomList, PeerList, JoinRoomPopover
 │   │   ├── chat/              # ChatHeader, MessageFeed, MessageItem, ChatInput,
 │   │   │                      # TypingBar, NewMessagesButton
-│   │   ├── dm/                # DmHeader (fingerprint), (reusa componentes de chat)
+│   │   ├── dm/                # DmHeader (fingerprint), (reuses chat components)
 │   │   ├── settings/          # SettingsModal, NetworkTab, PrivacyTab, AppearanceTab
 │   │   └── common/            # Modal, Badge, StatusDot, Icon, ConfirmDialog
 │   ├── lib/
 │   │   ├── p2p/
-│   │   │   ├── roomManager.ts # Map<roomId, RoomConnection>; única superficie Trystero
-│   │   │   └── protocol.ts    # tipos Envelope, acciones, validación/dedup
+│   │   │   ├── roomManager.ts # Map<roomId, RoomConnection>; the only Trystero surface
+│   │   │   └── protocol.ts    # Envelope types, actions, validation/dedup
 │   │   ├── crypto/
-│   │   │   ├── identity.ts    # keypair ECDH, fingerprint, persistencia JWK
-│   │   │   ├── dm.ts          # ECDH + HKDF + AES-GCM por par
-│   │   │   ├── roomKey.ts     # PBKDF2 + sal determinista + AES-GCM
-│   │   │   └── hashes.ts      # SHA-256/uuid/roomId (9.4 spec)
+│   │   │   ├── identity.ts    # ECDH keypair, fingerprint, JWK persistence
+│   │   │   ├── dm.ts          # ECDH + HKDF + AES-GCM per peer
+│   │   │   ├── roomKey.ts     # PBKDF2 + deterministic salt + AES-GCM
+│   │   │   └── hashes.ts      # SHA-256/uuid/roomId (spec 9.4)
 │   │   ├── markdown/
-│   │   │   └── render.tsx     # renderizador subset seguro (RF-03)
-│   │   └── nickname.ts        # generador adjetivo-sustantivo (es)
+│   │   │   └── render.tsx     # safe subset renderer (RF-03)
+│   │   └── nickname.ts        # noun-adjective generator (es-ES)
 │   ├── stores/
-│   │   ├── useAppStore.ts     # AppState del spec (8.1)
+│   │   ├── useAppStore.ts     # the spec's AppState (8.1)
 │   │   └── useSettingsStore.ts
 │   ├── hooks/
-│   │   ├── useRoom.ts         # suscripción a sala activa
-│   │   ├── useLatency.ts      # bucle ping/pong
-│   │   ├── useTheme.ts        # claro/oscuro/sistema + anti-flash
+│   │   ├── useRoom.ts         # subscription to the active room
+│   │   ├── useLatency.ts      # ping/pong loop
+│   │   ├── useTheme.ts        # light/dark/system + anti-flash
 │   │   └── useNotifications.ts
-│   └── styles/index.css       # Tailwind + tokens de tema
+│   └── styles/index.css       # Tailwind + theme tokens
 ├── tests/
-│   ├── crypto.test.ts         # vectores y roundtrips (sección 6)
-│   ├── markdown.test.tsx      # ataques XSS y subset
-│   ├── protocol.test.ts       # dedup, validación v, tamaño
+│   ├── crypto.test.ts         # vectors and roundtrips (section 6)
+│   ├── markdown.test.tsx      # XSS attacks and the subset
+│   ├── protocol.test.ts       # dedup, v validation, size
 │   └── nickname.test.ts
 ├── .gitignore
 ├── package.json
@@ -78,216 +79,217 @@ gritos/
 └── vite.config.ts
 ```
 
-**Reglas de arquitectura del código**
-- Trystero se importa **únicamente** desde `lib/p2p/roomManager.ts` (aisla cambios de API — riesgo R4).
-- Los componentes no tocan Web Crypto ni WebSockets: solo stores y hooks.
-- Todo lo criptográfico vive en `lib/crypto/` y es testeable sin red.
+**Code architecture rules**
+
+- Trystero is imported **only** from `lib/p2p/roomManager.ts` (isolates API changes — risk R4).
+- Components touch neither Web Crypto nor WebSockets: only stores and hooks.
+- Everything cryptographic lives in `lib/crypto/` and is testable without a network.
 
 ## 4. Milestones
 
-### M0 · Setup y fundaciones — *complejidad S*
+### M0 · Setup and foundations — _S complexity_
 
-**Objetivo**: repositorio vivo con toolchain completa y app vacía renderizando.
+**Goal**: a living repository with the full toolchain and an empty app rendering.
 
-- [ ] `npm create vite@latest . -- --template react-ts` (sobre la raíz, respetando `docs/`).
-- [ ] Dependencias: `trystero` (fijar **versión exacta**, sin `^`), `zustand`, `tailwindcss` (+ plugin Vite si se usa Tailwind 4) — **cero dependencias runtime más** (sin `uuid` → `crypto.randomUUID()`; sin `marked`/`dompurify` → renderer propio; sin `idb` → D2 lo elimina).
+- [ ] `npm create vite@latest . -- --template react-ts` (at the root, respecting `docs/`).
+- [ ] Dependencies: `trystero` (pin the **exact version**, no `^`), `zustand`, `tailwindcss` (+ the Vite plugin if Tailwind 4 is used) — **zero further runtime dependencies** (no `uuid` → `crypto.randomUUID()`; no `marked`/`dompurify` → own renderer; no `idb` → D2 removes it).
 - [ ] Dev deps: `vitest`, `@testing-library/react`, `jsdom`, `eslint` (+ `typescript-eslint`, `eslint-plugin-react-hooks`), `prettier`.
 - [ ] Scripts: `dev`, `build`, `preview`, `test`, `lint`, `format`.
-- [ ] `git init`, `.gitignore` (node_modules, dist, .env, .DS_Store), commit inicial.
-- [ ] Estructura de carpetas de la sección 3 (vacía pero con los módulos creados y exportando stubs tipados).
-- [ ] Tipos base del spec (8.1) en `stores/` y `lib/p2p/protocol.ts`.
-- [ ] README mínimo: qué es Gritos, cómo arrancar, enlace a `docs/spec.md`.
+- [ ] `git init`, `.gitignore` (node_modules, dist, .env, .DS_Store), initial commit.
+- [ ] The folder structure of section 3 (empty but with the modules created and exporting typed stubs).
+- [ ] The spec's base types (8.1) in `stores/` and `lib/p2p/protocol.ts`.
+- [ ] Minimal README: what Gritos is, how to run it, a link to `docs/spec.md`.
 
-**Done cuando**: `dev` sirve la app vacía con tema funcionando, `build` + `lint` + `test` (con un test humo) pasan, y hay commit inicial.
+**Done when**: `dev` serves the empty app with the theme working, `build` + `lint` + `test` (with a smoke test) pass, and there is an initial commit.
 
-### M1 · Núcleo P2P multi-sala — *complejidad L*
+### M1 · Multi-room P2P core — _L complexity_
 
-**Objetivo**: conectividad real entre pestañas sin UI de chat. Es el milestone de mayor riesgo técnico; se ataca primero para desbloquear todo lo demás.
+**Goal**: real connectivity between tabs with no chat UI. This is the highest-technical-risk milestone; it is attacked first to unlock everything else.
 
-Cubre (spec): 6.3, 6.5, 7 (protocolo completo), 9.4, RF-06 parcial.
+Covers (spec): 6.3, 6.5, 7 (the full protocol), 9.4, RF-06 partial.
 
-- [ ] `hashes.ts`: `deriveRoomId(nombre, contraseña?)` según 9.4, con tests.
+- [ ] `hashes.ts`: `deriveRoomId(name, password?)` per 9.4, with tests.
 - [ ] `roomManager.ts`:
-  - [ ] `joinRoom(nombre, contraseña?)` / `leaveRoom(roomId)` / `reconnectAll()`; cap `maxActiveRooms` validado antes de unir.
-  - [ ] Por sala: registro de acciones `presence`, `keys`, `chat`, `dm`, `typing`, `receipt`, `ping`, `pong` (7.1).
-  - [ ] Eventos → actualización del store Zustand (pares, estado de la sala, typing decay).
-  - [ ] `appId = 'gritos-app-v1'`; `config` con trackers/ICE desde settings.
-  - [ ] Heurística de estado `error` (15 s sin conexión a tracker) y `searching`→`connected`.
-- [ ] `protocol.ts`: parse/validación de `Envelope` (v, tamaños, ids), dedup por sala, tests.
-- [ ] `useLatency`: ping cada 5 s por par, timeout y marca `degraded` tras 3 fallos.
-- [ ] Vista de depuración temporal (se elimina en M6): panel que muestra por sala el estado, pares, latencias y un botón que envía un `chat` de prueba — suficiente para verificar sin UI.
-- [ ] Cambios de apodo reanunciados (`presence`).
+  - [ ] `joinRoom(name, password?)` / `leaveRoom(roomId)` / `reconnectAll()`; the `maxActiveRooms` cap validated before joining.
+  - [ ] Per room: registration of the `presence`, `keys`, `chat`, `dm`, `typing`, `receipt`, `ping`, `pong` actions (7.1).
+  - [ ] Events → Zustand store updates (peers, room status, typing decay).
+  - [ ] `appId = 'gritos-app-v1'`; `config` with trackers/ICE from settings.
+  - [ ] `error` state heuristic (15 s with no tracker connection) and `searching`→`connected`.
+- [ ] `protocol.ts`: `Envelope` parse/validation (v, sizes, ids), per-room dedup, tests.
+- [ ] `useLatency`: ping every 5 s per peer, timeout and a `degraded` mark after 3 failures.
+- [ ] Temporary debug view (removed in M6): a panel showing per-room status, peers, latencies and a button that sends a test `chat` — enough to verify without UI.
+- [ ] Nickname changes re-announced (`presence`).
 
-**Done cuando**: en 2 pestañas unidas a `#lobby` ambos paneles muestran al otro par con apodo, fingerprint y latencia <X ms; en 3 pestañas se ven 2 pares cada una; al cerrar una pestaña, las demás marcan la salida en <10 s; unirse a 5 salas con cap 4 es rechazado.
+**Done when**: in 2 tabs joined to `#lobby` both panels show the other peer with nickname, fingerprint and latency <X ms; in 3 tabs each sees 2 peers; closing one tab makes the others mark the leave in <10 s; joining a 5th room with cap 4 is rejected.
 
-### M2 · Onboarding y UI de chat — *complejidad L*
+### M2 · Onboarding and chat UI — _L complexity_
 
-**Objetivo**: la experiencia nuclear de chat en salas públicas, completa. Primer milestone *demostrable a terceros*.
+**Goal**: the nuclear public-room chat experience, complete. The first milestone _demonstrable to third parties_.
 
-Cubre (spec): RF-01, RF-02 (sin contraseña), RF-03, RF-06 (UI de pares), 10.1–10.4, 10.6, RNF-05 parcial.
+Covers (spec): RF-01, RF-02 (no password), RF-03, RF-06 (peer UI), 10.1–10.4, 10.6, RNF-05 partial.
 
-- [ ] `OnboardingScreen` (RF-01): input + "sorpréndeme" (`nickname.ts` con listas es-ES, tests), persistencia de identidad básica (sin claves todavía — llegan en M3).
-- [ ] Layout: sidebar colapsable (`Ctrl/Cmd+B`, drawer móvil), encabezado, feed, entrada (10.1).
-- [ ] Sidebar: Activas (badge unread + estado), Sugeridas (`#lobby #general #dev #random`), Recientes (`rememberRooms`), `[+ Unirse]` popover con validación de nombre (RF-02), sección Pares con dots de latencia.
-- [ ] `ChatInput`: Enter/Shift+Enter, auto-resize 6 líneas, límite 4000 con contador, throttle de `typing`, cola local si `searching`.
-- [ ] `MessageFeed` + `MessageItem`: render Markdown propio (`markdown/render.tsx` con tests de XSS: `<script>`, `onerror=`, `javascript:` en links), menciones resaltadas, color de autor por hash de peerId, hora `HH:MM`, color de sistema para entradas/salidas, separador FIFO al llegar a 500.
-- [ ] `typing` con expiración 4 s y línea "N personas están escribiendo…".
-- [ ] `receipt` batch (≤50 ids) y `✓`/`✓✓` en mensajes propios.
-- [ ] Scroll inteligente (auto solo a ≤150 px del fondo, botón "↓ N mensajes nuevos").
-- [ ] `useTheme` claro/oscuro/sistema + script anti-flash inline en `index.html` (10.6).
-- [ ] Estados de conexión con textos exactos del spec (10.3).
-- [ ] Cambio de vista entre salas activas sin perder conexiones.
+- [ ] `OnboardingScreen` (RF-01): input + "surprise me" (`nickname.ts` with es-ES lists, tests), basic identity persistence (no keys yet — they arrive in M3).
+- [ ] Layout: collapsible sidebar (`Ctrl/Cmd+B`, mobile drawer), header, feed, input (10.1).
+- [ ] Sidebar: Active (unread badge + status), Suggested (`#lobby #general #dev #random`), Recent (`rememberRooms`), a `[+ Join]` popover with name validation (RF-02), a Peers section with latency dots.
+- [ ] `ChatInput`: Enter/Shift+Enter, auto-resize to 6 lines, the 4000 limit with counter, `typing` throttle, a local queue while `searching`.
+- [ ] `MessageFeed` + `MessageItem`: own Markdown rendering (`markdown/render.tsx` with XSS tests: `<script>`, `onerror=`, `javascript:` in links), highlighted mentions, author color by peerId hash, `HH:MM` time, system color for joins/leaves, the FIFO separator at 500.
+- [ ] `typing` with 4 s expiry and the "N people are typing…" line.
+- [ ] Batched `receipt` (≤50 ids) and `✓`/`✓✓` on own messages.
+- [ ] Smart scroll (auto only at ≤150 px from the bottom, a "↓ N new messages" button).
+- [ ] `useTheme` light/dark/system + the inline anti-flash script in `index.html` (10.6).
+- [ ] Connection states with the spec's exact texts (10.3).
+- [ ] View switching between active rooms without dropping connections.
 
-**Done cuando**: dos pestañas conversan con Markdown, menciones y typing visibles; los receipts pasan a ✓✓; los unread acumulan y se limpian al abrir; el tema conmuta en vivo; checklist M2 de la sección 7 firmado.
+**Done when**: two tabs converse with Markdown, mentions and typing visible; receipts flip to ✓✓; unreads accumulate and clear on open; the theme switches live; the M2 checklist of section 7 signed.
 
-### M3 · DMs con E2EE — *complejidad M*
+### M3 · DMs with E2EE — _M complexity_
 
-**Objetivo**: mensajes directos 1:1 cifrados de extremo a extremo entre pares con sala compartida.
+**Goal**: 1:1 direct messages encrypted end to end between peers with a shared room.
 
-Cubre (spec): RF-04, 9.1, 9.2, 10.1 (menú de pares).
+Covers (spec): RF-04, 9.1, 9.2, 10.1 (peer menu).
 
-- [ ] `identity.ts` completo: keypair ECDH P-256 en primer arranque, export/import JWK en `localStorage`, fingerprint (formato 8×4 hex, 128 bits — issue #23), regeneración.
-- [ ] `keys`/`presence` ya enviados en M1; aquí se consumen: `dm.ts` deriva `claveDM` (ECDH → HKDF-SHA256 con sal por par ordenado) con tests de que ambos extremos derivan la misma clave.
-- [ ] Acción `dm` con `to`; destinatarios ajenos descartan (test unitario del filtrado).
-- [ ] Cifrado AES-GCM 256, IV 12 B por mensaje, `base64(IV‖ct)`, rechazo de ciphertext manipulado (test de tamper → GCM tag inválido).
-- [ ] UI: menú en par → "Mensaje directo"; vista DM que reusa feed/entrada; encabezado con apodo + fingerprint + aviso de verificación; badge unread; estado "par desconectado" al perder salas compartidas.
-- [ ] Notificación básica de DM entrante con pestaña oculta (permiso + toggle llegan formalmente en M5; aquí el camino técnico).
+- [ ] `identity.ts` complete: an ECDH P-256 keypair on first boot, JWK export/import in `localStorage`, fingerprint (8×4 hex format, 128 bits — issue #23), regeneration.
+- [ ] `keys`/`presence` are already sent in M1; here they are consumed: `dm.ts` derives the `dmKey` (ECDH → HKDF-SHA256 with the sorted per-pair salt) with tests that both ends derive the same key.
+- [ ] The `dm` action with `to`; unrelated recipients discard (unit test of the filtering).
+- [ ] AES-GCM 256 encryption, a 12 B IV per message, `base64(IV‖ct)`, rejection of tampered ciphertext (tamper test → invalid GCM tag).
+- [ ] UI: peer menu → "Direct message"; a DM view reusing feed/input; header with nickname + fingerprint + verification notice; unread badge; the "peer disconnected" state when shared rooms are lost.
+- [ ] Basic incoming-DM notification with the tab hidden (permission + toggle arrive formally in M5; here the technical path).
 
-**Done cuando**: DM E2EE fluye entre 2 pestañas; una tercera pestaña en la misma sala **no** puede descifrar (verificado en test unitario descifrando con clave errónea y por inspección del payload en DevTools); el fingerprint mostrado en ambas puntas coincide.
+**Done when**: an E2EE DM flows between 2 tabs; a third tab in the same room **cannot** decrypt (verified in a unit test decrypting with the wrong key and by payload inspection in DevTools); the fingerprint shown at both ends matches.
 
-### M4 · Salas con contraseña — *complejidad M*
+### M4 · Password rooms — _M complexity_
 
-**Objetivo**: salas cifradas cuya existencia depende de la contraseña.
+**Goal**: encrypted rooms whose existence depends on the password.
 
-Cubre (spec): RF-05, 9.3, 9.4 (ruta con contraseña).
+Covers (spec): RF-05, 9.3, 9.4 (the password path).
 
-- [ ] `roomKey.ts`: PBKDF2-SHA256 600 000 iter, sal determinista por nombre, AES-GCM — tests de roundtrip y de coste (el test usa la API real; se mide que <1 s en desktop).
-- [ ] Extensión de `joinRoom` con contraseña: derivación de roomId, marca `hasPassword`, contraseña **solo en memoria de sesión**.
-- [ ] `JoinRoomPopover`: campo contraseña opcional con toggle "sala cifrada" y explicación de una línea ("Quien no tenga la contraseña no encontrará esta sala").
-- [ ] Cifrado de `chat` en salas con contraseña; placeholder "🔒 mensaje cifrado" en el (teórico) caso de recepción sin clave.
-- [ ] 🔒 en encabezado y sidebar; re-unión tras recarga pidiendo contraseña de nuevo; mensaje único "No se ha encontrado la sala #nombre con esa contraseña" (no distingue sala inexistente de contraseña errónea).
-- [ ] Al regenerar identidad o panic: sin cambios de comportamiento en salas (la clave de sala es de sala, no de identidad) — testado.
+- [ ] `roomKey.ts`: PBKDF2-SHA256 600,000 iterations, a deterministic per-name salt, AES-GCM — roundtrip and cost tests (the test uses the real API; it is measured at <1 s on desktop).
+- [ ] `joinRoom` extension with a password: roomId derivation, the `hasPassword` mark, the password **in session memory only**.
+- [ ] `JoinRoomPopover`: an optional password field with an "encrypted room" toggle and a one-line explanation ("Whoever lacks the password will not find this room").
+- [ ] `chat` encryption in password rooms; the "🔒 encrypted message" placeholder in the (theoretical) no-key reception case.
+- [ ] 🔒 in header and sidebar; rejoining after a reload demanding the password again; the single message "Room #name not found with that password" (it does not distinguish a nonexistent room from a wrong password).
+- [ ] On identity regeneration or panic: no behavior change in rooms (the room key belongs to the room, not the identity) — tested.
 
-**Done cuando**: 2 pestañas con la misma contraseña conversan cifradas (payload ilegible en DevTools); una tercera pestaña sin contraseña no descubre la sala (se queda en `searching` y recibe el mensaje de error al agotar); la recarga exige re-introducir la contraseña.
+**Done when**: 2 tabs with the same password converse encrypted (payload illegible in DevTools); a third tab without the password does not discover the room (it stays `searching` and receives the error message when the heuristic expires); the reload demands re-entering the password.
 
-### M5 · Ajustes y privacidad — *complejidad M*
+### M5 · Settings and privacy — _M complexity_
 
-**Objetivo**: el modal completo, notificaciones y higiene de datos.
+**Goal**: the complete modal, notifications and data hygiene.
 
-Cubre (spec): RF-07, RF-08, RF-09, RF-10 (ajustes de apariencia), 8.2.
+Covers (spec): RF-07, RF-08, RF-09, RF-10 (appearance settings), 8.2.
 
-- [ ] `SettingsModal` con pestañas y foco atrapado (`Esc` cierra).
-- [ ] **Red**: `autoJoinLobby`, edición de trackers (validación `wss://`, lista vacía = defaults), ICE servers (`stun:`/`turn:` + credenciales, JSON validado), `maxActiveRooms` 1–6, nota "aplica al reconectar" + botón **Reconectar todo** (usa `reconnectAll()` de M1).
-- [ ] **Privacidad**: toggle notificaciones + solicitud de permiso con estados (concedido/denegado/no consultado), `rememberRooms`, **Regenerar identidad** (confirmación con aviso de cambio de fingerprint), **Panic button** (doble confirmación, limpia `gritos:*`, aborta conexiones, recarga).
-- [ ] **Apariencia**: tema (ya implementado en M2, aquí se enlaza), estado inicial del sidebar.
-- [ ] `useNotifications` completo: mención `@apodo` y DM con `document.hidden`, clic → foco + navegación a la vista origen (RF-09).
-- [ ] Cambio de apodo desde ajustes con re-anuncio a pares.
-- [ ] Verificación 8.2: inspección de `localStorage` — solo las 4 claves `gritos:*` y sin contenido sensible.
+- [ ] `SettingsModal` with tabs and trapped focus (`Esc` closes).
+- [ ] **Network**: `autoJoinLobby`, tracker editing (`wss://` validation, empty list = defaults), ICE servers (`stun:`/`turn:` + credentials, validated JSON), `maxActiveRooms` 1–6, the "applies on reconnect" note + the **Reconnect all** button (uses M1's `reconnectAll()`).
+- [ ] **Privacy**: the notifications toggle + permission request with states (granted/denied/not requested), `rememberRooms`, **Regenerate identity** (confirmation warning about the fingerprint change), **Panic button** (double confirmation, wipes `gritos:*`, aborts connections, reloads).
+- [ ] **Appearance**: theme (already implemented in M2, wired here), the sidebar's initial state.
+- [ ] `useNotifications` complete: an `@nickname` mention and DMs with `document.hidden`, click → focus + navigation to the originating view (RF-09).
+- [ ] Nickname change from settings with a re-announce to peers.
+- [ ] 8.2 verification: `localStorage` inspection — only the 4 `gritos:*` keys and no sensitive content.
 
-**Done cuando**: todos los ajustes persisten y aplican tras recarga; trackers custom se ven en DevTools → Network al reconectar; el panic button deja el `localStorage` vacío y vuelve al onboarding; una mención con pestaña oculta dispara notificación y su clic navega al origen.
+**Done when**: every setting persists and applies after reload; custom trackers are visible in DevTools → Network on reconnect; the panic button leaves `localStorage` empty and returns to onboarding; a mention with the tab hidden fires a notification and its click navigates to the origin.
 
-### M6 · Pulido, QA y release — *complejidad M*
+### M6 · Polish, QA and release — _M complexity_
 
-**Objetivo**: calidad de producción y despliegue.
+**Goal**: production quality and deployment.
 
-Cubre (spec): RNF-03, RNF-05, RNF-06, RNF-07, 11 (limitaciones visibles donde proceda).
+Covers (spec): RNF-03, RNF-05, RNF-06, RNF-07, 11 (limitations visible where appropriate).
 
-- [ ] Eliminar la vista de depuración de M1 (o dejarla tras flag `?debug`).
-- [ ] Empty states diseñados: sala vacía ("Comparte el nombre de la sala para que otros se unan"), sin DMs, sin recientes.
-- [ ] Accesibilidad: foco visible, `aria-live` del feed, roles de lista, `Esc` en todos los modales/popovers, contraste AA auditado, navegación por teclado del sidebar.
-- [ ] Responsive real (≤768 px): sidebar drawer, entrada usable en móvil.
-- [ ] Rendimiento: medir con 15 pares simulados (pestañas múltiples / navegadores) y salas al cap; recorte de re-renders (selectores Zustand finos, memo de mensajes).
-- [ ] `index.html`: meta CSP endurecida (`script-src 'self'`; validar interacción con WebSockets/WebRTC en cada navegador), `color-scheme`, título/descripción.
-- [ ] Manejo de errores de red en UI: banner no bloqueante para estado `error` de tracker con atajo a Ajustes → Red.
-- [ ] Checklist QA completo (sección 7) en 2 navegadores distintos (p. ej. Chrome + Firefox).
-- [ ] README final: captura, guía de despliegue estático (cualquier host de ficheros, HTTPS requerido — RNF-04), limitaciones (spec §11), aviso de trackers públicos.
+- [ ] Remove M1's debug view (or keep it behind the `?debug` flag).
+- [ ] Designed empty states: empty room ("Share the room name so others can join"), no DMs, no recents.
+- [ ] Accessibility: visible focus, the feed's `aria-live`, list roles, `Esc` in every modal/popover, AA contrast audited, sidebar keyboard navigation.
+- [ ] Real responsive behavior (≤768 px): sidebar drawer, usable input on mobile.
+- [ ] Performance: measured with 15 simulated peers (multiple tabs / browsers) and rooms at the cap; re-render trimming (fine Zustand selectors, memoized messages).
+- [ ] `index.html`: hardened CSP meta (`script-src 'self'`; validate the interaction with WebSockets/WebRTC in each browser), `color-scheme`, title/description.
+- [ ] Network-error handling in the UI: a non-blocking banner for the tracker `error` state with a shortcut to Settings → Network.
+- [ ] The full QA checklist (section 7) in 2 different browsers (e.g. Chrome + Firefox).
+- [ ] Final README: screenshot, static-deployment guide (any file host, HTTPS required — RNF-04), limitations (spec §11), the public-trackers notice.
 - [ ] Tag `v1.0.0`.
 
-**Done cuando**: build de producción desplegado en un hosting estático funciona end-to-end entre dos máquinas/redes distintas (o dos navegadores con redes distintas si no hay segundo equipo), checklist completo en verde.
+**Done when**: the production build deployed to a static host works end to end between two machines/networks (or two browsers on different networks if there is no second machine), the full checklist green.
 
-## 5. Dependencias entre milestones
+## 5. Dependencies between milestones
 
 ```
 M0 ──► M1 ──► M2 ──► M3 ──► M4 ──► M5 ──► M6
         │              │
-        │              └── M4 depende de M3 solo en detalle cripto (roomKey es
-        │                  independiente, pero comparte infraestructura de cifrado)
-        └── M2 depende de M1 (roomManager + protocolo). M5 depende de M2 (layout/modal)
-            y M3 (regenerar identidad). M6 depende de todo.
+        │              └── M4 depends on M3 only in crypto detail (roomKey is
+        │                  independent, but shares encryption infrastructure)
+        └── M2 depends on M1 (roomManager + protocol). M5 depends on M2 (layout/modal)
+            and M3 (identity regeneration). M6 depends on everything.
 ```
 
-Orden estricto recomendado; M3 y M4 **pueden** intercambiarse si se prefiere validar antes las salas cifradas que los DMs.
+Strict recommended order; M3 and M4 **may** be swapped if validating the encrypted rooms before the DMs is preferred.
 
-## 6. Estrategia de pruebas
+## 6. Testing strategy
 
-### 6.1 Unitarias (Vitest, corren en cada milestone)
+### 6.1 Unit (Vitest, run at every milestone)
 
-| Módulo | Casos mínimos |
-|---|---|
-| `crypto/hashes` | roomId determinista con/sin contraseña; sal estable; uuid no repetido. |
-| `crypto/dm` | ambos extremos derivan la misma clave; roundtrip cifrar/descifrar; ciphertext manipulado falla (tag GCM); mensaje >4000 B rechazado. |
-| `crypto/roomKey` | misma contraseña → misma clave en clientes distintos; roundtrip; contraseñas distintas → claves distintas. |
-| `crypto/identity` | generación → fingerprint estable; regeneración → fingerprint distinto; persistencia/recarga restaura el par. |
-| `markdown/render` | subset completo renderiza; `<script>`, `<img onerror>`, `[x](javascript:…)`, atributos HTML y entidades se escapan; enlaces solo http/https; longitud y saltos correctos. |
-| `p2p/protocol` | dedup por id; `v≠1` ignorado; payloads >64 KB descartados; `dm` con `to` ajeno filtrado; batch de receipts ≤50. |
-| `nickname` | formato válido, sin repetición inmediata, charset es-ES correcto. |
+| Module            | Minimum cases                                                                                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crypto/hashes`   | deterministic roomId with/without password; stable salt; non-repeating uuid.                                                                                                |
+| `crypto/dm`       | both ends derive the same key; encrypt/decrypt roundtrip; tampered ciphertext fails (GCM tag); a message >4000 B rejected.                                                  |
+| `crypto/roomKey`  | same password → same key on different clients; roundtrip; different passwords → different keys.                                                                             |
+| `crypto/identity` | generation → stable fingerprint; regeneration → different fingerprint; persistence/reload restores the pair.                                                                |
+| `markdown/render` | the full subset renders; `<script>`, `<img onerror>`, `[x](javascript:…)`, HTML attributes and entities are escaped; links http/https only; correct length and line breaks. |
+| `p2p/protocol`    | dedup by id; `v≠1` ignored; payloads >64 KB discarded; a `dm` with a foreign `to` filtered; receipt batches ≤50.                                                            |
+| `nickname`        | valid format, no immediate repetition, correct es-ES charset.                                                                                                               |
 
-### 6.2 Manuales multi-pestaña (plantilla por milestone)
+### 6.2 Manual multi-tab (template per milestone)
 
-Cada milestone añade filas a una checklist acumulativa en `docs/qa-checklist.md` (se crea en M1). Formato: acción → esperado → pass/fail → navegador. La ejecución usa como mínimo 2 pestañas (y donde se indica, 2 navegadores o 2 equipos para validar NAT distintos).
+Each milestone appends rows to a cumulative checklist in `docs/qa-checklist.md` (created in M1). Format: action → expected → pass/fail → browser. Execution uses at least 2 tabs (and, where noted, 2 browsers or 2 machines to validate different NATs).
 
-### 6.3 Opcionales (no bloqueantes)
+### 6.3 Optional (non-blocking)
 
-- E2E Playwright con dos contextos de navegador automatizando el happy path M2. Solo si el proyecto lo pide; el checklist manual es la fuente de verdad de v1.
+- E2E Playwright with two browser contexts automating M2's happy path. Only if the project calls for it; the manual checklist is v1's source of truth.
 
-## 7. Checklist QA maestro (se completa en M6)
+## 7. Master QA checklist (completed in M6)
 
-1. Primera visita → onboarding → auto-join `#lobby` (con y sin `autoJoinLobby`).
-2. 2 pestañas en `#lobby`: presencia mutua, latencia, estado `connected`.
-3. Mensaje con todo el subset Markdown + mención → render correcto en receptor.
-4. Typing visible y expiración a 4 s.
+1. First visit → onboarding → auto-join `#lobby` (with and without `autoJoinLobby`).
+2. 2 tabs in `#lobby`: mutual presence, latency, `connected` status.
+3. A message with the full Markdown subset + a mention → correct render on the receiver.
+4. Typing visible and expiring after 4 s.
 5. Receipts ✓→✓✓.
-6. Scroll: historial largo, auto-scroll, botón "N nuevos".
-7. 3 salas activas simultáneas (cap 4): mensajes cruzados, unread por sala, cambio de vista sin pérdida.
-8. Intento de 5.ª sala → rechazo con mensaje.
-9. DM E2EE entre 2 pestañas; tercera pestaña no descifra.
-10. Fingerprint igual en ambas puntas del DM.
-11. Sala con contraseña: unión de 2 clientes, ciphertext ilegible en DevTools, tercer cliente no encuentra la sala.
-12. Recarga en sala con contraseña → re-petición de contraseña.
-13. Ajustes: trackers custom visibles al reconectar; STUN custom aplicado (ver ICE en `about:webrtc` / `chrome://webrtc-internals`).
-14. Notificación por mención y por DM con pestaña oculta; clic navega al origen.
-15. Tema claro/oscuro/sistema sin flash al cargar.
-16. Panic button → `localStorage` vacío + onboarding limpio.
-17. Regenerar identidad → fingerprint cambia y se re-anuncia.
-18. Cierre abrupto de una pestaña → el resto la marca desconectada <10 s.
-19. Móvil (viewport ≤768 px): drawer, envío de mensaje, DM.
-20. `npm run build` + `preview`: todo lo anterior contra el bundle de producción.
+6. Scroll: long history, auto-scroll, the "N new" button.
+7. 3 simultaneous active rooms (cap 4): cross-room messages, per-room unread, view switching without loss.
+8. A 5th-room attempt → rejected with a message.
+9. E2EE DM between 2 tabs; a third tab cannot decrypt.
+10. The fingerprint identical at both ends of the DM.
+11. Password room: 2 clients join, ciphertext illegible in DevTools, a third client cannot find the room.
+12. Reload in a password room → the password asked again.
+13. Settings: custom trackers visible on reconnect; custom STUN applied (see ICE in `about:webrtc` / `chrome://webrtc-internals`).
+14. Mention and DM notifications with the tab hidden; click navigates to the origin.
+15. Light/dark/system theme with no flash on load.
+16. Panic button → empty `localStorage` + clean onboarding.
+17. Regenerate identity → the fingerprint changes and is re-announced.
+18. Abrupt tab close → the rest mark it disconnected <10 s.
+19. Mobile (viewport ≤768 px): drawer, message sending, DM.
+20. `npm run build` + `preview`: all of the above against the production bundle.
 
-## 8. Riesgos y mitigaciones
+## 8. Risks and mitigations
 
-| # | Riesgo | Prob. | Impacto | Mitigación |
-|---|---|---|---|---|
-| R1 | Trackers públicos caídos o saturados (la app "no encuentra a nadie") | Media | Alto | Lista de trackers de respaldo en `roomManager`; ajuste de trackers custom desde M5; estado `error` con guía en UI (10.3); documentar en README. |
-| R2 | NAT simétrica/firewall bloquea P2P directo | Media | Alto | STUN público por defecto (incluido en Trystero); TURN configurable por el usuario (RF-07); limitación documentada (spec §11.3). |
-| R3 | Duplicación de conexiones con varias salas (recursos/CPU) | Media | Medio | Cap de salas (4 por defecto, máx 6); ping tolerante al throttling; medición en M6 con 15 pares. |
-| R4 | Cambios de API en Trystero | Baja | Medio | Versión fijada exacta; única superficie de import en `roomManager.ts` (sección 3). |
-| R5 | XSS a través de Markdown compromete la clave privada de `localStorage` | Baja | Crítico | Renderer propio de subset sin HTML crudo + suite de tests de XSS + CSP en `index.html` + cero deps de renderizado de terceros. |
-| R6 | Throttling de timers en pestaña oculta rompe latencia/presencia | Alta | Bajo | Ping tolerante (5 s + 3 fallos → degradado ⚪, no desconectado); recuperación al volver al foco. |
-| R7 | Suplantación de apodo (sin identidad global) | Media | Medio | Fingerprint visible en DMs + aviso de verificación (TOFU); limitación documentada (spec §9.5). |
-| R8 | Descubrimiento lento (2–6 s) percibido como fallo | Alta | Bajo | Textos de estado exactos (10.3), indicador animado, entrada no bloqueada con cola local. |
+| #   | Risk                                                            | Prob.  | Impact   | Mitigation                                                                                                                                       |
+| --- | --------------------------------------------------------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R1  | Public trackers down or saturated (the app "finds nobody")      | Medium | High     | A backup tracker list in `roomManager`; custom-trackers setting from M5; the `error` state with an in-UI guide (10.3); documented in the README. |
+| R2  | Symmetric NAT/firewall blocks direct P2P                        | Medium | High     | A public STUN by default (included in Trystero); user-configurable TURN (RF-07); documented limitation (spec §11.3).                             |
+| R3  | Connection duplication with several rooms (resources/CPU)       | Medium | Medium   | The room cap (4 by default, max 6); throttling-tolerant ping; measurement in M6 with 15 peers.                                                   |
+| R4  | API changes in Trystero                                         | Low    | Medium   | Exact pinned version; the only import surface in `roomManager.ts` (section 3).                                                                   |
+| R5  | XSS through Markdown compromises the `localStorage` private key | Low    | Critical | Own subset renderer with no raw HTML + an XSS test suite + CSP in `index.html` + zero third-party rendering deps.                                |
+| R6  | Timer throttling in a hidden tab breaks latency/presence        | High   | Low      | Tolerant ping (5 s + 3 failures → degraded ⚪, not disconnected); recovery on focus.                                                             |
+| R7  | Nickname impersonation (no global identity)                     | Medium | Medium   | Fingerprint visible in DMs + the verification notice (TOFU); documented limitation (spec §9.5).                                                  |
+| R8  | Slow discovery (2–6 s) perceived as a failure                   | High   | Low      | Exact status texts (10.3), an animated indicator, input not blocked with a local queue.                                                          |
 
-## 9. Estimación orientativa
+## 9. Indicative estimation
 
-Complejidad relativa: **S** = 1–2 días, **M** = 3–5 días, **L** = 1–2 semanas (referencia: una persona con experiencia media en el stack, a jornada completa; ajustar ×2–×3 a tiempo parcial).
+Relative complexity: **S** = 1–2 days, **M** = 3–5 days, **L** = 1–2 weeks (reference: one person with average experience in the stack, full time; adjust ×2–×3 for part-time).
 
-| Milestone | Complejidad | Acumulado orientativo |
-|---|---|---|
-| M0 Setup | S | 0,5 semana |
-| M1 Núcleo P2P | L | 2 semanas |
-| M2 Onboarding + chat | L | 3,5 semanas |
-| M3 DMs E2EE | M | 4,5 semanas |
-| M4 Salas con contraseña | M | 5 semanas |
-| M5 Ajustes y privacidad | M | 5,5 semanas |
-| M6 Pulido y release | M | 6–7 semanas |
+| Milestone               | Complexity | Indicative cumulative |
+| ----------------------- | ---------- | --------------------- |
+| M0 Setup                | S          | 0.5 weeks             |
+| M1 P2P core             | L          | 2 weeks               |
+| M2 Onboarding + chat    | L          | 3.5 weeks             |
+| M3 E2EE DMs             | M          | 4.5 weeks             |
+| M4 Password rooms       | M          | 5 weeks               |
+| M5 Settings and privacy | M          | 5.5 weeks             |
+| M6 Polish and release   | M          | 6–7 weeks             |
 
-**Hitos demostrables**: fin de M2 = demo pública de chat en salas; fin de M4 = demo completa de privacidad (E2EE + salas ocultas); fin de M6 = v1.0.0 desplegable.
+**Demonstrable milestones**: end of M2 = public chat-in-rooms demo; end of M4 = full privacy demo (E2EE + hidden rooms); end of M6 = deployable v1.0.0.

@@ -135,7 +135,7 @@ describe('M6 empty states (Spanish, discrete)', () => {
 
   it('sidebar DM section keeps its header with an empty state and lists channels later', async () => {
     render(<Sidebar />)
-    const section = screen.getByRole('region', { name: 'Mensajes directos' })
+    const section = screen.getByRole('region', { name: 'Direct messages' })
     expect(section.textContent).toContain(EMPTY_DM_LIST_TEXT)
 
     useAppStore.getState().ensureDmChannel('peer-1', 'luna-cauta', 'A31F 09BC 77D2 4E5A')
@@ -146,17 +146,17 @@ describe('M6 empty states (Spanish, discrete)', () => {
     expect(section.textContent).toContain('luna-cauta')
   })
 
-  it('Recientes shows an empty state with rememberRooms on and nothing remembered', async () => {
+  it('Recent shows an empty state with rememberRooms on and nothing remembered', async () => {
     useAppStore.getState().setRecentRooms([])
     render(<Sidebar />)
-    expect(screen.getByRole('region', { name: 'Salas recientes' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: 'Recent rooms' })).toHaveTextContent(
       EMPTY_RECENTS_TEXT,
     )
 
     // Off → the whole section disappears (RF-02).
     useSettingsStore.getState().setSettings({ rememberRooms: false })
     await waitFor(() => {
-      expect(screen.queryByRole('region', { name: 'Salas recientes' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Recent rooms' })).not.toBeInTheDocument()
     })
   })
 })

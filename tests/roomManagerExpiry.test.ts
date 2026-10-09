@@ -106,7 +106,7 @@ describe('expiry sweep through the manager (issue #96)', () => {
   it('never revokes delivered receipts: own ✓✓ survives every sweep', async () => {
     const { room, roomId } = await joinWithPeer()
     // Own message goes ✓✓ on the peer's receipt...
-    const own = manager.sendChat(roomId, 'mío')
+    const own = manager.sendChat(roomId, 'mine')
     room.receive('receipt', { ids: [own?.id ?? ''] }, 'peer-1')
     expect(storedRoom(roomId).messages[0]?.status).toBe('delivered')
 

@@ -117,7 +117,7 @@ describe('joinRoom (RF-02, spec §6.3)', () => {
     await manager.joinRoom('dev')
     const rejection = manager.joinRoom('random')
     await expect(rejection).rejects.toThrowError(manager.RoomLimitError)
-    await expect(rejection).rejects.toThrow('Límite de salas activas alcanzado (2)')
+    await expect(rejection).rejects.toThrow('Active room limit reached (2)')
     expect(manager.getActiveRoomCount()).toBe(2)
     expect(Object.keys(useAppStore.getState().rooms)).toHaveLength(2)
   })
@@ -251,7 +251,7 @@ describe('presence and keys on peer join (§7.1)', () => {
     expect(peer.nickname).toHaveLength(NICKNAME_MAX_LENGTH)
     // The join line shows the sanitized nick, never the raw broadcast.
     expect(storedRoom(roomId).messages[0]?.text).toBe(
-      `— ${'x'.repeat(NICKNAME_MAX_LENGTH)} se ha unido —`,
+      `— ${'x'.repeat(NICKNAME_MAX_LENGTH)} joined —`,
     )
   })
 
@@ -264,7 +264,7 @@ describe('presence and keys on peer join (§7.1)', () => {
       'peer-1',
     )
     expect(storedRoom(roomId).peers[0]?.nickname).toBe('luna-cauta')
-    expect(storedRoom(roomId).messages[0]?.text).toBe('— luna-cauta se ha unido —')
+    expect(storedRoom(roomId).messages[0]?.text).toBe('— luna-cauta joined —')
   })
 
   it('keeps the peerId-prefix default for a nick that sanitizes to empty (issue #28)', async () => {
@@ -279,7 +279,7 @@ describe('presence and keys on peer join (§7.1)', () => {
     room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
     const messages = storedRoom(roomId).messages
     expect(messages).toHaveLength(1)
-    expect(messages[0]?.text).toBe('— luna-cauta se ha unido —')
+    expect(messages[0]?.text).toBe('— luna-cauta joined —')
   })
 
   it('stores received raw public keys and derives the fingerprint', async () => {
@@ -351,7 +351,7 @@ describe('setNickname validation (issue #28, RF-01)', () => {
 
     const rejected = 'a'.repeat(NICKNAME_MAX_LENGTH + 1)
     expect(() => manager.setNickname(rejected)).toThrowError(manager.NicknameError)
-    expect(() => manager.setNickname(rejected)).toThrowError(`Apodo no válido: «${rejected}»`)
+    expect(() => manager.setNickname(rejected)).toThrowError(`Invalid nickname: "${rejected}"`)
     expect(manager.getSessionIdentity()?.identity.nickname).toBe(identityBefore)
     expect(useAppStore.getState().identity?.nickname).toBe(identityBefore)
     await flushMicrotasks()
@@ -655,7 +655,7 @@ describe('M2 outgoing chat (RF-03, §10.3)', () => {
     expect(first).not.toBeNull()
     expect(room.action('chat').sends).toHaveLength(0)
 
-    const second = manager.sendChat(roomId, 'también en cola')
+    const second = manager.sendChat(roomId, 'also queued')
     room.peerJoin('peer-1')
     await flushMicrotasks()
 
@@ -663,7 +663,7 @@ describe('M2 outgoing chat (RF-03, §10.3)', () => {
     const sends = room.action('chat').sends
     expect(sends).toHaveLength(2)
     expect(sends[0]?.data).toMatchObject({ body: 'en cola' })
-    expect(sends[1]?.data).toMatchObject({ body: 'también en cola' })
+    expect(sends[1]?.data).toMatchObject({ body: 'also queued' })
 
     const messages = storedRoom(roomId).messages
     expect(messages.filter((message) => message.authorId === 'self')).toHaveLength(2)
@@ -816,7 +816,7 @@ describe('M2 system feed lines (RF-06)', () => {
     expect(messages[0]).toMatchObject({
       kind: 'system',
       authorId: 'system',
-      text: '— luna-cauta se ha unido —',
+      text: '— luna-cauta joined —',
     })
 
     room.receive('presence', { nick: 'luna-c', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
@@ -833,14 +833,14 @@ describe('M2 system feed lines (RF-06)', () => {
     const messages = storedRoom(roomId).messages
     expect(messages[messages.length - 1]).toMatchObject({
       kind: 'system',
-      text: '— luna-cauta ha salido —',
+      text: '— luna-cauta left —',
     })
     // A returning peer re-announces its join.
     room.peerJoin('peer-1')
     room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
     const again = storedRoom(roomId).messages
     expect(again[again.length - 1]).toMatchObject({
-      text: '— luna-cauta se ha unido —',
+      text: '— luna-cauta joined —',
     })
   })
 
@@ -882,7 +882,7 @@ describe('issue #36 — system-line rate cap (per peer, rolling minute)', () => 
     room.receive('presence', { nick: 'zorro-bravo', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-2')
     texts = storedRoom(roomId).messages.map((message) => message.text)
     expect(texts).toHaveLength(SYSTEM_LINE_RATE_CAP + 1)
-    expect(texts[texts.length - 1]).toBe('— zorro-bravo se ha unido —')
+    expect(texts[texts.length - 1]).toBe('— zorro-bravo joined —')
 
     // Once the rolling window rolls off, the suppressed join announcement
     // of peer-1 (still unannounced) goes through.
@@ -890,7 +890,7 @@ describe('issue #36 — system-line rate cap (per peer, rolling minute)', () => 
     room.receive('presence', presence, 'peer-1')
     texts = storedRoom(roomId).messages.map((message) => message.text)
     expect(texts).toHaveLength(SYSTEM_LINE_RATE_CAP + 2)
-    expect(texts[texts.length - 1]).toBe('— luna-cauta se ha unido —')
+    expect(texts[texts.length - 1]).toBe('— luna-cauta joined —')
   })
 
   it('never caps the first join line of a peer (fresh budget announces immediately)', async () => {
@@ -900,7 +900,7 @@ describe('issue #36 — system-line rate cap (per peer, rolling minute)', () => 
     room.receive('presence', { nick: 'luna-cauta', fp: 'A31F 09BC 77D2 4E5A' }, 'peer-1')
     const messages = storedRoom(roomId).messages
     expect(messages).toHaveLength(1)
-    expect(messages[0]).toMatchObject({ kind: 'system', text: '— luna-cauta se ha unido —' })
+    expect(messages[0]).toMatchObject({ kind: 'system', text: '— luna-cauta joined —' })
   })
 })
 
@@ -1725,7 +1725,7 @@ describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
       roomId,
       authorId: 'system',
       authorNick: '',
-      text: 'peer-1 se ha unido',
+      text: 'peer-1 joined',
       ts: Date.now(),
       encrypted: false,
       status: 'delivered',
@@ -1738,7 +1738,7 @@ describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
       roomId,
       authorId: 'peer-1',
       authorNick: 'x',
-      text: '🔒 mensaje cifrado',
+      text: '🔒 encrypted message',
       ts: Date.now(),
       encrypted: true,
       status: 'delivered',
@@ -1830,7 +1830,7 @@ describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
 
 // ---------------------------------------------------------------------------
 // Issue #102 phase 3 — the request UX's transport seam (requestHistory, the
-// [Pedir] button) and the recovered-state append wiring (onRecovered →
+// [Ask] button) and the recovered-state append wiring (onRecovered →
 // store). The card dismisses on tap; the manager's per-room ask budget
 // rate-limits repeat joins. Recovered batches append in wire order as
 // `recovered: true` rows under the latched separator counter — never
@@ -1839,7 +1839,7 @@ describe('issue #102 phase 2 — consent layer (shareHistory honoring)', () => {
 // and receiver-clock TTL expiry mirrored from the live path.
 // ---------------------------------------------------------------------------
 
-describe('issue #102 phase 3 — requestHistory (the [Pedir] transport)', () => {
+describe('issue #102 phase 3 — requestHistory (the [Ask] transport)', () => {
   it('refuses an unknown room without throwing', () => {
     expect(manager.requestHistory('nope')).toBe(false)
   })
@@ -2134,6 +2134,6 @@ describe('issue #102 phase 3 — recovered append (onRecovered → store)', () =
     })
     const last = storedRoom(roomId).messages.at(-1)
     expect(last?.encrypted).toBe(true)
-    expect(last?.text).toBe('🔒 mensaje cifrado')
+    expect(last?.text).toBe('🔒 encrypted message')
   })
 })

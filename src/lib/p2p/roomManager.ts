@@ -302,7 +302,7 @@ export class RoomLimitError extends Error {
   readonly maxRooms: number
 
   constructor(maxRooms: number) {
-    super(`Límite de salas activas alcanzado (${maxRooms})`)
+    super(`Active room limit reached (${maxRooms})`)
     this.name = 'RoomLimitError'
     this.maxRooms = maxRooms
   }
@@ -311,7 +311,7 @@ export class RoomLimitError extends Error {
 /** RF-02 — invalid room names reject before any network call. */
 export class RoomNameError extends Error {
   constructor(rawName: string) {
-    super(`Nombre de sala no válido: «${rawName}»`)
+    super(`Invalid room name: "${rawName}"`)
     this.name = 'RoomNameError'
   }
 }
@@ -319,7 +319,7 @@ export class RoomNameError extends Error {
 /** RF-01 — invalid nicknames reject before any state/presence change. */
 export class NicknameError extends Error {
   constructor(rawNickname: string) {
-    super(`Apodo no válido: «${rawNickname}»`)
+    super(`Invalid nickname: "${rawNickname}"`)
     this.name = 'NicknameError'
   }
 }
@@ -2077,7 +2077,7 @@ function appendMuteLineToActiveRoom(text: string): void {
  * Issue #95 — mutes a fingerprint from the UI (PeerList menu, MessageItem
  * author affordance): stores it via the settings helper and, when this is a
  * fresh mute (an idempotent re-mute only refreshes the last-seen nickname),
- * appends '@nick fue silenciado' to the active room. False when the
+ * appends '@nick was muted' to the active room. False when the
  * fingerprint is malformed or the mute list is full.
  */
 export function muteFromUi(fingerprint: string, nickname: string): boolean {
@@ -2100,7 +2100,7 @@ export function muteFromUi(fingerprint: string, nickname: string): boolean {
  * Issue #95 — lifts a mute from the UI (PeerList menu, Privacidad mute
  * list): removes it via the settings helper and, when a last-seen nickname
  * is still known (it rides memory-only and dies with the session), appends
- * '@nick ya no está silenciado' to the active room. False when the
+ * '@nick is no longer muted' to the active room. False when the
  * fingerprint is malformed or was not muted.
  */
 export function unmuteFromUi(fingerprint: string): boolean {

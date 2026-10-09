@@ -14,37 +14,37 @@ afterEach(cleanup)
 
 describe('markdown subset (RF-03)', () => {
   it('renders the full subset: bold, italic, code, links', () => {
-    renderText('**negrita** y *cursiva* y `código` y [enlace](https://ejemplo.org)')
-    expect(screen.getByText('negrita').closest('strong')).toBeInTheDocument()
-    expect(screen.getByText('cursiva').closest('em')).toBeInTheDocument()
-    expect(screen.getByText('código').closest('code')).toBeInTheDocument()
-    const link = screen.getByText('enlace').closest('a')
-    expect(link).toHaveAttribute('href', 'https://ejemplo.org')
+    renderText('**bold** and *italic* and `code` and [link](https://example.org)')
+    expect(screen.getByText('bold').closest('strong')).toBeInTheDocument()
+    expect(screen.getByText('italic').closest('em')).toBeInTheDocument()
+    expect(screen.getByText('code').closest('code')).toBeInTheDocument()
+    const link = screen.getByText('link').closest('a')
+    expect(link).toHaveAttribute('href', 'https://example.org')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
   it('renders fenced code blocks verbatim, without inline markup', () => {
-    renderText('antes\n```\n**no es bold** y <b>html</b>\n```\ndespués')
-    expect(screen.getByText('**no es bold** y <b>html</b>').closest('pre')).toBeInTheDocument()
-    expect(screen.queryByText('no es bold', { selector: 'strong' })).not.toBeInTheDocument()
-    expect(screen.getByText('antes')).toBeInTheDocument()
-    expect(screen.getByText('después')).toBeInTheDocument()
+    renderText('before\n```\n**not bold** and <b>html</b>\n```\nafter')
+    expect(screen.getByText('**not bold** and <b>html</b>').closest('pre')).toBeInTheDocument()
+    expect(screen.queryByText('not bold', { selector: 'strong' })).not.toBeInTheDocument()
+    expect(screen.getByText('before')).toBeInTheDocument()
+    expect(screen.getByText('after')).toBeInTheDocument()
   })
 
   it('handles an unterminated fence as a code block', () => {
-    renderText('```\nsin cerrar')
-    expect(screen.getByText('sin cerrar').closest('pre')).toBeInTheDocument()
+    renderText('```\nnot closed')
+    expect(screen.getByText('not closed').closest('pre')).toBeInTheDocument()
   })
 
   it('keeps line breaks inside a paragraph', () => {
-    const { container } = render(<MarkdownRenderer text={'línea 1\nlínea 2'} />)
+    const { container } = render(<MarkdownRenderer text={'line 1\nline 2'} />)
     expect(container.querySelector('br')).toBeInTheDocument()
-    expect(container.textContent).toContain('línea 1')
-    expect(container.textContent).toContain('línea 2')
+    expect(container.textContent).toContain('line 1')
+    expect(container.textContent).toContain('line 2')
   })
 
   it('renders long messages completely (4 KB, the protocol cap)', () => {
-    const text = 'palabra '.repeat(500) // 4500 chars → capped upstream at 4000
+    const text = 'word '.repeat(810) // 4050 chars → capped upstream at 4000
     const { container } = render(<MarkdownRenderer text={text.slice(0, 4000)} />)
     expect(container.textContent?.length).toBeGreaterThanOrEqual(3990)
   })
@@ -116,40 +116,40 @@ describe('mentions (RF-03)', () => {
     const tokens = parseInline('escribe x@luna-cauta hoy', ['luna-cauta'])
     expect(tokens.every((token) => token.type !== 'mention')).toBe(true)
 
-    const ok = parseInline('escribe @luna-cauta hoy', ['luna-cauta'])
+    const ok = parseInline('write @luna-cauta today', ['luna-cauta'])
     expect(ok.some((token) => token.type === 'mention')).toBe(true)
   })
 
   it('leaves non-mention @ alone (emails, unknown nicks)', () => {
-    const { container } = renderText('escribe a a@b.com y @nadie', ['b'])
+    const { container } = renderText('write to a@b.com and @nobody', ['b'])
     // a@b.com: 'a' before @ is a word char → never a mention.
-    // @nadie: not in the candidates → plain text.
+    // @nobody: not in the candidates → plain text.
     expect(container.querySelectorAll('span.bg-accent\\/20')).toHaveLength(0)
     expect(container.textContent).toContain('a@b.com')
-    expect(container.textContent).toContain('@nadie')
+    expect(container.textContent).toContain('@nobody')
   })
 
   it('parses the mention token only when a candidate matches', () => {
-    expect(parseInline('@luna salta', ['luna'])).toEqual([
+    expect(parseInline('@luna jumps', ['luna'])).toEqual([
       { type: 'mention', value: '@luna' },
-      { type: 'text', value: ' salta' },
+      { type: 'text', value: ' jumps' },
     ])
     // Without candidates the same characters stay plain text (split on the
     // same token boundaries).
-    expect(parseInline('@luna salta', [])).toEqual([
+    expect(parseInline('@luna jumps', [])).toEqual([
       { type: 'text', value: '@luna' },
-      { type: 'text', value: ' salta' },
+      { type: 'text', value: ' jumps' },
     ])
   })
 })
 
 describe('parseMarkdown blocks', () => {
   it('splits fenced blocks from paragraphs', () => {
-    const blocks = parseMarkdown('hola\n```\ncode\nlines\n```\nadiós')
+    const blocks = parseMarkdown('hello\n```\ncode\nlines\n```\nbye')
     expect(blocks).toEqual([
-      { type: 'paragraph', tokens: [{ type: 'text', value: 'hola' }] },
+      { type: 'paragraph', tokens: [{ type: 'text', value: 'hello' }] },
       { type: 'codeBlock', code: 'code\nlines' },
-      { type: 'paragraph', tokens: [{ type: 'text', value: 'adiós' }] },
+      { type: 'paragraph', tokens: [{ type: 'text', value: 'bye' }] },
     ])
   })
 

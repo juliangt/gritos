@@ -44,10 +44,10 @@ import {
 
 /**
  * Phase 3 UI of issue #97 (spec §12.2): the trackerless manual DM wizard —
- * entry points (sidebar «+ invitación», tracker-error banner shortcut), both
+ * entry points (sidebar «+ invite», tracker-error banner shortcut), both
  * roles over the REAL engine and the fake PC pair (integration style), bad
  * paste retry, cancellation with dispose, the focus trap, and the connected
- * channel rendered by the standard DM view (DmHeader, «(sin sala)»).
+ * channel rendered by the standard DM view (DmHeader, «(no room)»).
  */
 
 let sessionB: SessionIdentity
@@ -197,7 +197,7 @@ function stubClipboard(): ReturnType<typeof vi.fn> {
 }
 
 describe('manual DM wizard (issue #97, spec §12.2)', () => {
-  it('opens from the sidebar «+ invitación» entry', () => {
+  it('opens from the sidebar «+ invite» entry', () => {
     const onOpenManualDm = vi.fn()
     render(<Sidebar onOpenManualDm={onOpenManualDm} />)
     fireEvent.click(screen.getByRole('button', { name: MANUAL_DM_INVITE_ENTRY }))
@@ -250,7 +250,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     // Sidebar entry.
     fireEvent.click(screen.getByRole('button', { name: MANUAL_DM_INVITE_ENTRY }))
     expect(screen.getByRole('dialog', { name: MANUAL_DM_WIZARD_LABEL })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog', { name: MANUAL_DM_WIZARD_LABEL })).not.toBeInTheDocument()
 
     // Banner shortcut opens the SAME dialog.
@@ -284,7 +284,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     fireEvent.change(screen.getByLabelText(MANUAL_DM_PASTE_ANSWER_LABEL), {
       target: { value: answerBlob },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Conectar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     expect(await screen.findByText(MANUAL_DM_PROGRESS_ESTABLISHING)).toBeInTheDocument()
 
     connectPair(pair)
@@ -382,7 +382,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     const onClose = vi.fn()
     await createInviteThroughWizard(pair, onClose)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog', { name: MANUAL_DM_WIZARD_LABEL })).not.toBeInTheDocument()
@@ -402,7 +402,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     // Initial focus lands inside the dialog.
     expect(dialog.contains(document.activeElement)).toBe(true)
 
-    // Tab cycles inside; the Cancelar button is the last focusable.
+    // Tab cycles inside; the Cancel button is the last focusable.
     const focusables = Array.from(
       dialog.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -414,7 +414,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     expect(dialog.contains(document.activeElement)).toBe(true)
     expect(document.activeElement).toBe(focusables[0])
 
-    // Esc cancels (dispose + close), like the Cancelar button.
+    // Esc cancels (dispose + close), like the Cancel button.
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)
     await waitFor(() => {
@@ -422,7 +422,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     })
   })
 
-  it('a connected manual channel renders the standard DM view with (sin sala)', () => {
+  it('a connected manual channel renders the standard DM view with (no room)', () => {
     stubClipboard()
     useAppStore.getState().setIdentity({
       nickname: 'luna-cauta',
@@ -438,17 +438,17 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'zorro-b' })).toBeInTheDocument()
     expect(screen.getByText(sessionB.identity.fingerprint)).toBeInTheDocument()
     expect(
-      screen.getByText('Compáralo con tu interlocutor para verificar su identidad'),
+      screen.getByText('Compare it with your contact to verify their identity'),
     ).toBeInTheDocument()
-    expect(screen.getByText('1 par')).toBeInTheDocument()
+    expect(screen.getByText('1 peer')).toBeInTheDocument()
 
     // The DmList entry carries the manual marker.
-    const section = screen.getByRole('region', { name: 'Mensajes directos' })
+    const section = screen.getByRole('region', { name: 'Direct messages' })
     expect(section.textContent).toContain('zorro-b')
-    expect(within(section).getByText('(sin sala)')).toBeInTheDocument()
+    expect(within(section).getByText('(no room)')).toBeInTheDocument()
 
     // The composer is live for a connected manual channel.
-    expect(screen.getByLabelText('Escribe un mensaje')).toBeEnabled()
+    expect(screen.getByLabelText('Write a message')).toBeEnabled()
     expect(key.startsWith('manual:')).toBe(true)
   })
 
@@ -463,12 +463,12 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     render(<ChatLayout />)
 
     // Exact RF-04 wording in the header and the composer, disabled input.
-    expect(screen.getAllByText('El par se ha desconectado')).toHaveLength(2)
-    expect(screen.getByLabelText('Escribe un mensaje')).toBeDisabled()
-    // The sidebar entry keeps the disconnected marker next to «(sin sala)».
-    expect(screen.getByLabelText('par desconectado')).toBeInTheDocument()
+    expect(screen.getAllByText('The peer has disconnected')).toHaveLength(2)
+    expect(screen.getByLabelText('Write a message')).toBeDisabled()
+    // The sidebar entry keeps the disconnected marker next to «(no room)».
+    expect(screen.getByLabelText('peer disconnected')).toBeInTheDocument()
     expect(
-      within(screen.getByRole('region', { name: 'Mensajes directos' })).getByText('(sin sala)'),
+      within(screen.getByRole('region', { name: 'Direct messages' })).getByText('(no room)'),
     ).toBeInTheDocument()
   })
 
@@ -502,7 +502,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     fireEvent.change(screen.getByLabelText(MANUAL_DM_PASTE_ANSWER_LABEL), {
       target: { value: answerBlob },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Conectar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     // The paste must LAND before the pair connects: the establishing status
     // only appears once acceptAnswer applied (state answer-pasted), so the
     // data channels below open into a machine that can go `connected` —
@@ -521,7 +521,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     // The composer routes through the manual manager: the send lands in the
     // feed AND reaches the peer over the manual channel.
     render(<ChatLayout />)
-    const textarea = screen.getByLabelText('Escribe un mensaje')
+    const textarea = screen.getByLabelText('Write a message')
     fireEvent.change(textarea, { target: { value: 'hola sin trackers' } })
     // Composing raises the typing flag on the peer side.
     await waitFor(() => {
@@ -529,7 +529,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     })
     fireEvent.keyDown(textarea, { key: 'Enter' })
     await waitFor(() => {
-      expect(screen.getByLabelText('Mensajes directos con zorro-b').textContent).toContain(
+      expect(screen.getByLabelText('Direct messages with zorro-b').textContent).toContain(
         'hola sin trackers',
       )
     })
@@ -541,7 +541,7 @@ describe('manual DM wizard (issue #97, spec §12.2)', () => {
     // nickname (room-DM typing semantics, §7.1).
     peerEngine.sendTyping(true)
     await waitFor(() => {
-      expect(screen.getByText('zorro-b está escribiendo…')).toBeInTheDocument()
+      expect(screen.getByText('zorro-b is typing…')).toBeInTheDocument()
     })
   })
 })

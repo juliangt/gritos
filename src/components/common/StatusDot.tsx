@@ -6,9 +6,9 @@ import type { RoomStatus } from '../../stores/useAppStore'
  * latency scale (🟢🟡🔴⚪) lives in `latencyDot` (stores/useAppStore).
  */
 const STATUS_STYLES: Record<RoomStatus, { className: string; label: string }> = {
-  searching: { className: 'bg-amber-400 animate-pulse', label: 'buscando pares' },
-  connected: { className: 'bg-emerald-500', label: 'conectado' },
-  error: { className: 'bg-red-500', label: 'sin acceso a trackers' },
+  searching: { className: 'bg-amber-400 animate-pulse', label: 'searching for peers' },
+  connected: { className: 'bg-emerald-500', label: 'connected' },
+  error: { className: 'bg-red-500', label: 'no tracker access' },
 }
 
 export function StatusDot({ status }: { status: RoomStatus }) {

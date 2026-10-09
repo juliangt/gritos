@@ -28,18 +28,18 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const input = () => screen.getByLabelText('Tu apodo') as HTMLInputElement
-const submitForm = () => fireEvent.submit(screen.getByRole('form', { name: 'entrada' }))
+const input = () => screen.getByLabelText('Your nickname') as HTMLInputElement
+const submitForm = () => fireEvent.submit(screen.getByRole('form', { name: 'enter' }))
 
 describe('OnboardingScreen (RF-01, spec §10.2)', () => {
-  it('renders the spec layout: logo, field, sorpréndeme, Entrar →', () => {
+  it('renders the spec layout: logo, field, surprise me, Enter →', () => {
     render(<OnboardingScreen />)
     expect(screen.getByRole('heading', { level: 1, name: 'gritos' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'sorpréndeme' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Entrar →' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'surprise me' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enter →' })).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Sin servidor, sin cuentas: tus mensajes viajan directos entre navegadores y desaparecen al recargar.',
+        'No server, no accounts: your messages travel directly between browsers and disappear on reload.',
       ),
     ).toBeInTheDocument()
   })
@@ -49,10 +49,10 @@ describe('OnboardingScreen (RF-01, spec §10.2)', () => {
     expect(screen.getByText(P2P_DISCLOSURE_TEXT)).toBeInTheDocument()
   })
 
-  it('sorpréndeme fills a valid generated nickname', () => {
+  it('surprise me fills a valid generated nickname', () => {
     render(<OnboardingScreen />)
     expect(input().value).toBe('')
-    fireEvent.click(screen.getByRole('button', { name: 'sorpréndeme' }))
+    fireEvent.click(screen.getByRole('button', { name: 'surprise me' }))
     // The field must hold a generator-valid nickname (sustantivo-adjetivo).
     expect(input().value).toMatch(/^[a-záéíóúñü]+-[a-záéíóúñü]+$/)
   })
@@ -61,7 +61,7 @@ describe('OnboardingScreen (RF-01, spec §10.2)', () => {
     render(<OnboardingScreen />)
     fireEvent.change(input(), { target: { value: 'no!!!' } })
     submitForm()
-    expect(screen.getByRole('alert')).toHaveTextContent('Usa entre 2 y 24 caracteres')
+    expect(screen.getByRole('alert')).toHaveTextContent('Use 2 to 24 characters')
     // Identity untouched.
     expect(useAppStore.getState().identity).toBeNull()
     expect(localStorage.getItem(IDENTITY_STORAGE_KEY)).toBeNull()

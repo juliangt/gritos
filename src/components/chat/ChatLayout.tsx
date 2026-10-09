@@ -56,8 +56,8 @@ export function ChatLayout() {
   const fileTransfers = useFileTransfers()
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
-  // Issue #99 — slash-command seams: the /ayuda overlay, the /limpiar
-  // confirmation and the password-recovery offer armed by a /sala join.
+  // Issue #99 — slash-command seams: the /help overlay, the /clear
+  // confirmation and the password-recovery offer armed by a /room join.
   // All session-only ui-store fields (never persisted).
   const helpOpen = useUiStore((state) => state.helpOpen)
   const closeHelp = useUiStore((state) => state.closeHelp)
@@ -271,7 +271,7 @@ export function ChatLayout() {
           className="fixed inset-0 z-30 flex"
           role="dialog"
           aria-modal="true"
-          aria-label="Barra lateral"
+          aria-label="Sidebar"
         >
           <div
             className="absolute inset-0 bg-black/50"
@@ -301,7 +301,7 @@ export function ChatLayout() {
             the not-found heuristic may simply need its password (RF-05:
             indistinguishable from a nonexistent room): offer the regular
             join form, prefilled, so the password can be entered. The form
-            never reaches the URL or storage. Issue #99 — /sala arms the
+            never reaches the URL or storage. Issue #99 — /room arms the
             same recovery for its name-only join (password rooms are
             undetectable from the name): the first source with a matching
             name wins, and dismissing either clears both. */}
@@ -309,10 +309,10 @@ export function ChatLayout() {
           (linkedRoomName ?? slashRecoveryRoom) === activeRoom.name &&
           activeRoom.status === 'error' && (
             <section
-              aria-label="Unirse con contraseña"
+              aria-label="Join with password"
               className="flex flex-col items-center gap-2 border-b border-border bg-surface px-3 py-3"
             >
-              <p className="text-xs text-muted">Si la sala tiene contraseña, únete con ella:</p>
+              <p className="text-xs text-muted">If the room has a password, join with it:</p>
               <div className="w-full max-w-xs">
                 <JoinRoomPopover
                   initialName={activeRoom.name}
@@ -387,8 +387,7 @@ export function ChatLayout() {
         ) : activeRoom === null ? (
           <main className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
             <p className="text-sm text-muted">
-              No hay ninguna sala activa. Únete a una desde la barra lateral (tecla Ctrl/Cmd+B para
-              mostrarla).
+              No active room. Join one from the sidebar (press Ctrl/Cmd+B to show it).
             </p>
           </main>
         ) : (
@@ -400,7 +399,7 @@ export function ChatLayout() {
               fifoTrimmed={activeRoom.fifoTrimmed}
               expiredCount={activeRoom.expiredCount}
               recoveredCount={activeRoom.recoveredCount}
-              ariaLabel={`Mensajes de #${activeRoom.name}`}
+              ariaLabel={`Messages in #${activeRoom.name}`}
               emptyStateText={EMPTY_ROOM_FEED_TEXT}
               historyAsk={historyAsk}
             />
@@ -437,11 +436,11 @@ export function ChatLayout() {
         onClose={() => setContactFlow({ open: false, prefill: null })}
       />
 
-      {/* Issue #99 — /ayuda overlay: the command table renders straight from
+      {/* Issue #99 — /help overlay: the command table renders straight from
           SLASH_COMMANDS; Esc/backdrop close through the Modal base. */}
       <SlashHelpModal open={helpOpen} onClose={closeHelp} />
 
-      {/* Issue #99 — /limpiar confirmation (the mute-with-DM ConfirmDialog
+      {/* Issue #99 — /clear confirmation (the mute-with-DM ConfirmDialog
           pattern): only an explicit confirm wipes the ACTIVE room's local
           feed; cancel and Esc leave it untouched. */}
       <ConfirmDialog

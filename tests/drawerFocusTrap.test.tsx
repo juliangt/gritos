@@ -16,7 +16,7 @@ import { installFakeTrystero } from './fakeTrystero'
  * close — the same contract `tests/modal.test.tsx` covers for Modal.
  */
 
-const TOGGLE_NAME = 'Mostrar u ocultar la barra lateral'
+const TOGGLE_NAME = 'Show or hide the sidebar'
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -59,7 +59,7 @@ function openDrawerFromToggle() {
   const toggle = screen.getAllByRole('button', { name: TOGGLE_NAME })[0]
   toggle.focus()
   fireEvent.click(toggle)
-  return { toggle, drawer: screen.getByRole('dialog', { name: 'Barra lateral' }) }
+  return { toggle, drawer: screen.getByRole('dialog', { name: 'Sidebar' }) }
 }
 
 function drawerFocusables(drawer: HTMLElement) {
@@ -68,7 +68,7 @@ function drawerFocusables(drawer: HTMLElement) {
 
 async function expectDrawerClosed() {
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Barra lateral' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Sidebar' })).not.toBeInTheDocument()
   })
 }
 
@@ -105,7 +105,7 @@ describe('Mobile drawer focus trap (issue #48, RNF-05)', () => {
     expect(focusables.length).toBeGreaterThan(0)
 
     // The composer sits behind the drawer, outside the trap surface.
-    const composer = screen.getByLabelText('Escribe un mensaje')
+    const composer = screen.getByLabelText('Write a message')
     expect(drawer.contains(composer)).toBe(false)
 
     // Tab from every focusable position: the focus must stay in the drawer.

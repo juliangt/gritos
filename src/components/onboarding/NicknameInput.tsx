@@ -14,12 +14,12 @@ export function NicknameInput(props: {
   return (
     <div className="flex flex-col gap-1">
       <input
-        aria-label="Tu apodo"
+        aria-label="Your nickname"
         name="nickname"
         autoComplete="off"
         spellCheck={false}
         maxLength={NICKNAME_MAX_LENGTH + 16}
-        placeholder="p. ej. zorro-bravo"
+        placeholder="e.g. zorro-bravo"
         value={props.value}
         disabled={props.disabled === true}
         aria-invalid={props.error !== null}

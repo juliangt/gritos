@@ -99,7 +99,7 @@ describe('useNotifications (RF-09 end to end)', () => {
     await flushCrypto()
 
     expect(FakeNotification.instances).toHaveLength(1)
-    expect(FakeNotification.instances[0]?.title).toBe('gritos — mención en #general')
+    expect(FakeNotification.instances[0]?.title).toBe('gritos — mention in #general')
     expect(FakeNotification.instances[0]?.options?.body).toBe(`zorro-bravo: hola @${ownNick}`)
 
     FakeNotification.instances[0]?.onclick?.()
@@ -115,7 +115,7 @@ describe('useNotifications (RF-09 end to end)', () => {
     const connection = await manager.joinRoom('general')
     const room = fake.rooms[fake.rooms.length - 1]
     room.peerJoin('peer-1')
-    room.receive('chat', chatEnvelope({ body: 'sin mención' }), 'peer-1')
+    room.receive('chat', chatEnvelope({ body: 'no mention' }), 'peer-1')
     if (ownNick !== undefined) {
       room.receive('chat', chatEnvelope({ body: `x@${ownNick}` }), 'peer-1')
     }
@@ -173,7 +173,7 @@ describe('useNotifications (RF-09 end to end)', () => {
       a.ephFingerprint,
       await computeFingerprint(mineEph),
     )
-    const sealed = await encryptDm(dmKey, '¿me ves?')
+    const sealed = await encryptDm(dmKey, 'can you see me?')
     room.receive(
       'dm',
       createEnvelope({
@@ -191,8 +191,8 @@ describe('useNotifications (RF-09 end to end)', () => {
     await flushCrypto()
 
     expect(FakeNotification.instances).toHaveLength(1)
-    expect(FakeNotification.instances[0]?.title).toBe('gritos — DM de luna-cauta')
-    expect(FakeNotification.instances[0]?.options?.body).toBe('luna-cauta: ¿me ves?')
+    expect(FakeNotification.instances[0]?.title).toBe('gritos — DM from luna-cauta')
+    expect(FakeNotification.instances[0]?.options?.body).toBe('luna-cauta: can you see me?')
 
     FakeNotification.instances[0]?.onclick?.()
     expect(window.focus).toHaveBeenCalledTimes(1)
@@ -216,7 +216,7 @@ describe('TTL expiry vs notifications (issue #96 Phase 4)', () => {
 
     // The mention notification fired at receive time, off the store append.
     expect(FakeNotification.instances).toHaveLength(1)
-    expect(FakeNotification.instances[0]?.title).toBe('gritos — mención en #general')
+    expect(FakeNotification.instances[0]?.title).toBe('gritos — mention in #general')
 
     // The expiry sweep removes ONLY the feed row; the raised notification is
     // a fire-and-forget OS surface — no code path closes or re-raises it.
@@ -226,7 +226,7 @@ describe('TTL expiry vs notifications (issue #96 Phase 4)', () => {
     expect(stored?.messages).toHaveLength(0)
     expect(stored?.expiredCount).toBe(1)
     expect(FakeNotification.instances).toHaveLength(1)
-    expect(FakeNotification.instances[0]?.title).toBe('gritos — mención en #general')
+    expect(FakeNotification.instances[0]?.title).toBe('gritos — mention in #general')
     expect(FakeNotification.instances[0]?.close).not.toHaveBeenCalled()
   })
 })

@@ -10,7 +10,7 @@ import { installFakeTrystero } from './fakeTrystero'
 
 /**
  * Issue #41 — the room-header share affordance: navigator.share when
- * available, clipboard fallback with brief 'Enlace copiado' feedback. The
+ * available, clipboard fallback with brief 'Link copied' feedback. The
  * produced URL always comes from buildRoomLink (only the room name rides
  * along; the password never does).
  */
@@ -49,23 +49,23 @@ function stubNavigatorProperty(name: 'share' | 'clipboard', value: unknown): voi
   Object.defineProperty(window.navigator, name, { value, configurable: true })
 }
 
-describe('ChatHeader — Compartir sala (issue #41)', () => {
+describe('ChatHeader — Share room (issue #41)', () => {
   it('uses navigator.share with the built room link when available', async () => {
     const share = vi.fn().mockResolvedValue(undefined)
     stubNavigatorProperty('share', share)
     render(<ChatHeader room={room({ name: 'lobby' })} onToggleSidebar={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Compartir sala' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share room' }))
 
     await waitFor(() => {
       expect(share).toHaveBeenCalledTimes(1)
     })
     expect(share).toHaveBeenCalledWith({
-      title: 'Sala #lobby en gritos',
+      title: 'Room #lobby on gritos',
       url: buildRoomLink('lobby'),
     })
     // The share sheet needs no clipboard feedback.
-    expect(screen.queryByText('Enlace copiado')).not.toBeInTheDocument()
+    expect(screen.queryByText('Link copied')).not.toBeInTheDocument()
   })
 
   it('prefers navigator.share even when the clipboard exists', async () => {
@@ -75,7 +75,7 @@ describe('ChatHeader — Compartir sala (issue #41)', () => {
     stubNavigatorProperty('clipboard', { writeText })
     render(<ChatHeader room={room({ name: 'dev' })} onToggleSidebar={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Compartir sala' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share room' }))
 
     await waitFor(() => {
       expect(share).toHaveBeenCalledTimes(1)
@@ -83,14 +83,14 @@ describe('ChatHeader — Compartir sala (issue #41)', () => {
     expect(writeText).not.toHaveBeenCalled()
   })
 
-  it('falls back to the clipboard and shows the Enlace copiado feedback', async () => {
+  it('falls back to the clipboard and shows the Link copied feedback', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     stubNavigatorProperty('clipboard', { writeText })
     render(<ChatHeader room={room({ name: 'mi-sala' })} onToggleSidebar={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Compartir sala' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share room' }))
 
-    await screen.findByText('Enlace copiado')
+    await screen.findByText('Link copied')
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText).toHaveBeenCalledWith(buildRoomLink('mi-sala'))
   })
@@ -102,9 +102,9 @@ describe('ChatHeader — Compartir sala (issue #41)', () => {
       <ChatHeader room={room({ name: 'secreta', hasPassword: true })} onToggleSidebar={vi.fn()} />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Compartir sala' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share room' }))
 
-    await screen.findByText('Enlace copiado')
+    await screen.findByText('Link copied')
     const url = writeText.mock.calls[0]?.[0] as string
     expect(url).toContain('#sala=secreta')
     expect(url).not.toContain('password')
@@ -112,7 +112,7 @@ describe('ChatHeader — Compartir sala (issue #41)', () => {
 
   it('offers no share affordance without an active room', () => {
     render(<ChatHeader room={null} onToggleSidebar={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: 'Compartir sala' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Share room' })).not.toBeInTheDocument()
   })
 
   it('a denied clipboard degrades silently (no crash, no feedback)', async () => {
@@ -120,11 +120,11 @@ describe('ChatHeader — Compartir sala (issue #41)', () => {
     stubNavigatorProperty('clipboard', { writeText })
     render(<ChatHeader room={room({ name: 'lobby' })} onToggleSidebar={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Compartir sala' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share room' }))
 
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(writeText).toHaveBeenCalledTimes(1)
-    expect(screen.queryByText('Enlace copiado')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
+    expect(screen.queryByText('Link copied')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 })

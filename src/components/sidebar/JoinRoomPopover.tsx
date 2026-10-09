@@ -13,7 +13,7 @@ import { useRoomManager } from '../../hooks/useRoomManager'
  * room password hides behind the 'sala cifrada' toggle with the one-line
  * explanation; when the toggle is on a non-empty password is required —
  * the room key and the §9.4 roomId both derive from it. Room-cap rejections
- * surface the exact manager message "Límite de salas activas alcanzado (N)":
+ * surface the exact manager message "Active room limit reached (N)":
  * the popover's own submit sets it as the local error, and `managerError`
  * carries one raised outside (issue #87: a suggested-room join rejected by
  * the sidebar reuses this open popover instead of a hidden paragraph).
@@ -86,14 +86,14 @@ export function JoinRoomPopover(props: {
 
   return (
     <form
-      aria-label="Unirse por nombre"
+      aria-label="Join by name"
       onSubmit={(event) => void submit(event)}
       className="flex flex-col gap-2 rounded-md border border-border bg-surface p-2"
     >
       <input
-        aria-label="Nombre de la sala"
+        aria-label="Room name"
         autoFocus
-        placeholder="nombre-de-sala"
+        placeholder="room-name"
         spellCheck={false}
         value={name}
         onChange={(event) => {
@@ -104,13 +104,13 @@ export function JoinRoomPopover(props: {
       />
       {name.trim() !== '' && (
         <p className="text-xs text-muted">
-          Se unirá a <span className="font-mono text-text">#{normalized ?? '—'}</span>
+          You will join <span className="font-mono text-text">#{normalized ?? '—'}</span>
         </p>
       )}
       <label className="flex items-center gap-1.5 text-xs text-muted">
         <input
           type="checkbox"
-          aria-label="sala cifrada"
+          aria-label="encrypted room"
           checked={encrypted}
           onChange={(event) => {
             setEncrypted(event.target.checked)
@@ -118,14 +118,14 @@ export function JoinRoomPopover(props: {
           }}
           className="h-3.5 w-3.5 accent-accent"
         />
-        <span>🔒 sala cifrada</span>
+        <span>🔒 encrypted room</span>
       </label>
       {encrypted && (
         <>
           <input
-            aria-label="Contraseña de la sala"
+            aria-label="Room password"
             type="password"
-            placeholder="Contraseña de la sala"
+            placeholder="Room password"
             spellCheck={false}
             value={password}
             onChange={(event) => {
@@ -148,7 +148,7 @@ export function JoinRoomPopover(props: {
           disabled={busy}
           className="rounded bg-accent px-3 py-1.5 text-xs font-semibold text-accent-text disabled:opacity-50"
         >
-          Unirse
+          Join
         </button>
         {props.onDismiss !== undefined && (
           <button
@@ -156,7 +156,7 @@ export function JoinRoomPopover(props: {
             onClick={props.onDismiss}
             className="rounded border border-border px-3 py-1.5 text-xs"
           >
-            Cancelar
+            Cancel
           </button>
         )}
       </div>

@@ -220,7 +220,7 @@ describe('ChatHeader QR popover (issue #100, Phase 2)', () => {
     expect(contexts.get(canvas)?.rects).toHaveLength(1 + countDark(matrix))
   })
 
-  it('downloads a PNG named gritos-sala-<name> with the export size floor', () => {
+  it('downloads a PNG named gritos-room-<name> with the export size floor', () => {
     const toBlobCanvases: HTMLCanvasElement[] = []
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (
       this: HTMLCanvasElement,

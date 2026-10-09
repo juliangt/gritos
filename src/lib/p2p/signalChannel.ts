@@ -101,10 +101,10 @@ export class KnockError extends Error {
   constructor(reason: KnockError['reason']) {
     super(
       reason === 'signal-off'
-        ? 'El canal global está desactivado'
+        ? 'The global channel is disabled'
         : reason === 'peer-not-present'
-          ? 'Esa huella no está presente en el canal global'
-          : 'El golpe no es válido',
+          ? 'That fingerprint is not present on the global channel'
+          : 'The knock is not valid',
     )
     this.name = 'KnockError'
     this.reason = reason

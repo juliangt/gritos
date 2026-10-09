@@ -56,18 +56,18 @@ describe('Network error banner (RNF-07)', () => {
     render(<NetworkErrorBanner />)
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos',
+      'No tracker access — check your connection or configure alternative trackers',
     )
-    expect(screen.getByRole('button', { name: 'Abrir ajustes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument()
   })
 
-  it('"Abrir ajustes" opens Ajustes on the Red tab (RF-07)', () => {
+  it('"Open settings" opens Ajustes on the Red tab (RF-07)', () => {
     seed([room('r1', 'lobby', { status: 'error' })])
     render(<NetworkErrorBanner />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir ajustes' }))
-    const dialog = screen.getByRole('dialog', { name: 'Ajustes' })
-    expect(within(dialog).getByRole('tab', { name: 'Red' })).toHaveAttribute(
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
+    const dialog = screen.getByRole('dialog', { name: 'Settings' })
+    expect(within(dialog).getByRole('tab', { name: 'Network' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
@@ -77,7 +77,7 @@ describe('Network error banner (RNF-07)', () => {
     seed([room('r1', 'lobby', { status: 'error' })])
     render(<NetworkErrorBanner />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Descartar el aviso' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss the notice' }))
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
 
     // A different room entering the error state re-shows the banner.
@@ -89,7 +89,7 @@ describe('Network error banner (RNF-07)', () => {
     seed([room('r1', 'lobby', { status: 'error' })])
     render(<NetworkErrorBanner />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Descartar el aviso' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss the notice' }))
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
 
     // Recovery prunes the dismissal…

@@ -120,9 +120,9 @@ describe('frame-bust bootstrap (issues #27, #104 phase 3)', () => {
     // entry bundle tag) is gone and the Spanish deny warning is all that
     // remains — the module bundle below never executes.
     expect(document.head).toBeNull()
-    expect(document.querySelector('h1')?.textContent).toBe('gritos no puede ejecutarse en un marco')
+    expect(document.querySelector('h1')?.textContent).toBe('gritos cannot run inside a frame')
     expect(document.querySelector('p')?.textContent).toContain(
-      'no puede ejecutarse dentro de un marco o iframe',
+      'cannot run inside a frame or iframe',
     )
     // The anti-flash half never ran: the framed path returns before it.
     expect(win.matchMedia).not.toHaveBeenCalled()

@@ -24,13 +24,13 @@ export const DEFAULT_UI: UiPersisted = { sidebarCollapsed: false }
 export interface UiSession {
   /** Room name the sidebar's JoinRoomPopover opens prefilled with; null = closed. */
   joinPopoverName: string | null
-  /** The /ayuda overlay. */
+  /** The /help overlay. */
   helpOpen: boolean
-  /** The /limpiar confirmation dialog. */
+  /** The /clear confirmation dialog. */
   clearFeedOpen: boolean
   /**
    * Room joined by name whose join may still need its password (the issue
-   * #41 recovery pattern, armed by /sala): ChatLayout offers the prefilled
+   * #41 recovery pattern, armed by /room): ChatLayout offers the prefilled
    * password form when that room exhausts the not-found heuristic.
    */
   recoveryRoom: string | null
@@ -39,15 +39,15 @@ export interface UiSession {
 export interface UiStore extends UiPersisted, UiSession {
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
-  /** /sala on a room that may need a password: opens the popover prefilled. */
+  /** /room on a room that may need a password: opens the popover prefilled. */
   openJoinPopover: (name: string) => void
   closeJoinPopover: () => void
   openHelp: () => void
   closeHelp: () => void
-  /** /limpiar: opens the confirmation; the dialog owns the actual wipe. */
+  /** /clear: opens the confirmation; the dialog owns the actual wipe. */
   requestClearFeed: () => void
   cancelClearFeed: () => void
-  /** /sala joined a room by name: arm its password-recovery offer. */
+  /** /room joined a room by name: arm its password-recovery offer. */
   armPasswordRecovery: (name: string) => void
   clearPasswordRecovery: () => void
 }

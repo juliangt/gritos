@@ -11,14 +11,14 @@ import { useSettingsStore } from '../stores/useSettingsStore'
  * without the API (tests, old browsers) can never crash.
  */
 
-/** §10.5 — exact DM title format: 'gritos — DM de <nick>'. */
+/** §10.5 — exact DM title format: 'gritos — DM from <nick>'. */
 export function dmNotificationTitle(nick: string): string {
-  return `gritos — DM de ${nick}`
+  return `gritos — DM from ${nick}`
 }
 
-/** §10.5 — exact mention title format: 'gritos — mención en #<sala>'. */
+/** §10.5 — exact mention title format: 'gritos — mention in #<room>'. */
 export function mentionNotificationTitle(roomName: string): string {
-  return `gritos — mención en #${roomName}`
+  return `gritos — mention in #${roomName}`
 }
 
 /** §10.5 — exact body format: '<nick>: <text>'. */
@@ -114,11 +114,7 @@ function gateOpen(): boolean {
 }
 
 /** Shows a notification and wires its click handler; true when shown. */
-function show(
-  title: string,
-  body: string,
-  onClick: () => void,
-): boolean {
+function show(title: string, body: string, onClick: () => void): boolean {
   try {
     if (!gateOpen()) return false
     const notification = new Notification(title, { body }) as FocusableNotification
@@ -145,7 +141,7 @@ export function notifyIncomingDm(dm: IncomingDm): boolean {
 }
 
 /**
- * Room mention notification (§10.5): title 'gritos — mención en #<sala>',
+ * Room mention notification (§10.5): title 'gritos — mention in #<room>',
  * body '<nick>: <text>'; click focuses the tab and opens the room view.
  */
 export function notifyMention(mention: RoomMention): boolean {

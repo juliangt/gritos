@@ -7,7 +7,7 @@ import { SettingsModal } from '../settings/SettingsModal'
 import { QrSharePopover } from './QrSharePopover'
 import { QR_BUTTON_LABEL } from '../settings/messages'
 
-/** Issue #41 — how long the 'Enlace copiado' feedback stays visible. */
+/** Issue #41 — how long the 'Link copied' feedback stays visible. */
 const COPIED_FEEDBACK_MS = 2_000
 
 /**
@@ -32,7 +32,7 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
     if (room === null) return
     const url = buildRoomLink(room.name)
     if (typeof navigator.share === 'function') {
-      void navigator.share({ title: `Sala #${room.name} en gritos`, url }).catch(() => {
+      void navigator.share({ title: `Room #${room.name} on gritos`, url }).catch(() => {
         // Share sheet dismissed — nothing to report.
       })
       return
@@ -53,8 +53,8 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
       <button
         type="button"
         onClick={props.onToggleSidebar}
-        aria-label="Mostrar u ocultar la barra lateral"
-        title="Mostrar u ocultar la barra lateral (Ctrl/Cmd+B)"
+        aria-label="Show or hide the sidebar"
+        title="Show or hide the sidebar (Ctrl/Cmd+B)"
         className="rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
       >
         ☰
@@ -67,7 +67,7 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
           <h1 className="truncate text-sm font-semibold">
             #{props.room.name}
             {props.room.hasPassword && (
-              <span role="img" aria-label="sala cifrada" title="Sala con contraseña">
+              <span role="img" aria-label="encrypted room" title="Password-protected room">
                 {' '}
                 🔒
               </span>
@@ -76,13 +76,13 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
           <StatusDot status={props.room.status} />
           <span className="min-w-0 truncate text-xs text-muted">{roomStatusText(props.room)}</span>
           <span className="ml-auto shrink-0 text-xs text-muted">
-            {props.room.peers.length} {props.room.peers.length === 1 ? 'par' : 'pares'}
+            {props.room.peers.length} {props.room.peers.length === 1 ? 'peer' : 'peers'}
           </span>
           <button
             type="button"
             onClick={shareRoom}
-            aria-label="Compartir sala"
-            title="Compartir sala"
+            aria-label="Share room"
+            title="Share room"
             className="rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
           >
             ⤴
@@ -101,15 +101,15 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
 
       {copied && (
         <span aria-live="polite" className="shrink-0 text-xs text-muted">
-          Enlace copiado
+          Link copied
         </span>
       )}
 
       <button
         type="button"
         onClick={() => setSettingsOpen(true)}
-        aria-label="Ajustes"
-        title="Ajustes"
+        aria-label="Settings"
+        title="Settings"
         className="rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
       >
         ⚙

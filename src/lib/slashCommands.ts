@@ -15,20 +15,26 @@
  *   for quoting; wording reuses the owning libs (NICKNAME_ERROR_TEXT,
  *   INVALID_ROOM_NAME_TEXT) plus the row's usage (`slashUsageText`).
  * - `kind: 'unknown'` — leading '/' with a verb outside the table: the input
- *   is NEVER sent; the UI hints «Comando desconocido — /ayuda».
+ *   is NEVER sent; the UI hints "Unknown command — /help".
  * - `kind: 'literal'` — `\/` escape hatch: the composer strips the backslash
  *   and sends `text` as a normal chat message.
  *
- * Verbs are lowercase-only by design (Spanish UI, documented, not
+ * Verbs are lowercase-only by design (English UI, documented, not
  * localized): '/NICK' is an unknown verb. Zero-argument commands are strict:
  * any argument is an 'extra-args' error, never silently ignored. Whitespace
  * runs between verb and arguments are skipped and arguments are end-trimmed;
  * internal whitespace survives for /me and is folded by the domain rules for
- * /nick (RF-01: runs collapse to one space) and /sala (RF-02: runs → '-').
+ * /nick (RF-01: runs collapse to one space) and /room (RF-02: runs → '-').
+ *
+ * VERBS (issue #112, Phase 1 — clean break): the pre-release rename
+ * /sala→/room, /salas→/rooms, /limpiar→/clear, /salir→/leave, /ayuda→/help
+ * keeps NO Spanish aliases — the app has no released users, so there is no
+ * compatibility burden to carry. English is the primary language of the
+ * table: usage and help strings below are the shipped copy.
  *
  * Help and usage strings live in this table rather than settings/messages.ts
  * (superseding the Phase-4 note in the issue): the command table is
- * protocol-adjacent grammar data owned by the parser module, and the /ayuda
+ * protocol-adjacent grammar data owned by the parser module, and the /help
  * overlay renders straight from SLASH_COMMANDS.
  */
 
@@ -47,14 +53,14 @@ export interface SlashCommandDef {
   /** Loose on purpose: the concrete literals live in the SLASH_COMMANDS rows. */
   readonly verb: string
   readonly arity: SlashArity
-  /** Argument shape shown by /ayuda and in usage errors, e.g. '/nick <nombre>'. */
+  /** Argument shape shown by /help and in usage errors, e.g. '/nick <name>'. */
   readonly usage: string
-  /** One-line Spanish help text (feeds the /ayuda overlay). */
+  /** One-line English help text (feeds the /help overlay). */
   readonly help: string
 }
 
 /**
- * The v1 command set (issue #99), in /ayuda display order. Kept as a plain
+ * The v1 command set (issue #99), in /help display order. Kept as a plain
  * tuple so `SlashVerb` derives from it and the parser switch stays
  * exhaustive over the real rows.
  */
@@ -62,50 +68,50 @@ export const SLASH_COMMANDS = [
   {
     verb: 'nick',
     arity: 'value',
-    usage: '/nick <nombre>',
-    help: 'Cambia tu apodo (2–24 caracteres: letras, números, espacios, guiones y guion bajo).',
+    usage: '/nick <name>',
+    help: 'Changes your nickname (2–24 characters: letters, numbers, spaces, hyphens and underscores).',
   },
   {
-    verb: 'sala',
+    verb: 'room',
     arity: 'value',
-    usage: '/sala <nombre>',
-    help: 'Únete a una sala por su nombre (se normaliza a minúsculas con guiones).',
+    usage: '/room <name>',
+    help: 'Joins a room by its name (normalized to lowercase with hyphens).',
   },
   {
     verb: 'dm',
     arity: 'value',
     usage: '/dm <nick>',
-    help: 'Abre una conversación directa cifrada con un par.',
+    help: 'Opens an encrypted direct conversation with a peer.',
   },
   {
     verb: 'me',
     arity: 'rest',
-    usage: '/me <acción>',
-    help: 'Envía una acción: se muestra en cursiva como «* apodo acción».',
+    usage: '/me <action>',
+    help: 'Sends an action: rendered in italics as "* nickname action".',
   },
   {
-    verb: 'salas',
+    verb: 'rooms',
     arity: 'none',
-    usage: '/salas',
-    help: 'Muestra las salas activas y sus mensajes sin leer.',
+    usage: '/rooms',
+    help: 'Lists the active rooms and their unread counts.',
   },
   {
-    verb: 'limpiar',
+    verb: 'clear',
     arity: 'none',
-    usage: '/limpiar',
-    help: 'Borra el historial local de esta sala (solo en tu navegador).',
+    usage: '/clear',
+    help: 'Clears the local history of this room (your browser only).',
   },
   {
-    verb: 'salir',
+    verb: 'leave',
     arity: 'none',
-    usage: '/salir',
-    help: 'Abandona la sala activa.',
+    usage: '/leave',
+    help: 'Leaves the active room.',
   },
   {
-    verb: 'ayuda',
+    verb: 'help',
     arity: 'none',
-    usage: '/ayuda',
-    help: 'Muestra esta lista de comandos.',
+    usage: '/help',
+    help: 'Shows this command list.',
   },
 ] as const satisfies readonly SlashCommandDef[]
 
@@ -117,13 +123,13 @@ type SlashCommandEntry = (typeof SLASH_COMMANDS)[number]
 
 /** Why a known command's arguments were rejected at parse level. */
 export type SlashArgError =
-  /** The grammar requires an argument and none was given (/nick /sala /dm /me). */
+  /** The grammar requires an argument and none was given (/nick /room /dm /me). */
   | 'missing-arg'
   /** An argument was given to a zero-argument command (strict arity). */
   | 'extra-args'
   /** The /nick argument fails the RF-01 nickname rules. */
   | 'invalid-nick'
-  /** The /sala argument cannot be normalized under RF-02. */
+  /** The /room argument cannot be normalized under RF-02. */
   | 'invalid-room'
 
 /**
@@ -133,10 +139,10 @@ export type SlashArgError =
  */
 export type SlashCommand =
   | { kind: 'command'; verb: 'nick'; nickname: string }
-  | { kind: 'command'; verb: 'sala'; room: string }
+  | { kind: 'command'; verb: 'room'; room: string }
   | { kind: 'command'; verb: 'dm'; nick: string }
   | { kind: 'command'; verb: 'me'; action: string }
-  | { kind: 'command'; verb: 'ayuda' | 'salas' | 'limpiar' | 'salir' }
+  | { kind: 'command'; verb: 'help' | 'rooms' | 'clear' | 'leave' }
   | { kind: 'error'; verb: SlashVerb; error: SlashArgError; arg: string }
   | { kind: 'unknown'; verb: string }
   | { kind: 'literal'; text: string }
@@ -157,17 +163,17 @@ function normalizeRoomArg(name: string): string | null {
 }
 
 /**
- * Table lookup for the executor (the /ayuda overlay, usage lines, the
+ * Table lookup for the executor (the /help overlay, usage lines, the
  * unknown-command hint). Undefined for anything outside the table.
  */
 export function getSlashCommandDef(verb: string): SlashCommandDef | undefined {
   return SLASH_COMMANDS.find((entry) => entry.verb === verb)
 }
 
-/** 'Uso: /nick <nombre>' — prefix for arity and validation error lines. */
+/** 'Usage: /nick <name>' — prefix for arity and validation error lines. */
 export function slashUsageText(verb: SlashVerb): string {
   const def = getSlashCommandDef(verb)
-  return `Uso: ${def?.usage ?? `/${verb}`}`
+  return `Usage: ${def?.usage ?? `/${verb}`}`
 }
 
 /**
@@ -212,15 +218,15 @@ function commandResult(def: SlashCommandEntry, rawArgs: string): SlashCommand {
       }
       return { kind: 'command', verb: 'nick', nickname }
     }
-    case 'sala': {
+    case 'room': {
       if (rawArgs === '') {
-        return { kind: 'error', verb: 'sala', error: 'missing-arg', arg: '' }
+        return { kind: 'error', verb: 'room', error: 'missing-arg', arg: '' }
       }
       const room = normalizeRoomArg(rawArgs)
       if (room === null) {
-        return { kind: 'error', verb: 'sala', error: 'invalid-room', arg: rawArgs }
+        return { kind: 'error', verb: 'room', error: 'invalid-room', arg: rawArgs }
       }
-      return { kind: 'command', verb: 'sala', room }
+      return { kind: 'command', verb: 'room', room }
     }
     case 'dm':
       // No RF-01 gate: remote nicks are boundary-sanitized, not charset-
@@ -237,10 +243,10 @@ function commandResult(def: SlashCommandEntry, rawArgs: string): SlashCommand {
         return { kind: 'error', verb: 'me', error: 'missing-arg', arg: '' }
       }
       return { kind: 'command', verb: 'me', action: rawArgs }
-    case 'ayuda':
-    case 'salas':
-    case 'limpiar':
-    case 'salir':
+    case 'help':
+    case 'rooms':
+    case 'clear':
+    case 'leave':
       // Strict arity: an argument to a zero-arg command is a typo, never
       // silently ignored.
       if (rawArgs !== '') {

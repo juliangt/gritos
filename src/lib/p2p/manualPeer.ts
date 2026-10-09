@@ -205,16 +205,16 @@ export function createAnswerBlob(fields: ManualBlobFields): string {
 
 function decodeRawKey(value: unknown, field: string): Uint8Array {
   if (typeof value !== 'string' || value === '') {
-    throw new ManualBlobError('keys', `Clave ausente o malformada: ${field}`)
+    throw new ManualBlobError('keys', `Missing or malformed key: ${field}`)
   }
   let bytes: Uint8Array
   try {
     bytes = base64ToBytes(value)
   } catch {
-    throw new ManualBlobError('keys', `Clave con base64 inválido: ${field}`)
+    throw new ManualBlobError('keys', `Key with invalid base64: ${field}`)
   }
   if (bytes.length !== RAW_PUBLIC_KEY_LENGTH) {
-    throw new ManualBlobError('keys', `Clave de longitud incorrecta: ${field}`)
+    throw new ManualBlobError('keys', `Key with the wrong length: ${field}`)
   }
   return bytes
 }
@@ -232,19 +232,19 @@ export async function parseManualBlob(text: string): Promise<ParsedManualBlob> {
     const json = new TextDecoder().decode(base64ToBytes(text.replace(/\s+/g, '')))
     const parsed: unknown = JSON.parse(json)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new ManualBlobError('encoding', 'El blob no es un objeto JSON')
+      throw new ManualBlobError('encoding', 'The blob is not a JSON object')
     }
     raw = parsed as RawManualBlob
   } catch (error) {
     if (error instanceof ManualBlobError) throw error
-    throw new ManualBlobError('encoding', 'El blob no es base64/JSON válido')
+    throw new ManualBlobError('encoding', 'The blob is not valid base64/JSON')
   }
 
   if (raw.v !== MANUAL_BLOB_VERSION) {
-    throw new ManualBlobError('version', `Versión de blob desconocida: ${String(raw.v)}`)
+    throw new ManualBlobError('version', `Unknown blob version: ${String(raw.v)}`)
   }
   if (raw.role !== 'invite' && raw.role !== 'answer') {
-    throw new ManualBlobError('role', `Rol de blob desconocido: ${String(raw.role)}`)
+    throw new ManualBlobError('role', `Unknown blob role: ${String(raw.role)}`)
   }
   const role: ManualBlobRole = raw.role
 
@@ -260,7 +260,7 @@ export async function parseManualBlob(text: string): Promise<ParsedManualBlob> {
     typeof raw.fp !== 'string' ||
     canonicalFingerprint(raw.fp) !== canonicalFingerprint(recomputed)
   ) {
-    throw new ManualBlobError('fingerprint', 'La huella no coincide con la clave de identidad')
+    throw new ManualBlobError('fingerprint', 'The fingerprint does not match the identity key')
   }
 
   // Role ⇔ SDP type coherence (§12.2: invite⇔offer, answer⇔answer).
@@ -273,7 +273,7 @@ export async function parseManualBlob(text: string): Promise<ParsedManualBlob> {
     typeof sdp.sdp !== 'string' ||
     sdp.sdp === ''
   ) {
-    throw new ManualBlobError('role', `El SDP no es coherente con el rol ${role}`)
+    throw new ManualBlobError('role', `The SDP is not coherent with the role ${role}`)
   }
   const description = sdp.sdp
 
@@ -444,7 +444,7 @@ export class ManualPeerEngine {
    */
   async createInvite(): Promise<string> {
     if (this.role !== 'invite') {
-      throw new ManualPeerError('illegal-transition', 'Solo el rol «invite» crea invitaciones')
+      throw new ManualPeerError('illegal-transition', 'Only the "invite" role creates invitations')
     }
     this.assertState('idle')
     const pc = this.createPeerConnection()
@@ -475,7 +475,7 @@ export class ManualPeerEngine {
    */
   async acceptAnswer(text: string, options?: { expectedPeerFingerprint?: string }): Promise<void> {
     if (this.role !== 'invite') {
-      throw new ManualPeerError('illegal-transition', 'Solo el rol «invite» acepta respuestas')
+      throw new ManualPeerError('illegal-transition', 'Only the "invite" role accepts answers')
     }
     this.assertState('invite-ready')
     const parsed = await this.parsePeerBlob(text, 'answer')
@@ -486,7 +486,7 @@ export class ManualPeerEngine {
     ) {
       throw new ManualPeerError(
         'fingerprint-mismatch',
-        'La huella de la respuesta no coincide con la esperada',
+        'The answer’s fingerprint does not match the expected one',
       )
     }
     this.remote = parsed
@@ -508,7 +508,7 @@ export class ManualPeerEngine {
    */
   async acceptInvite(text: string): Promise<string> {
     if (this.role !== 'answer') {
-      throw new ManualPeerError('illegal-transition', 'Solo el rol «answer» acepta invitaciones')
+      throw new ManualPeerError('illegal-transition', 'Only the "answer" role accepts invitations')
     }
     this.assertState('idle')
     const parsed = await this.parsePeerBlob(text, 'invite')
@@ -547,7 +547,7 @@ export class ManualPeerEngine {
     if (text.length > MAX_PLAINTEXT_LENGTH) {
       throw new ManualPeerError(
         'too-long',
-        `El mensaje supera el límite de ${MAX_PLAINTEXT_LENGTH} caracteres`,
+        `The message exceeds the limit of ${MAX_PLAINTEXT_LENGTH} characters`,
       )
     }
     const key = await this.requireKey()
@@ -603,7 +603,7 @@ export class ManualPeerEngine {
 
   private remoteId(): string {
     const remote = this.remote
-    if (remote === null) throw new ManualPeerError('not-connected', 'No hay par validado')
+    if (remote === null) throw new ManualPeerError('not-connected', 'No validated peer')
     return canonicalFingerprint(remote.fingerprint)
   }
 
@@ -611,7 +611,7 @@ export class ManualPeerEngine {
     if (this.state !== expected) {
       throw new ManualPeerError(
         'illegal-transition',
-        `Se esperaba el estado «${expected}», hay «${this.state}»`,
+        `Expected state "${expected}", got "${this.state}"`,
       )
     }
   }
@@ -623,13 +623,16 @@ export class ManualPeerEngine {
    */
   private assertNotTerminal(): void {
     if (this.state === 'failed' || this.state === 'disconnected' || this.state === 'closed') {
-      throw new ManualPeerError('illegal-transition', `La sesión ya terminó en «${this.state}»`)
+      throw new ManualPeerError(
+        'illegal-transition',
+        `The session already ended in "${this.state}"`,
+      )
     }
   }
 
   private assertConnected(): void {
     if (this.state !== 'connected' || this.channel?.readyState !== 'open') {
-      throw new ManualPeerError('not-connected', 'El canal manual no está conectado')
+      throw new ManualPeerError('not-connected', 'The manual channel is not connected')
     }
   }
 
@@ -657,7 +660,7 @@ export class ManualPeerEngine {
 
   private requirePeerConnection(): RTCPeerConnection {
     const pc = this.pc
-    if (pc === null) throw new ManualPeerError('illegal-transition', 'No hay conexión activa')
+    if (pc === null) throw new ManualPeerError('illegal-transition', 'No active connection')
     return pc
   }
 
@@ -714,7 +717,7 @@ export class ManualPeerEngine {
       ) {
         this.teardown(
           'failed',
-          new ManualPeerError('connect-timeout', 'La conexión no se estableció a tiempo'),
+          new ManualPeerError('connect-timeout', 'The connection was not established in time'),
         )
       }
     }, this.connectGuardMs)
@@ -738,7 +741,7 @@ export class ManualPeerEngine {
     }
   }
 
-  /** §12.2 — a drop after connecting lands on «El par se ha desconectado». */
+  /** §12.2 — a drop after connecting lands on «The peer has disconnected». */
   private handleChannelClosed(): void {
     if (this.state === 'connected') {
       this.teardown('disconnected')
@@ -799,8 +802,7 @@ export class ManualPeerEngine {
 
   private async requireKey(): Promise<CryptoKey> {
     const key = this.keyPromise
-    if (key === null)
-      throw new ManualPeerError('not-connected', 'La clave compartida no está derivada')
+    if (key === null) throw new ManualPeerError('not-connected', 'The shared key is not derived')
     return key
   }
 
@@ -948,10 +950,7 @@ export class ManualPeerEngine {
   private parsePeerBlob(text: string, expected: ManualBlobRole): Promise<ParsedManualBlob> {
     return parseManualBlob(text).then((parsed) => {
       if (parsed.role !== expected) {
-        throw new ManualPeerError(
-          'bad-blob',
-          `Se esperaba un blob «${expected}», no «${parsed.role}»`,
-        )
+        throw new ManualPeerError('bad-blob', `Expected a "${expected}" blob, not "${parsed.role}"`)
       }
       return parsed
     })

@@ -119,10 +119,10 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
   it('keeps only well-formed wss:// trackers', () => {
     expect(
       normalizeSettings(
-        { trackers: ['not a url', 'http://x', 'wss://', 42, 'wss://tracker.ejemplo:443'] },
+        { trackers: ['not a url', 'http://x', 'wss://', 42, 'wss://tracker.example:443'] },
         FALLBACK,
       ).trackers,
-    ).toEqual(['wss://tracker.ejemplo:443'])
+    ).toEqual(['wss://tracker.example:443'])
     expect(normalizeSettings({ trackers: 'wss://solo' }, FALLBACK).trackers).toEqual([])
     expect(normalizeSettings({ trackers: [] }, FALLBACK).trackers).toEqual([])
   })
@@ -214,7 +214,7 @@ describe('normalizeSettings (issue #29 schema validation)', () => {
   it('roundtrips a valid full record unchanged', () => {
     const valid: typeof DEFAULT_SETTINGS = {
       autoJoinLobby: false,
-      trackers: ['wss://tracker.ejemplo:443'],
+      trackers: ['wss://tracker.example:443'],
       iceServers: [{ urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' }],
       maxActiveRooms: 2,
       theme: 'light',
@@ -338,7 +338,7 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
         autoJoinLobby: false,
-        trackers: ['wss://tracker.ejemplo:443'],
+        trackers: ['wss://tracker.example:443'],
         iceServers: [{ urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' }],
         maxActiveRooms: 5,
         theme: 'dark',
@@ -348,7 +348,7 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
     )
     const { settings } = await rehydrate()
     expect(settings.autoJoinLobby).toBe(false)
-    expect(settings.trackers).toEqual(['wss://tracker.ejemplo:443'])
+    expect(settings.trackers).toEqual(['wss://tracker.example:443'])
     expect(settings.iceServers).toEqual([
       { urls: 'turn:turn.example:3478', username: 'ana', credential: 'secreta' },
     ])

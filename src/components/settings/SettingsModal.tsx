@@ -1,19 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { Modal } from '../common/Modal'
 import { useRoomManager } from '../../hooks/useRoomManager'
-import {
-  isValidNickname,
-  normalizeNickname,
-  NICKNAME_ERROR_TEXT,
-} from '../../lib/nickname'
+import { isValidNickname, normalizeNickname, NICKNAME_ERROR_TEXT } from '../../lib/nickname'
 import { useAppStore } from '../../stores/useAppStore'
 import { AppearanceTab } from './AppearanceTab'
 import { NetworkTab } from './NetworkTab'
 import { PrivacyTab } from './PrivacyTab'
 
 /**
- * Settings modal (RF-07, RNF-05): three tabs — Red / Privacidad /
- * Apariencia — inside a focus-trapped modal that closes with Esc, the ✕
+ * Settings modal (RF-07, RNF-05): three tabs — Network / Privacy /
+ * Appearance — inside a focus-trapped modal that closes with Esc, the ✕
  * button or a backdrop click, and restores focus to the opener. Every
  * change persists to its store instantly (spec: "Todos los cambios se
  * guardan en localStorage al instante"). The nickname field at the top of
@@ -26,15 +22,15 @@ type SettingsTab = 'network' | 'privacy' | 'appearance'
 export type { SettingsTab }
 
 const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'network', label: 'Red' },
-  { id: 'privacy', label: 'Privacidad' },
-  { id: 'appearance', label: 'Apariencia' },
+  { id: 'network', label: 'Network' },
+  { id: 'privacy', label: 'Privacy' },
+  { id: 'appearance', label: 'Appearance' },
 ]
 
 export function SettingsModal(props: {
   open: boolean
   onClose: () => void
-  /** Tab shown on open (defaults to Red — M6 network-error banner shortcut). */
+  /** Tab shown on open (defaults to Network — the network-error banner shortcut). */
   initialTab?: SettingsTab
 }) {
   // The content mounts only while open, so its drafts and tab start fresh
@@ -44,7 +40,7 @@ export function SettingsModal(props: {
     <Modal
       open
       onClose={props.onClose}
-      label="Ajustes"
+      label="Settings"
       className="flex max-h-[90vh] w-full max-w-md flex-col rounded-lg border border-border bg-surface p-4 outline-none"
     >
       <SettingsModalContent initialTab={props.initialTab ?? 'network'} onClose={props.onClose} />
@@ -88,10 +84,10 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
   return (
     <>
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">Ajustes</h2>
+        <h2 className="text-base font-semibold">Settings</h2>
         <button
           type="button"
-          aria-label="Cerrar ajustes"
+          aria-label="Close settings"
           onClick={props.onClose}
           className="rounded px-1.5 py-1 text-sm text-muted hover:bg-bg hover:text-text"
         >
@@ -100,12 +96,12 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
       </div>
 
       <form
-        aria-label="Cambiar apodo"
+        aria-label="Change nickname"
         onSubmit={submitNickname}
         className="mt-3 flex flex-col gap-1"
       >
         <label className="text-xs font-medium text-muted" htmlFor="settings-nickname">
-          Tu apodo
+          Your nickname
         </label>
         <div className="flex items-center gap-1">
           <input
@@ -126,7 +122,7 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
             type="submit"
             className="shrink-0 rounded-md border border-border px-2 py-1.5 text-xs hover:border-accent"
           >
-            Guardar apodo
+            Save nickname
           </button>
         </div>
         {nicknameError !== null && (
@@ -138,7 +134,7 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
 
       <div
         role="tablist"
-        aria-label="Secciones de ajustes"
+        aria-label="Settings sections"
         className="mt-3 flex gap-1 border-b border-border"
       >
         {TABS.map((tab) => (

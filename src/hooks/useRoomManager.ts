@@ -129,7 +129,7 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
       await joinRoom(name, password)
       return null
     } catch (error) {
-      return error instanceof Error ? error.message : 'Error desconocido'
+      return error instanceof Error ? error.message : 'Unknown error'
     }
   }, [])
 
@@ -141,7 +141,7 @@ export function useRoomManager(options: UseRoomManagerOptions = {}): RoomManager
     } catch (error) {
       return {
         roomId: null,
-        error: error instanceof Error ? error.message : 'Error desconocido',
+        error: error instanceof Error ? error.message : 'Unknown error',
       }
     }
   }, [])

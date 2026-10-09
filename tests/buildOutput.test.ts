@@ -65,7 +65,7 @@ import swSource from '../public/sw.js?raw'
  *   phase-2 tests above).
  * - Issue #104 (phase 4): the update flow ships as designed. The worker
  *   never calls skipWaiting() (a new deploy waits for the toast's
- *   «Recargar» reload, which is what activates it and triggers the
+ *   [Reload] click, which is what activates it and triggers the
  *   activate-time cleanup), and the bundle carries the waiting-worker
  *   detection (updatefound/statechange) plus the App-level toast with its
  *   exact wording — string literals survive minification, so their
@@ -343,8 +343,8 @@ describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => 
     expect(inline[0], 'the bootstrap must refuse to run when the page is framed').toContain(
       'window.top !== window.self',
     )
-    expect(inline[0], 'the framed page must show the Spanish deny warning').toContain(
-      'no puede ejecutarse dentro de un marco o iframe',
+    expect(inline[0], 'the framed page must show the deny warning').toContain(
+      'cannot run inside a frame or iframe',
     )
   })
 
@@ -388,7 +388,7 @@ describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => 
     expect(title).toMatch(/content="gritos/)
     const description = metaByProperty(html, 'og:description')
     expect(description, 'og:description must be present').toBeDefined()
-    expect(description).toContain('chat P2P sin servidor')
+    expect(description).toContain('serverless P2P chat')
     const image = metaByProperty(html, 'og:image')
     expect(image, 'og:image must be present').toBeDefined()
     expect(image).toContain('content="./apple-touch-icon.png"')
@@ -434,16 +434,14 @@ describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => 
   it('eliminates the ?debug panel from the emitted JS (issue #32)', () => {
     const js = emittedJs(result)
     // Sanity first: the chunks are the real app code, not an empty shell.
-    expect(js).toContain('Comparte el nombre de la sala para que otros se unan.')
+    expect(js).toContain('Share the room name so others can join.')
     // Unique DebugPanel strings: App.tsx gates the panel behind
     // `import.meta.env.DEV`, so tree-shaking must drop the module entirely
     // (absent code cannot render, which is stronger than a hidden flag).
     expect(js, 'the debug panel must not ship to production (issue #32)').not.toContain(
-      'Panel de depuración',
+      'debug panel',
     )
-    expect(js, 'the debug panel test-chat button must not ship').not.toContain(
-      'Enviar chat de prueba',
-    )
+    expect(js, 'the debug panel test-chat button must not ship').not.toContain('Send test chat')
   })
 })
 
@@ -828,8 +826,8 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
 
   it('leaves new versions waiting for the toast reload — no skipWaiting call anywhere (issue #104, phase 4)', () => {
     // The phase-4 decision: the worker never calls skipWaiting(), so a new
-    // deploy installs and WAITS while the page's toast («Nueva versión
-    // disponible — [Recargar]») offers the swap; location.reload() is what
+    // deploy installs and WAITS while the page's toast ("New version
+    // available — [Reload]") offers the swap; location.reload() is what
     // activates it. Pinning the shipped dist copy AND the public/ source it
     // is generated from: a re-added skipWaiting() would swap the shell
     // under a live chat session with no consent, exactly what the toast
@@ -854,8 +852,8 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
     expect(js, 'the registration must watch for updatefound installs').toContain('updatefound')
     expect(js, 'and for the install worker statechange transitions').toContain('statechange')
     expect(js, 'the App-level toast ships with its exact wording').toContain(
-      'Nueva versión disponible',
+      'New version available',
     )
-    expect(js, 'the reload action of the toast').toContain('Recargar')
+    expect(js, 'the reload action of the toast').toContain('Reload')
   })
 })
