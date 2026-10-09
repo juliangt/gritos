@@ -2551,6 +2551,8 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
   // First peer activity disproves the tracker-dead heuristic (§10.3).
   disarmErrorHeuristic(connection)
   setConnectionStatus(connection, 'connected')
+  // Issue #125 — peers arrived, so the "may be empty" hint is obsolete.
+  useAppStore.getState().setRoomPeerlessHint(connection.roomId, false)
   // Issue #102 phase 3 — a history ask tapped while the room was still
   // hunting goes out now that a DataChannel exists (budget already paid at
   // accept time; the payload dies with the connection if no peer ever
@@ -2626,8 +2628,12 @@ function handlePeerLeave(connection: RoomInternals, peerId: string): void {
     useAppStore.getState().rooms[connection.roomId] !== undefined &&
     (useAppStore.getState().rooms[connection.roomId]?.peers.length ?? 1) === 0
   ) {
-    // No DataChannel left: back to hunting (§10.3 searching).
+    // No DataChannel left: back to hunting (§10.3 searching). Issue #125 —
+    // drop the stale hint with the status reset: the room may find peers
+    // again, and a still-peerless one re-latches the hint at the next
+    // reachable expiry of the freshly armed heuristic.
     setConnectionStatus(connection, 'searching')
+    useAppStore.getState().setRoomPeerlessHint(connection.roomId, false)
     armErrorHeuristic(connection)
   }
 }
@@ -3000,7 +3006,11 @@ function setConnectionStatus(connection: RoomInternals, status: RoomStatus): voi
  * §10.3 heuristic — 15 s with no connection to any tracker while searching
  * → 'error' (issue #125). Peer activity disarms it instantly (handlePeerJoin);
  * an empty room over an OPEN relay socket is signaling, not breakage, so the
- * timer re-arms and a later outage is still caught by a future check.
+ * timer re-arms and a later outage is still caught by a future check. That
+ * reachable branch also latches the store's `peerlessHint` (issue #125) while
+ * the room has zero peers, so the UI can say "the room may be empty" without
+ * claiming a network failure; the hint is cleared wherever the state is
+ * disproven (peer join, real error, last peer leaving).
  */
 function armErrorHeuristic(connection: RoomInternals): void {
   disarmErrorHeuristic(connection)
@@ -3011,9 +3021,18 @@ function armErrorHeuristic(connection: RoomInternals): void {
         // Issue #125 — signaling is up, the room is just peerless: keep
         // hunting instead of firing the error, and re-check after another
         // window so a tracker that dies LATER still trips the heuristic.
+        // The hint latches ONLY on a truly empty room: a `searching` room
+        // that still lists peers is mid-handshake (found, no DataChannel
+        // yet), not empty.
+        if (useAppStore.getState().rooms[connection.roomId]?.peers.length === 0) {
+          useAppStore.getState().setRoomPeerlessHint(connection.roomId, true)
+        }
         armErrorHeuristic(connection)
         return
       }
+      // Issue #125 — a real (dead-tracker) expiry owns the error state: the
+      // hint must not outlive it, or the UI would under-report the outage.
+      useAppStore.getState().setRoomPeerlessHint(connection.roomId, false)
       setConnectionStatus(connection, 'error')
     }
   }, ERROR_HEURISTIC_MS)

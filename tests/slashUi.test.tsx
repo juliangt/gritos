@@ -262,4 +262,30 @@ describe('/room password recovery (ChatLayout)', () => {
     render(<ChatLayout />)
     expect(screen.queryByRole('region', { name: 'Join with password' })).not.toBeInTheDocument()
   })
+
+  // Issue #125 — a wrong-password/nonexistent room over healthy trackers no
+  // longer reaches `error`: it stays `searching` with the latched peerless
+  // hint, which must arm the same prefilled recovery offer.
+  it('offers the form for a searching room whose peerless hint latched (issue #125)', () => {
+    const store = useAppStore.getState()
+    store.setActiveView({ kind: 'room', id: 'room-secreta' })
+    store.upsertRoom(
+      room({ id: 'room-secreta', name: 'secreta', status: 'searching', peerlessHint: true }),
+    )
+    useUiStore.getState().armPasswordRecovery('secreta')
+
+    render(<ChatLayout />)
+    const recovery = screen.getByRole('region', { name: 'Join with password' })
+    expect(within(recovery).getByLabelText('Room name')).toHaveValue('secreta')
+  })
+
+  it('does not offer the form for a plain searching room without the hint', () => {
+    const store = useAppStore.getState()
+    store.setActiveView({ kind: 'room', id: 'room-secreta' })
+    store.upsertRoom(room({ id: 'room-secreta', name: 'secreta', status: 'searching' }))
+    useUiStore.getState().armPasswordRecovery('secreta')
+
+    render(<ChatLayout />)
+    expect(screen.queryByRole('region', { name: 'Join with password' })).not.toBeInTheDocument()
+  })
 })

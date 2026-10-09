@@ -304,10 +304,13 @@ export function ChatLayout() {
             never reaches the URL or storage. Issue #99 — /room arms the
             same recovery for its name-only join (password rooms are
             undetectable from the name): the first source with a matching
-            name wins, and dismissing either clears both. */}
+            name wins, and dismissing either clears both. Issue #125 — the
+            not-found state now surfaces as a peerless `searching` room over
+            healthy trackers too, so the latched `peerlessHint` arms the
+            same offer alongside the plain `error` status. */}
         {activeRoom !== null &&
           (linkedRoomName ?? slashRecoveryRoom) === activeRoom.name &&
-          activeRoom.status === 'error' && (
+          (activeRoom.status === 'error' || activeRoom.peerlessHint === true) && (
             <section
               aria-label="Join with password"
               className="flex flex-col items-center gap-2 border-b border-border bg-surface px-3 py-3"

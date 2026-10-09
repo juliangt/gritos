@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Room } from '../../stores/useAppStore'
-import { roomStatusText } from '../../lib/rooms'
+import { PEERLESS_ROOM_HINT_TEXT, roomStatusText } from '../../lib/rooms'
 import { buildRoomLink } from '../../lib/shareLinks'
 import { StatusDot } from '../common/StatusDot'
 import { SettingsModal } from '../settings/SettingsModal'
@@ -14,10 +14,11 @@ const COPIED_FEEDBACK_MS = 2_000
  * Main-area header (spec §10.1/§10.3): '#name' with the 🔒 marker, the
  * exact connection status text (RF-05: a password room that exhausts the
  * heuristic without peers shows the single not-found message), peer count,
- * the sidebar toggle, the share affordance (issue #41: navigator.share with
- * a clipboard fallback; the link carries only the room name) with the QR
- * invite popover next to it (issue #100: same link, scannable) and the
- * settings entry (RF-07 modal).
+ * the issue #125 peerless hint line when the room latched it (still
+ * `searching`, so the status text stays untouched), the sidebar toggle, the
+ * share affordance (issue #41: navigator.share with a clipboard fallback;
+ * the link carries only the room name) with the QR invite popover next to it
+ * (issue #100: same link, scannable) and the settings entry (RF-07 modal).
  */
 export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -75,6 +76,12 @@ export function ChatHeader(props: { room: Room | null; onToggleSidebar: () => vo
           </h1>
           <StatusDot status={props.room.status} />
           <span className="min-w-0 truncate text-xs text-muted">{roomStatusText(props.room)}</span>
+          {/* Issue #125 — a peerless room over healthy trackers stays
+              `searching`: this subordinate line says the room may simply be
+              empty (never the error wording; the §10.3 texts stay pinned). */}
+          {props.room.peerlessHint === true && (
+            <span className="min-w-0 truncate text-xs text-muted">{PEERLESS_ROOM_HINT_TEXT}</span>
+          )}
           <span className="ml-auto shrink-0 text-xs text-muted">
             {props.room.peers.length} {props.room.peers.length === 1 ? 'peer' : 'peers'}
           </span>

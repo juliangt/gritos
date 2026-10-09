@@ -280,6 +280,67 @@ describe('status transitions (spec §10.3)', () => {
     }))
     expect(manager.trackersReachable()).toBe(true)
   })
+
+  // Issue #125 phase 2 — the reachable expiry latches the store's
+  // `peerlessHint` so the UI can say "the room may be empty" without the
+  // error semantics; every state change that disproves it clears it.
+  it('latches peerlessHint on a reachable expiry with zero peers', async () => {
+    const { roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 1 },
+    }))
+    expect(storedRoom(roomId).peerlessHint).toBeUndefined()
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).status).toBe('searching')
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
+  })
+
+  it('a peer join clears the latched peerlessHint', async () => {
+    const { room, roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 1 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
+
+    room.peerJoin('peer-1')
+    expect(storedRoom(roomId).status).toBe('connected')
+    expect(storedRoom(roomId).peerlessHint).toBe(false)
+  })
+
+  it('an unreachable-tracker expiry fires the error with the hint cleared', async () => {
+    const { roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 3 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).status).toBe('error')
+    expect(storedRoom(roomId).peerlessHint).toBe(false)
+  })
+
+  it('the last peer leaving clears the hint and the next reachable expiry re-latches it', async () => {
+    const { room, roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 1 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
+
+    room.peerJoin('peer-1')
+    room.peerLeave('peer-1')
+    // The leave's re-arm branch resets the hint with the status…
+    expect(storedRoom(roomId).status).toBe('searching')
+    expect(storedRoom(roomId).peerlessHint).toBe(false)
+
+    // …and a still-peerless room re-latches it at the next expiry.
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).status).toBe('searching')
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
+  })
 })
 
 describe('presence and keys on peer join (§7.1)', () => {
