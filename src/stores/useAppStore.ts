@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { LanguageSetting } from '../i18n/index'
 import { REACT_EMOJIS, type ReactEmoji } from '../lib/p2p/protocol'
 
 /**
@@ -63,6 +64,16 @@ export interface Settings {
    * rest of the record.
    */
   globalDm: boolean
+  /**
+   * Issue #119 — UI language. 'auto' follows the browser: Spanish when
+   * `navigator.language` starts with "es", English for everything else
+   * (including undefined/empty); 'en'/'es' pin the locale outright. The
+   * raw choice persists here while the RESOLVED locale lives in the i18n
+   * runtime (src/i18n/index, which re-derives it on boot and on change).
+   * Rides inside `gritos:settings` (spec §8.2) and is wiped by the panic
+   * button like the rest of the record. Default: 'auto'.
+   */
+  language: LanguageSetting
 }
 
 export interface Identity {

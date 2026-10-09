@@ -35,6 +35,9 @@ export const DEFAULT_SETTINGS: Settings = {
   // nickname to every opt-in peer, so the default is OFF and leaving wipes
   // every piece of signal-swarm state.
   globalDm: false,
+  // Issue #119: 'auto' follows the browser language (Spanish for es*,
+  // English otherwise); the i18n runtime resolves it on boot and on change.
+  language: 'auto',
 }
 
 export interface SettingsStore {

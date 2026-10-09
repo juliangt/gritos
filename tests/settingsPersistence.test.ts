@@ -127,4 +127,25 @@ describe('settings persistence (spec §8.2)', () => {
     const { useSettingsStore: freshStore } = await import('../src/stores/useSettingsStore')
     expect(freshStore.getState().settings.shareHistory).toBe(true)
   })
+
+  it('persists and rehydrates the UI language (issue #119)', async () => {
+    // The raw choice ('auto' by default) rides `gritos:settings`; the
+    // RESOLVED locale lives in the i18n runtime, never in this record.
+    expect(useSettingsStore.getState().settings.language).toBe('auto')
+    expect(
+      (JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string) as { language: string })
+        .language,
+    ).toBe('auto')
+
+    useSettingsStore.getState().setSettings({ language: 'es' })
+    expect(
+      (JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string) as { language: string })
+        .language,
+    ).toBe('es')
+
+    // A reload restores the pinned language.
+    vi.resetModules()
+    const { useSettingsStore: freshStore } = await import('../src/stores/useSettingsStore')
+    expect(freshStore.getState().settings.language).toBe('es')
+  })
 })
