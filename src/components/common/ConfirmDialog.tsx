@@ -1,9 +1,12 @@
 import { Modal } from './Modal'
+import { useT } from '../../i18n/index'
 
 /**
  * Confirmation dialog (RF-07/RF-08): used for destructive actions
  * (identity regeneration, panic button). Focus starts on the cancel
- * button — the safe choice — and Esc/backdrop/cancel all abort.
+ * button — the safe choice — and Esc/backdrop/cancel all abort. The
+ * default cancel label resolves through `t` on every render (issue #119 —
+ * a module-level default would freeze the boot locale).
  */
 export function ConfirmDialog(props: {
   open: boolean
@@ -16,6 +19,7 @@ export function ConfirmDialog(props: {
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const t = useT()
   return (
     <Modal open={props.open} onClose={props.onCancel} label={props.title}>
       <h2 className="text-base font-semibold">{props.title}</h2>
@@ -26,7 +30,7 @@ export function ConfirmDialog(props: {
           onClick={props.onCancel}
           className="rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent"
         >
-          {props.cancelLabel ?? 'Cancel'}
+          {props.cancelLabel ?? t('common.cancel')}
         </button>
         <button
           type="button"

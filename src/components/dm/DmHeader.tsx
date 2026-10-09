@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { DmChannel } from '../../stores/useAppStore'
 import { displayFingerprint } from '../../lib/crypto/identity'
-import { useT } from '../../i18n/index'
+import { tPlural, useT } from '../../i18n/index'
 import { SettingsModal } from '../settings/SettingsModal'
 
 /**
@@ -28,8 +28,8 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
       <button
         type="button"
         onClick={props.onToggleSidebar}
-        aria-label="Show or hide the sidebar"
-        title="Show or hide the sidebar (Ctrl/Cmd+B)"
+        aria-label={t('chat.toggleSidebarAria')}
+        title={t('chat.toggleSidebarTitle')}
         className="rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
       >
         ☰
@@ -45,7 +45,9 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
               className={`shrink-0 text-xs ${channel.available ? 'text-muted' : 'text-accent'}`}
               role="status"
             >
-              {channel.available ? '1 peer' : t('dm.peerDisconnected')}
+              {channel.available
+                ? tPlural('common.peerCount', 1)
+                : t('dm.peerDisconnected')}
             </span>
           </div>
           <p className="truncate text-xs text-muted">
@@ -66,8 +68,8 @@ export function DmHeader(props: { channel: DmChannel | null; onToggleSidebar: ()
       <button
         type="button"
         onClick={() => setSettingsOpen(true)}
-        aria-label="Settings"
-        title="Settings"
+        aria-label={t('common.settings')}
+        title={t('common.settings')}
         className="ml-auto rounded px-1.5 py-1 text-base leading-none hover:bg-bg"
       >
         ⚙

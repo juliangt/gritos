@@ -12,8 +12,9 @@
  *   name, trimmed /dm target, end-trimmed /me action). Dispatch on `verb`.
  * - `kind: 'error'` — known verb, rejected arguments; the executor prints a
  *   local system line. `error` says why, `arg` carries the trimmed raw input
- *   for quoting; wording reuses the owning libs (NICKNAME_ERROR_TEXT,
- *   INVALID_ROOM_NAME_TEXT) plus the row's usage (`slashUsageText`).
+ *   for quoting; wording reuses the owning libs' i18n keys
+ *   (errors.nicknameInvalid, settings.invalidRoomName) plus the row's usage
+ *   (`slashUsageText`).
  * - `kind: 'unknown'` — leading '/' with a verb outside the table: the input
  *   is NEVER sent; the UI hints "Unknown command — /help".
  * - `kind: 'literal'` — `\/` escape hatch: the composer strips the backslash

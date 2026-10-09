@@ -32,10 +32,10 @@ export function DmList(props: {
   // toggling the switch hides/reveals it with no further wiring.
   const globalDm = useSettingsStore((state) => state.settings.globalDm)
   return (
-    <section aria-label="Direct messages" className="flex flex-col gap-1">
+    <section aria-label={t('sidebar.dmSectionLabel')} className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Direct messages
+          {t('sidebar.dmSectionLabel')}
         </h2>
         <span className="flex shrink-0 items-center gap-1">
           {globalDm && props.onOpenContact !== undefined && (
@@ -75,7 +75,7 @@ export function DmList(props: {
                 title={
                   channel.available
                     ? undefined
-                    : 'The peer has disconnected — the history remains'
+                    : t('dm.peerDisconnectedHistory')
                 }
                 className={`flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-left hover:bg-surface ${
                   channel.peerId === props.activePeerId ? 'bg-surface font-semibold' : ''
@@ -99,7 +99,11 @@ export function DmList(props: {
                   </span>
                 )}
                 {!channel.available && (
-                  <span role="img" aria-label="peer disconnected" title="The peer has disconnected">
+                  <span
+                    role="img"
+                    aria-label={t('sidebar.peerDisconnectedAria')}
+                    title={t('dm.peerDisconnected')}
+                  >
                     ⚪
                   </span>
                 )}

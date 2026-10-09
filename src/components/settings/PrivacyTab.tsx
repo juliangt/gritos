@@ -9,7 +9,7 @@ import { getMutedNickname, useSettingsStore } from '../../stores/useSettingsStor
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { Toggle } from './Toggle'
-import { useT } from '../../i18n/index'
+import { useT, type TranslationKey } from '../../i18n/index'
 import { unmutePeerAction } from './messages'
 
 /**
@@ -20,43 +20,28 @@ import { unmutePeerAction } from './messages'
  * unmute (issue #95), the P2P exposure disclosure (issue #35), an at-rest
  * storage note for the wrapped identity key (issue #24) and for the TURN
  * credentials (issue #30), identity regeneration behind a confirming
- * dialog, and the panic button behind a double confirmation.
+ * dialog, and the panic button behind a double confirmation. Every rendered
+ * string resolves through `t` (issue #119 — locale-live).
  */
 
-const PERMISSION_GRANTED_TEXT = 'Permission granted.'
-const PERMISSION_DEFAULT_TEXT = 'Permission not requested.'
-const PERMISSION_DENIED_TEXT = 'Permission denied. Enable it from the browser settings.'
-const PERMISSION_UNSUPPORTED_TEXT = 'Your browser does not support notifications.'
-
-const REGENERATE_DIALOG_TITLE = 'Regenerate identity'
-const REGENERATE_DIALOG_BODY =
-  'A new key pair will be generated: your fingerprint will change and the DM channels with your peers will stop matching. Continue?'
-
-const PANIC_BUTTON_LABEL = 'Wipe everything and leave'
-const PANIC_DIALOG_TITLE = PANIC_BUTTON_LABEL
-const PANIC_DIALOG_BODY = 'Nickname, keys, settings and every local trace will be wiped. Continue?'
-const PANIC_FINAL_DIALOG_BODY =
-  'This action is definitive: every connection will be closed and the app will reload to start from scratch.'
-
-/**
- * Issue #95 — canonical fingerprint shortened to its first two 8×4 display
- * groups: enough to tell entries apart without printing the 39-char form.
- */
+/** Issue #95 — canonical fingerprint shortened to its first two 8×4 display
+ * groups: enough to tell entries apart without printing the 39-char form. */
 function shortFingerprint(canonical: string): string {
   const grouped = canonical.replace(/(.{4})(?=.)/g, '$1 ')
   return `${grouped.split(' ').slice(0, 2).join(' ')}…`
 }
 
-function permissionText(state: NotificationPermissionState): string {
+/** NotificationPermissionState → dictionary key (resolved through `t`). */
+function permissionKey(state: NotificationPermissionState): TranslationKey {
   switch (state) {
     case 'granted':
-      return PERMISSION_GRANTED_TEXT
+      return 'settings.permissionGranted'
     case 'denied':
-      return PERMISSION_DENIED_TEXT
+      return 'settings.permissionDenied'
     case 'unsupported':
-      return PERMISSION_UNSUPPORTED_TEXT
+      return 'settings.permissionUnsupported'
     default:
-      return PERMISSION_DEFAULT_TEXT
+      return 'settings.permissionDefault'
   }
 }
 
@@ -93,10 +78,10 @@ export function PrivacyTab() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Toggle
-          label="Desktop notifications"
+          label={t('settings.notificationsLabel')}
           checked={settings.notifications}
           disabled={permission !== 'granted'}
-          hint={permissionText(permission)}
+          hint={t(permissionKey(permission))}
           onChange={(notifications) => setSettings({ notifications })}
         />
         <button
@@ -105,12 +90,12 @@ export function PrivacyTab() {
           disabled={permission !== 'default'}
           className="self-start rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
         >
-          Allow notifications
+          {t('settings.allowNotifications')}
         </button>
       </div>
 
       <Toggle
-        label="Remember recent rooms"
+        label={t('settings.rememberRoomsLabel')}
         checked={settings.rememberRooms}
         onChange={(rememberRooms) => setSettings({ rememberRooms })}
       />
@@ -183,43 +168,34 @@ export function PrivacyTab() {
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">
-          Your private key is stored encrypted in this browser: the key that decrypts it lives in
-          IndexedDB and nothing travels over the network. Even so, if something fully compromises
-          this origin (a malicious extension, malware on your computer) it could use that key to
-          impersonate you.
-        </p>
-        <p className="text-xs text-muted">
-          Generate a new ECDH key pair: your fingerprint will change for all your peers.
-        </p>
+        <p className="text-xs text-muted">{t('settings.identityKeyAtRestNote')}</p>
+        <p className="text-xs text-muted">{t('settings.regenerateHint')}</p>
         <button
           type="button"
           onClick={() => setRegenerateDialogOpen(true)}
           disabled={regenerating}
           className="self-start rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
         >
-          Regenerate identity
+          {t('settings.regenerateIdentity')}
         </button>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted">
-          Last resort: wipes the nickname, keys, settings and every local trace in this browser.
-        </p>
+        <p className="text-xs text-muted">{t('panic.lastResortNote')}</p>
         <button
           type="button"
           onClick={() => setPanicDialogOpen(true)}
           className="self-start rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-500"
         >
-          {PANIC_BUTTON_LABEL}
+          {t('panic.buttonLabel')}
         </button>
       </div>
 
       <ConfirmDialog
         open={regenerateDialogOpen}
-        title={REGENERATE_DIALOG_TITLE}
-        body={REGENERATE_DIALOG_BODY}
-        confirmLabel="Regenerate"
+        title={t('settings.regenerateIdentity')}
+        body={t('settings.regenerateDialogBody')}
+        confirmLabel={t('settings.regenerateConfirm')}
         danger
         onConfirm={() => void confirmRegenerate()}
         onCancel={() => setRegenerateDialogOpen(false)}
@@ -227,9 +203,9 @@ export function PrivacyTab() {
 
       <ConfirmDialog
         open={panicDialogOpen}
-        title={PANIC_DIALOG_TITLE}
-        body={PANIC_DIALOG_BODY}
-        confirmLabel="Continue"
+        title={t('panic.buttonLabel')}
+        body={t('panic.dialogBody')}
+        confirmLabel={t('common.continue')}
         danger
         onConfirm={() => {
           setPanicDialogOpen(false)
@@ -240,9 +216,9 @@ export function PrivacyTab() {
 
       <ConfirmDialog
         open={panicFinalOpen}
-        title={PANIC_BUTTON_LABEL}
-        body={PANIC_FINAL_DIALOG_BODY}
-        confirmLabel={PANIC_BUTTON_LABEL}
+        title={t('panic.buttonLabel')}
+        body={t('panic.finalDialogBody')}
+        confirmLabel={t('panic.buttonLabel')}
         danger
         onConfirm={() => {
           setPanicFinalOpen(false)

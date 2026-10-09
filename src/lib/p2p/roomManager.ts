@@ -314,12 +314,17 @@ export type RelaySockets = Record<string, { readonly readyState: number }>
 /** Returns Trystero's current url → relay socket record (`getRelaySockets`). */
 export type RelaySocketsProvider = () => RelaySockets
 
-/** RF-02 — exceeding settings.maxActiveRooms rejects with this typed error. */
+/**
+ * RF-02 — exceeding settings.maxActiveRooms rejects with this typed error.
+ * Issue #119 — the message is the single-sourced `errors.roomLimitReached`
+ * template, resolved through `t` at throw time (these messages surface
+ * verbatim in the join popover, the recovery form and /room lines).
+ */
 export class RoomLimitError extends Error {
   readonly maxRooms: number
 
   constructor(maxRooms: number) {
-    super(`Active room limit reached (${maxRooms})`)
+    super(t('errors.roomLimitReached', { count: maxRooms }))
     this.name = 'RoomLimitError'
     this.maxRooms = maxRooms
   }
@@ -328,7 +333,7 @@ export class RoomLimitError extends Error {
 /** RF-02 — invalid room names reject before any network call. */
 export class RoomNameError extends Error {
   constructor(rawName: string) {
-    super(`Invalid room name: "${rawName}"`)
+    super(t('errors.roomNameInvalid', { name: rawName }))
     this.name = 'RoomNameError'
   }
 }
@@ -336,7 +341,7 @@ export class RoomNameError extends Error {
 /** RF-01 — invalid nicknames reject before any state/presence change. */
 export class NicknameError extends Error {
   constructor(rawNickname: string) {
-    super(`Invalid nickname: "${rawNickname}"`)
+    super(t('errors.invalidNickname', { nickname: rawNickname }))
     this.name = 'NicknameError'
   }
 }

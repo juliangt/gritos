@@ -13,6 +13,7 @@
  *   chat.*          the chat header/composer (§10.3 status, banners)
  *   feed.*          room feed rows and separators
  *   dm.*            direct-message surfaces
+ *   sidebar.*       the sidebar sections (rooms, peers, DM list, join form)
  *   slash.*         slash-command docs, feedback and error lines
  *   files.*         file-transfer UI (§12.4)
  *   qr.*            the QR share overlay
@@ -22,6 +23,13 @@
  *   notifications.* desktop notification bodies (§10.5)
  *   panic.*         the panic-button confirmations
  *   errors.*        generic error lines
+ *
+ * Phase 3 moved the remaining inline component literals in: every aria-label,
+ * title, placeholder and JSX string of the sidebar, the settings tabs, the
+ * chat chrome, onboarding and the panic flow now resolve through `t` at
+ * render time, and the engine-thrown UI errors (the room-cap/invalid-name
+ * messages surfacing verbatim in the join popover and /room lines) are
+ * single-sourced here too.
  *
  * EXACT-TEXT CONTRACT: components AND tests import the same keys — tests
  * assert the `en` strings verbatim through `t`, so a copy change here is a
@@ -60,9 +68,31 @@ export const en = {
   'common.copied': 'Copied',
   /** Interpolation seed: `{what}` is filled from `t` params. */
   'common.copiedWith': 'Copied {what}',
-  /** Plural seed — `tPlural('common.peerCount', n)` picks the right form. */
+  /** Plural seed — `tPlural('common.peerCount', n)` picks the right form.
+   * Phase 3: ChatHeader's header count and DmHeader's fixed single-peer line
+   * render through this pair too (the hardcoded '1 peer' is gone). */
   'common.peerCountOne': '{count} peer',
   'common.peerCountOther': '{count} peers',
+  /** Plural pair — the unread pill next to every sidebar row (Badge). */
+  'common.unreadCountOne': '{count} unread',
+  'common.unreadCountOther': '{count} unread',
+
+  /** Shared chrome reused across surfaces (phase 3 inline-literal harvest). */
+  'common.continue': 'Continue',
+  'common.join': 'Join',
+  'common.send': 'Send',
+  /** The settings entry: ChatHeader/DmHeader ⚙ aria + title and the modal's
+   * accessible name and heading — one wording everywhere. */
+  'common.settings': 'Settings',
+  /** The ✕ dismiss control of the network banners (aria + title, ×2 spots). */
+  'common.dismissNotice': 'Dismiss the notice',
+  /** The 🔒 marker on a password room (RoomList row, ChatHeader title,
+   * JoinRoomPopover toggle): accessible name and tooltip. */
+  'common.encryptedRoomAria': 'encrypted room',
+  'common.encryptedRoomTitle': 'Password-protected room',
+  /** Onboarding + settings nickname fields: the label and the field's
+   * accessible name are the same wording (one key). */
+  'common.yourNickname': 'Your nickname',
 
   /** Shared destructive/safe verbs: PeerList menu, knock cards, file cards. */
   'common.mute': 'Mute',
@@ -112,6 +142,8 @@ export const en = {
   'common.updateReload': 'Reload',
   /** Accessible name and tooltip of the dismiss control (session-only). */
   'common.updateToastDismiss': 'Dismiss the notice',
+  /** The toast region's accessible name (UpdateToast role="status"). */
+  'common.updateToastLabel': 'New app version',
 
   // -------------------------------------------------------------------------
   // settings — the settings modal: Network-tab validation (RF-07), the
@@ -217,6 +249,85 @@ export const en = {
     'Whoever lacks the password will not find this room. Its name is never saved in this browser.',
   'settings.emptyRoomPassword': 'Write a password for the encrypted room',
 
+  /**
+   * Phase 3 — the inline literals of the modal itself and its three tabs.
+   * The modal label/heading render the shared `common.settings` wording.
+   */
+
+  /** Modal chrome: the ✕ control, the nickname form (RF-01) and the tabs. */
+  'settings.closeAria': 'Close settings',
+  'settings.changeNicknameLabel': 'Change nickname',
+  'settings.saveNickname': 'Save nickname',
+  'settings.sectionsAria': 'Settings sections',
+  'settings.tabNetwork': 'Network',
+  'settings.tabPrivacy': 'Privacy',
+  'settings.tabAppearance': 'Appearance',
+
+  /** Privacy tab — the notifications toggle with its permission-request flow.
+   * The hint mirrors the browser's NotificationPermission state. */
+  'settings.notificationsLabel': 'Desktop notifications',
+  'settings.allowNotifications': 'Allow notifications',
+  'settings.permissionGranted': 'Permission granted.',
+  'settings.permissionDefault': 'Permission not requested.',
+  'settings.permissionDenied': 'Permission denied. Enable it from the browser settings.',
+  'settings.permissionUnsupported': 'Your browser does not support notifications.',
+  /** Privacy tab — remember-recents toggle. */
+  'settings.rememberRoomsLabel': 'Remember recent rooms',
+
+  /**
+   * Privacy tab — identity regeneration (issue #24 context): the at-rest
+   * note for the wrapped private key, the ECDH pointer above the button, and
+   * the confirm dialog. The button label doubles as the dialog title (one
+   * wording, as before the migration).
+   */
+  'settings.identityKeyAtRestNote':
+    'Your private key is stored encrypted in this browser: the key that decrypts it lives in IndexedDB and nothing travels over the network. Even so, if something fully compromises this origin (a malicious extension, malware on your computer) it could use that key to impersonate you.',
+  'settings.regenerateHint': 'Generate a new ECDH key pair: your fingerprint will change for all your peers.',
+  'settings.regenerateIdentity': 'Regenerate identity',
+  'settings.regenerateDialogBody':
+    'A new key pair will be generated: your fingerprint will change and the DM channels with your peers will stop matching. Continue?',
+  'settings.regenerateConfirm': 'Regenerate',
+
+  /** Network tab — auto-join (RF-02) and the custom-tracker list. */
+  'settings.autoJoinLobbyLabel': 'Auto-join #lobby on start',
+  'settings.customTrackersHeading': 'Custom trackers',
+  'settings.addTracker': 'Add tracker',
+  /** Per-row accessible names; `{index}` is the 1-based row number. */
+  'settings.trackerRowLabel': 'Tracker {index}',
+  'settings.removeTrackerRowLabel': 'Remove tracker {index}',
+  'settings.removeTrackerTitle': 'Remove tracker',
+
+  /** Network tab — the ICE server list (STUN/TURN). The option values
+   * ('stun'/'turn') are persisted data and stay literal; only the labels
+   * and the per-row accessible names live here. */
+  'settings.iceServersHeading': 'ICE servers (STUN/TURN)',
+  'settings.stunOption': 'STUN',
+  'settings.turnOption': 'TURN',
+  'settings.addIceServer': 'Add ICE server',
+  'settings.iceTypeRowLabel': 'ICE server type {index}',
+  'settings.iceUrlRowLabel': 'ICE server URL {index}',
+  'settings.removeIceRowLabel': 'Remove ICE server {index}',
+  'settings.removeIceTitle': 'Remove ICE server',
+  'settings.turnUsernameLabel': 'TURN username {index}',
+  'settings.turnPasswordLabel': 'TURN password {index}',
+  'settings.turnUsernamePlaceholder': 'username',
+  'settings.turnPasswordPlaceholder': 'password',
+  /** Issue #30 — the toggle deciding TURN-credential persistence. The same
+   * wording is quoted inside `settings.turnCredentialAtRestNote`. */
+  'settings.rememberTurnCredentialsLabel': 'Remember TURN credentials in this browser',
+
+  /** Network tab — the 1–6 active-room cap and the reconnect-all action. */
+  'settings.maxActiveRoomsLabel': 'Active room limit',
+  'settings.reconnectAll': 'Reconnect all',
+
+  /** Appearance tab — the theme radio group (labels only: the persisted
+   * ThemeChoice VALUES 'light'/'dark'/'system' are data, never translated). */
+  'settings.themeLabel': 'Theme',
+  'settings.themeLight': 'Light',
+  'settings.themeDark': 'Dark',
+  'settings.themeSystem': 'System',
+  'settings.collapseSidebarLabel': 'Collapse sidebar on start',
+
   // -------------------------------------------------------------------------
   // chat — the chat header/composer: the §10.3 connection-status templates,
   // the network banners (RNF-07, issue #43, issue #125) and the password-room
@@ -256,6 +367,57 @@ export const en = {
    */
   'chat.insecureContextBanner':
     'Could not connect — WebRTC and encryption require HTTPS or localhost (insecure context). See the README for serving the app over HTTPS.',
+
+  /**
+   * Phase 3 — the header/composer inline chrome: sidebar toggle (header +
+   * DmHeader twin), share affordance (issue #41), room-status dot a11y
+   * labels (§10.1), the composer (RF-03), the password-recovery offer
+   * (issue #41/§10.3) and the RNF-07 banner chrome.
+   */
+
+  /** ☰ toggle (ChatHeader AND DmHeader — one wording). */
+  'chat.toggleSidebarAria': 'Show or hide the sidebar',
+  'chat.toggleSidebarTitle': 'Show or hide the sidebar (Ctrl/Cmd+B)',
+
+  /** Issue #41 — share affordance: button accessible name, the Web Share
+   * sheet title ({name} is the room name; 'gritos' is the brand, kept) and
+   * the clipboard-fallback feedback. */
+  'chat.shareRoomAria': 'Share room',
+  'chat.shareTitle': 'Room #{name} on gritos',
+  'chat.linkCopied': 'Link copied',
+
+  /** StatusDot a11y labels per §10.3 room status (resolve at render). */
+  'chat.statusSearching': 'searching for peers',
+  'chat.statusConnected': 'connected',
+  'chat.statusError': 'no tracker access',
+
+  /** Composer (RF-03): form/textarea accessible names, the visible hint and
+   * the queue note; the counter (`{length}/{cap}`) stays literal data. */
+  'chat.composerLabel': 'Message',
+  'chat.messageAria': 'Write a message',
+  'chat.messagePlaceholder': 'Message (Markdown)…',
+  'chat.markdownHint': '**bold** · *italic* · `code`',
+  'chat.queuedHint': 'Queued until connected…',
+
+  /** Password-recovery offer over a not-found room (issue #41, RF-05). */
+  'chat.joinWithPasswordLabel': 'Join with password',
+  'chat.passwordJoinPrompt': 'If the room has a password, join with it:',
+
+  /** Room feed accessible name (MessageFeed label; {name} stays literal). */
+  'chat.roomFeedLabel': 'Messages in #{name}',
+
+  /** Empty-layout hint and the mobile drawer's accessible name. */
+  'chat.noActiveRoomHint':
+    'No active room. Join one from the sidebar (press Ctrl/Cmd+B to show it).',
+  'chat.sidebarDrawerLabel': 'Sidebar',
+
+  /** RNF-07 banner chrome: the region label and the settings shortcut. */
+  'chat.networkStatusAria': 'Network status',
+  'chat.openSettings': 'Open settings',
+
+  /** Own-message receipt markers (✓/✓✓) accessible labels. */
+  'chat.receiptDelivered': 'delivered',
+  'chat.receiptPending': 'sent, pending receipt',
 
   // -------------------------------------------------------------------------
   // feed — system lines, separators and empty states (RF-03/RF-06, §10.4).
@@ -353,6 +515,64 @@ export const en = {
   /** Accessible label of the DM message feed. */
   'dm.feedLabel': 'Direct messages with {peerNick}',
 
+  /**
+   * Phase 3 — the peer menu (PeerList) and the DmList disconnected chrome.
+   * The ⚠ rotation warning line collapses onto `dm.keyChangedWarning`.
+   */
+  'dm.directMessageAction': 'Direct message',
+  'dm.copyFingerprint': 'Copy fingerprint',
+  'dm.fingerprintCopied': 'Fingerprint copied.',
+  /** DmList row tooltip while the peer is away — the `dm.peerDisconnected`
+   * wording plus the history-retention clause. */
+  'dm.peerDisconnectedHistory': 'The peer has disconnected — the history remains',
+
+  // -------------------------------------------------------------------------
+  // sidebar — the sidebar sections (RF-02/RF-06, §10.1): room lists, the
+  // peers section, the DM list and the join-by-name form. Phase 3 namespace.
+  // -------------------------------------------------------------------------
+
+  /** '[+ Join]' entry button (brackets are UI chrome, kept verbatim). */
+  'sidebar.joinEntry': '[+ Join]',
+
+  /** Room sections: accessible names, headings and the empty state. */
+  'sidebar.activeRoomsLabel': 'Active rooms',
+  'sidebar.activeHeading': 'Active',
+  'sidebar.emptyActive': 'No active rooms yet.',
+  'sidebar.suggestedRoomsLabel': 'Suggested rooms',
+  'sidebar.suggestedHeading': 'Suggested',
+  'sidebar.recentRoomsLabel': 'Recent rooms',
+  'sidebar.recentHeading': 'Recent',
+  /** Per-row ✕ control: aria and tooltip share the template ({name} is the
+   * room name — a protocol token, never translated). */
+  'sidebar.leaveRoom': 'Leave {name}',
+
+  /** Peers section: accessible name, count heading (tPlural pair) and the
+   * empty state. */
+  'sidebar.peersSectionLabel': 'Peers',
+  'sidebar.peerCountOne': 'Peer ({count})',
+  'sidebar.peerCountOther': 'Peers ({count})',
+  'sidebar.emptyPeers': 'No peers yet. Share the room name so others can join.',
+  /** Per-peer affordances: latency dot, rotation ⚠, and the menu. */
+  'sidebar.latencyAria': 'latency',
+  'sidebar.fingerprintChangedAria': 'fingerprint changed',
+  'sidebar.peerActionsLabel': 'Actions for {nickname}',
+  /** DmList ⚪ marker accessible name (the tooltip is `dm.peerDisconnected`). */
+  'sidebar.peerDisconnectedAria': 'peer disconnected',
+
+  /** DM section heading and its section accessible name (one wording). */
+  'sidebar.dmSectionLabel': 'Direct messages',
+
+  /** Join-by-name popover (RF-02/RF-05): the form, the name field (the
+   * placeholder is a normalized-room-name hint — translated) and the live
+   * join preview (the '#{name}' token stays protocol-shaped). */
+  'sidebar.joinByNameLabel': 'Join by name',
+  'sidebar.roomNameAria': 'Room name',
+  'sidebar.roomNamePlaceholder': 'room-name',
+  'sidebar.joinPreview': 'You will join',
+  'sidebar.encryptedRoomText': '🔒 encrypted room',
+  'sidebar.roomPasswordAria': 'Room password',
+  'sidebar.roomPasswordPlaceholder': 'Room password',
+
   // -------------------------------------------------------------------------
   // slash — slash-command docs and local feedback/error lines (issue #99).
   // Feedback lines are local-only (never sent over the wire). The `usage`
@@ -436,6 +656,8 @@ export const en = {
 
   /** Composer attachment button (accessible name; visible text is 'Attach'). */
   'files.attachLabel': 'Attach a file',
+  /** The visible text of that button (phase 3). */
+  'files.attachButton': 'Attach',
   /** Pre-send dialog accessible name (the Modal label). */
   'files.dialogLabel': 'Send a file',
   /** Visible text and accessible name of the styled file-picker affordance. */
@@ -697,6 +919,51 @@ export const en = {
   /** Prefix of the optional note line rendered on the card. */
   'contact.knockNotePrefix': 'Note: ',
 
+  /** Phase 3 — the share screen's empty-session guard (no identity yet). */
+  'contact.noIdentity': 'No identity in this session.',
+
+  // -------------------------------------------------------------------------
+  // panic — the panic-button flow (RF-08, Privacy tab): the red entry button
+  // (its label doubles as both dialog titles and the final confirm label),
+  // the last-resort note above it and the two confirmation bodies. Phase 3
+  // namespace; the double confirmation order is the component's, not this
+  // dictionary's.
+  // -------------------------------------------------------------------------
+
+  'panic.buttonLabel': 'Wipe everything and leave',
+  'panic.lastResortNote':
+    'Last resort: wipes the nickname, keys, settings and every local trace in this browser.',
+  'panic.dialogBody': 'Nickname, keys, settings and every local trace will be wiped. Continue?',
+  'panic.finalDialogBody':
+    'This action is definitive: every connection will be closed and the app will reload to start from scratch.',
+
+  // -------------------------------------------------------------------------
+  // onboarding — first-visit onboarding (RF-01, spec §10.2): the tagline, the
+  // nickname form and its hints. Phase 3 namespace. The placeholder's
+  // 'zorro-bravo' example is DATA (an English-wordlist pair, like anything
+  // `generateNickname` may produce) — only the surrounding label translates.
+  // -------------------------------------------------------------------------
+
+  /** The pitch under the typographic logo. */
+  'onboarding.tagline':
+    'No server, no accounts: your messages travel directly between browsers and disappear on reload.',
+  /** The form's accessible name (historically lowercase — kept verbatim). */
+  'onboarding.formAria': 'enter',
+  /** The nickname field: label (shared `common.yourNickname` for the visible
+   * label) and the example placeholder. */
+  'onboarding.nicknamePlaceholder': 'e.g. zorro-bravo',
+  /** The two actions: the random generator and the submit. */
+  'onboarding.surpriseButton': 'surprise me',
+  'onboarding.enterButton': 'Enter →',
+  /** Join hints: the #lobby auto-join note and the '#room' deep-link note
+   * (prefix/suffix around the mono-styled '#{name}' token). */
+  'onboarding.lobbyHint':
+    'You will join #lobby automatically; from the sidebar you can join other rooms.',
+  'onboarding.linkedRoomPrefix': 'You will join the room',
+  'onboarding.linkedRoomSuffix': 'from the shared link.',
+  /** Web Crypto unavailable (non-secure context): the honest inline error. */
+  'onboarding.insecureContextError': 'Could not create the local identity (insecure context).',
+
   // -------------------------------------------------------------------------
   // notifications — desktop notifications (spec §10.5/RF-09): the exact
   // §10.5 title/body formats. Only two triggers exist: a room mention and an
@@ -719,6 +986,18 @@ export const en = {
   /** RF-01 — inline validation message for an invalid nickname. */
   'errors.nicknameInvalid':
     'Use 2 to 24 characters: letters, numbers, spaces, hyphens and underscores.',
+
+  /**
+   * Phase 3 — the engine-thrown rejections that surface verbatim in the UI
+   * (JoinRoomPopover/ChatLayout alert lines, the /room and /nick system
+   * lines). They interpolate the offending value; the templates here are the
+   * single source (roomManager throws through `t`, locale-live at throw
+   * time). Note the distinction: `errors.nicknameInvalid` is the RULE text,
+   * `errors.invalidNickname` the quoted-value rejection.
+   */
+  'errors.roomLimitReached': 'Active room limit reached ({count})',
+  'errors.roomNameInvalid': 'Invalid room name: "{name}"',
+  'errors.invalidNickname': 'Invalid nickname: "{nickname}"',
 
   /**
    * §10.3/RF-05 — a password room that exhausted the error heuristic without

@@ -69,7 +69,7 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
       {contextNoticeVisible && (
         <div
           role="status"
-          aria-label="Network status"
+          aria-label={t('chat.networkStatusAria')}
           className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
         >
           <StatusDot status="error" />
@@ -77,8 +77,8 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
           <button
             type="button"
             onClick={() => setContextNoticeDismissed(true)}
-            aria-label="Dismiss the notice"
-            title="Dismiss the notice"
+            aria-label={t('common.dismissNotice')}
+            title={t('common.dismissNotice')}
             className="shrink-0 rounded px-1 text-muted hover:text-text"
           >
             ✕
@@ -88,7 +88,7 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
       {visibleIds.length > 0 && (
         <div
           role="status"
-          aria-label="Network status"
+          aria-label={t('chat.networkStatusAria')}
           className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
         >
           <StatusDot status="error" />
@@ -98,13 +98,13 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
             onClick={() => setSettingsOpen(true)}
             className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
           >
-            Open settings
+            {t('chat.openSettings')}
           </button>
           {props.onOpenManualDm !== undefined && (
             <button
               type="button"
               onClick={props.onOpenManualDm}
-              title="Start a direct conversation without trackers"
+              title={t('wizard.inviteEntryTitle')}
               className="shrink-0 rounded border border-border px-2 py-1 font-medium hover:border-accent"
             >
               {t('wizard.bannerShortcut')}
@@ -113,8 +113,8 @@ export function NetworkErrorBanner(props: { onOpenManualDm?: () => void }) {
           <button
             type="button"
             onClick={dismiss}
-            aria-label="Dismiss the notice"
-            title="Dismiss the notice"
+            aria-label={t('common.dismissNotice')}
+            title={t('common.dismissNotice')}
             className="shrink-0 rounded px-1 text-muted hover:text-text"
           >
             ✕

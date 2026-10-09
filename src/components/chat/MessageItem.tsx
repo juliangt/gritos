@@ -264,7 +264,11 @@ export const MessageItem = memo(function MessageItem(props: {
       {own && (
         <span
           className="text-xs text-muted"
-          aria-label={props.message.status === 'delivered' ? 'delivered' : 'sent, pending receipt'}
+          aria-label={
+            props.message.status === 'delivered'
+              ? t('chat.receiptDelivered')
+              : t('chat.receiptPending')
+          }
         >
           {props.message.status === 'delivered' ? '✓✓' : '✓'}
         </span>

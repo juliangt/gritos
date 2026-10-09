@@ -4,8 +4,9 @@ import type { Translations } from './en'
  * Issue #119 — Spanish dictionary, compile-pinned to the English keys:
  * `Translations = Record<TranslationKey, string>` makes a missing or extra
  * key a `tsc -b` error, so the two dictionaries can never drift apart.
- * First-pass mirrors of ./en moved in during phase 2 (the phrasing is
- * refined in phase 4, once the full copy is in). Placeholders (`{nickname}`,
+ * First-pass mirrors of ./en (phase 2 moved the centralized copy in; phase 3
+ * added the inline component literals — the phrasing is refined in phase 4,
+ * once the full copy is in). Placeholders (`{nickname}`,
  * `{count}`, …) keep the exact `en` tokens — `t` fills them the same way in
  * both languages — and grammar/protocol fragments stay English inside every
  * locale: `{usage}` content ('/nick <name>'), the spec-frozen '(no room)' and
@@ -27,6 +28,17 @@ export const es: Translations = {
   'common.copiedWith': 'Copiado {what}',
   'common.peerCountOne': '{count} par',
   'common.peerCountOther': '{count} pares',
+  'common.unreadCountOne': '{count} sin leer',
+  'common.unreadCountOther': '{count} sin leer',
+
+  'common.continue': 'Continuar',
+  'common.join': 'Unirse',
+  'common.send': 'Enviar',
+  'common.settings': 'Ajustes',
+  'common.dismissNotice': 'Descartar el aviso',
+  'common.encryptedRoomAria': 'sala cifrada',
+  'common.encryptedRoomTitle': 'Sala protegida con contraseña',
+  'common.yourNickname': 'Tu apodo',
 
   'common.mute': 'Silenciar',
   'common.unmute': 'Dejar de silenciar',
@@ -47,6 +59,7 @@ export const es: Translations = {
   'common.updateAvailable': 'Nueva versión disponible',
   'common.updateReload': 'Recargar',
   'common.updateToastDismiss': 'Descartar el aviso',
+  'common.updateToastLabel': 'Nueva versión de la aplicación',
 
   // -------------------------------------------------------------------------
   // settings — modal de ajustes: validación de red (RF-07), avisos de
@@ -100,6 +113,64 @@ export const es: Translations = {
     'Quien no tenga la contraseña no encontrará esta sala. Su nombre nunca se guarda en este navegador.',
   'settings.emptyRoomPassword': 'Escribe una contraseña para la sala cifrada',
 
+  // Fase 3 — literales en línea del propio modal y de sus tres pestañas. La
+  // etiqueta/encabezado del modal usan el texto compartido `common.settings`.
+
+  'settings.closeAria': 'Cerrar los ajustes',
+  'settings.changeNicknameLabel': 'Cambiar el apodo',
+  'settings.saveNickname': 'Guardar el apodo',
+  'settings.sectionsAria': 'Secciones de ajustes',
+  'settings.tabNetwork': 'Red',
+  'settings.tabPrivacy': 'Privacidad',
+  'settings.tabAppearance': 'Apariencia',
+
+  'settings.notificationsLabel': 'Notificaciones de escritorio',
+  'settings.allowNotifications': 'Permitir notificaciones',
+  'settings.permissionGranted': 'Permiso concedido.',
+  'settings.permissionDefault': 'Permiso no solicitado.',
+  'settings.permissionDenied': 'Permiso denegado. Actívalo en la configuración del navegador.',
+  'settings.permissionUnsupported': 'Tu navegador no admite notificaciones.',
+  'settings.rememberRoomsLabel': 'Recordar las salas recientes',
+
+  'settings.identityKeyAtRestNote':
+    'Tu clave privada se guarda cifrada en este navegador: la clave que la descifra vive en IndexedDB y nada viaja por la red. Aun así, si algo compromete por completo este origen (una extensión maliciosa, malware en tu equipo) podría usar esa clave para suplantarte.',
+  'settings.regenerateHint':
+    'Genera un nuevo par de claves ECDH: tu huella cambiará para todos tus pares.',
+  'settings.regenerateIdentity': 'Regenerar la identidad',
+  'settings.regenerateDialogBody':
+    'Se generará un nuevo par de claves: tu huella cambiará y los canales DM con tus pares dejarán de coincidir. ¿Continuar?',
+  'settings.regenerateConfirm': 'Regenerar',
+
+  'settings.autoJoinLobbyLabel': 'Unirse a #lobby automáticamente al iniciar',
+  'settings.customTrackersHeading': 'Trackers personalizados',
+  'settings.addTracker': 'Añadir tracker',
+  'settings.trackerRowLabel': 'Tracker {index}',
+  'settings.removeTrackerRowLabel': 'Quitar el tracker {index}',
+  'settings.removeTrackerTitle': 'Quitar el tracker',
+
+  'settings.iceServersHeading': 'Servidores ICE (STUN/TURN)',
+  'settings.stunOption': 'STUN',
+  'settings.turnOption': 'TURN',
+  'settings.addIceServer': 'Añadir servidor ICE',
+  'settings.iceTypeRowLabel': 'Tipo de servidor ICE {index}',
+  'settings.iceUrlRowLabel': 'URL del servidor ICE {index}',
+  'settings.removeIceRowLabel': 'Quitar el servidor ICE {index}',
+  'settings.removeIceTitle': 'Quitar el servidor ICE',
+  'settings.turnUsernameLabel': 'Usuario TURN {index}',
+  'settings.turnPasswordLabel': 'Contraseña TURN {index}',
+  'settings.turnUsernamePlaceholder': 'usuario',
+  'settings.turnPasswordPlaceholder': 'contraseña',
+  'settings.rememberTurnCredentialsLabel': 'Recordar las credenciales TURN en este navegador',
+
+  'settings.maxActiveRoomsLabel': 'Límite de salas activas',
+  'settings.reconnectAll': 'Reconectar todo',
+
+  'settings.themeLabel': 'Tema',
+  'settings.themeLight': 'Claro',
+  'settings.themeDark': 'Oscuro',
+  'settings.themeSystem': 'Sistema',
+  'settings.collapseSidebarLabel': 'Plegar la barra lateral al iniciar',
+
   // -------------------------------------------------------------------------
   // chat — cabecera/compositor: plantillas de estado §10.3, banners de red
   // (RNF-07, #43, #125) y la sala no encontrada (§10.3/RF-05).
@@ -118,6 +189,40 @@ export const es: Translations = {
 
   'chat.insecureContextBanner':
     'No se pudo conectar — WebRTC y el cifrado requieren HTTPS o localhost (contexto no seguro). Consulta el README para servir la aplicación por HTTPS.',
+
+  // Fase 3 — cromos en línea de cabecera/compositor.
+
+  'chat.toggleSidebarAria': 'Mostrar u ocultar la barra lateral',
+  'chat.toggleSidebarTitle': 'Mostrar u ocultar la barra lateral (Ctrl/Cmd+B)',
+
+  'chat.shareRoomAria': 'Compartir la sala',
+  'chat.shareTitle': 'Sala #{name} en gritos',
+  'chat.linkCopied': 'Enlace copiado',
+
+  'chat.statusSearching': 'buscando pares',
+  'chat.statusConnected': 'conectado',
+  'chat.statusError': 'sin acceso a trackers',
+
+  'chat.composerLabel': 'Mensaje',
+  'chat.messageAria': 'Escribe un mensaje',
+  'chat.messagePlaceholder': 'Mensaje (Markdown)…',
+  'chat.markdownHint': '**negrita** · *cursiva* · `código`',
+  'chat.queuedHint': 'En cola hasta conectarse…',
+
+  'chat.joinWithPasswordLabel': 'Unirse con contraseña',
+  'chat.passwordJoinPrompt': 'Si la sala tiene contraseña, únete con ella:',
+
+  'chat.roomFeedLabel': 'Mensajes en #{name}',
+
+  'chat.noActiveRoomHint':
+    'No hay ninguna sala activa. Únete a una desde la barra lateral (pulsa Ctrl/Cmd+B para mostrarla).',
+  'chat.sidebarDrawerLabel': 'Barra lateral',
+
+  'chat.networkStatusAria': 'Estado de la red',
+  'chat.openSettings': 'Abrir los ajustes',
+
+  'chat.receiptDelivered': 'entregado',
+  'chat.receiptPending': 'enviado, pendiente de acuse',
 
   // -------------------------------------------------------------------------
   // feed — líneas de sistema, separadores y estados vacíos (RF-03/RF-06,
@@ -160,6 +265,50 @@ export const es: Translations = {
   'dm.keyChangedHint':
     'El par puede haber reinstalado la aplicación o ser una suplantación: verifica su identidad a través de otro canal antes de volver a confiar en él.',
   'dm.feedLabel': 'Mensajes directos con {peerNick}',
+
+  // Fase 3 — menú del par (PeerList) y cromos de desconexión de la DmList.
+  // La línea ⚠ de rotación usa `dm.keyChangedWarning`.
+
+  'dm.directMessageAction': 'Mensaje directo',
+  'dm.copyFingerprint': 'Copiar la huella',
+  'dm.fingerprintCopied': 'Huella copiada.',
+  'dm.peerDisconnectedHistory': 'El par se ha desconectado — el historial permanece',
+
+  // -------------------------------------------------------------------------
+  // sidebar — secciones de la barra lateral (RF-02/RF-06, §10.1): listas de
+  // salas, pares, lista de DM y formulario de unión. Espacio de nombres de
+  // la fase 3.
+  // -------------------------------------------------------------------------
+
+  'sidebar.joinEntry': '[+ Unirse]',
+
+  'sidebar.activeRoomsLabel': 'Salas activas',
+  'sidebar.activeHeading': 'Activas',
+  'sidebar.emptyActive': 'Aún no hay salas activas.',
+  'sidebar.suggestedRoomsLabel': 'Salas sugeridas',
+  'sidebar.suggestedHeading': 'Sugeridas',
+  'sidebar.recentRoomsLabel': 'Salas recientes',
+  'sidebar.recentHeading': 'Recientes',
+  'sidebar.leaveRoom': 'Abandonar {name}',
+
+  'sidebar.peersSectionLabel': 'Pares',
+  'sidebar.peerCountOne': 'Par ({count})',
+  'sidebar.peerCountOther': 'Pares ({count})',
+  'sidebar.emptyPeers': 'Aún no hay pares. Comparte el nombre de la sala para que otros se unan.',
+  'sidebar.latencyAria': 'latencia',
+  'sidebar.fingerprintChangedAria': 'huella cambiada',
+  'sidebar.peerActionsLabel': 'Acciones para {nickname}',
+  'sidebar.peerDisconnectedAria': 'par desconectado',
+
+  'sidebar.dmSectionLabel': 'Mensajes directos',
+
+  'sidebar.joinByNameLabel': 'Unirse por nombre',
+  'sidebar.roomNameAria': 'Nombre de la sala',
+  'sidebar.roomNamePlaceholder': 'nombre-sala',
+  'sidebar.joinPreview': 'Te unirás a',
+  'sidebar.encryptedRoomText': '🔒 sala cifrada',
+  'sidebar.roomPasswordAria': 'Contraseña de la sala',
+  'sidebar.roomPasswordPlaceholder': 'Contraseña de la sala',
 
   // -------------------------------------------------------------------------
   // slash — documentación y líneas locales de feedback/error de los comandos
@@ -211,6 +360,7 @@ export const es: Translations = {
   // -------------------------------------------------------------------------
 
   'files.attachLabel': 'Adjuntar un archivo',
+  'files.attachButton': 'Adjuntar',
   'files.dialogLabel': 'Enviar un archivo',
   'files.pickLabel': 'Elige un archivo…',
   'files.recipientLabel': 'Destinatario',
@@ -377,6 +527,39 @@ export const es: Translations = {
   'contact.knockCardsRegionLabel': 'Solicitudes de contacto',
   'contact.knockNotePrefix': 'Nota: ',
 
+  'contact.noIdentity': 'No hay identidad en esta sesión.',
+
+  // -------------------------------------------------------------------------
+  // panic — flujo del botón de pánico (RF-08, pestaña Privacidad). Fase 3.
+  // -------------------------------------------------------------------------
+
+  'panic.buttonLabel': 'Borrarlo todo y salir',
+  'panic.lastResortNote':
+    'Último recurso: borra el apodo, las claves, los ajustes y cualquier rastro local en este navegador.',
+  'panic.dialogBody':
+    'Se borrarán el apodo, las claves, los ajustes y cualquier rastro local. ¿Continuar?',
+  'panic.finalDialogBody':
+    'Esta acción es definitiva: se cerrarán todas las conexiones y la aplicación se recargará para empezar de cero.',
+
+  // -------------------------------------------------------------------------
+  // onboarding — primera visita (RF-01, §10.2). Fase 3. El ejemplo
+  // «zorro-bravo» del placeholder es DATO (pareja del wordlist inglés, como
+  // cualquier salida de generateNickname) — solo traduce la etiqueta que lo
+  // rodea.
+  // -------------------------------------------------------------------------
+
+  'onboarding.tagline':
+    'Sin servidores ni cuentas: tus mensajes viajan directamente entre navegadores y desaparecen al recargar.',
+  'onboarding.formAria': 'entrar',
+  'onboarding.nicknamePlaceholder': 'p. ej. zorro-bravo',
+  'onboarding.surpriseButton': 'sorpréndeme',
+  'onboarding.enterButton': 'Entrar →',
+  'onboarding.lobbyHint':
+    'Te unirás a #lobby automáticamente; desde la barra lateral puedes unirte a otras salas.',
+  'onboarding.linkedRoomPrefix': 'Te unirás a la sala',
+  'onboarding.linkedRoomSuffix': 'del enlace compartido.',
+  'onboarding.insecureContextError': 'No se pudo crear la identidad local (contexto no seguro).',
+
   // -------------------------------------------------------------------------
   // notifications — notificaciones de escritorio (§10.5/RF-09).
   // -------------------------------------------------------------------------
@@ -392,5 +575,8 @@ export const es: Translations = {
   'errors.unknown': 'Error desconocido',
   'errors.nicknameInvalid':
     'Usa de 2 a 24 caracteres: letras, números, espacios, guiones y guiones bajos.',
+  'errors.roomLimitReached': 'Límite de salas activas alcanzado ({count})',
+  'errors.roomNameInvalid': 'Nombre de sala no válido: "{name}"',
+  'errors.invalidNickname': 'Apodo no válido: "{nickname}"',
   'errors.roomNotFound': 'No se encontró la sala #{name} con esa contraseña',
 }

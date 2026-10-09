@@ -270,7 +270,7 @@ export function ChatLayout() {
           className="fixed inset-0 z-30 flex"
           role="dialog"
           aria-modal="true"
-          aria-label="Sidebar"
+          aria-label={t('chat.sidebarDrawerLabel')}
         >
           <div
             className="absolute inset-0 bg-black/50"
@@ -311,10 +311,10 @@ export function ChatLayout() {
           (linkedRoomName ?? slashRecoveryRoom) === activeRoom.name &&
           (activeRoom.status === 'error' || activeRoom.peerlessHint === true) && (
             <section
-              aria-label="Join with password"
+              aria-label={t('chat.joinWithPasswordLabel')}
               className="flex flex-col items-center gap-2 border-b border-border bg-surface px-3 py-3"
             >
-              <p className="text-xs text-muted">If the room has a password, join with it:</p>
+              <p className="text-xs text-muted">{t('chat.passwordJoinPrompt')}</p>
               <div className="w-full max-w-xs">
                 <JoinRoomPopover
                   initialName={activeRoom.name}
@@ -388,9 +388,7 @@ export function ChatLayout() {
           </>
         ) : activeRoom === null ? (
           <main className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-            <p className="text-sm text-muted">
-              No active room. Join one from the sidebar (press Ctrl/Cmd+B to show it).
-            </p>
+            <p className="text-sm text-muted">{t('chat.noActiveRoomHint')}</p>
           </main>
         ) : (
           <>
@@ -401,7 +399,7 @@ export function ChatLayout() {
               fifoTrimmed={activeRoom.fifoTrimmed}
               expiredCount={activeRoom.expiredCount}
               recoveredCount={activeRoom.recoveredCount}
-              ariaLabel={`Messages in #${activeRoom.name}`}
+              ariaLabel={t('chat.roomFeedLabel', { name: activeRoom.name })}
               emptyStateText={t('feed.emptyRoom')}
               historyAsk={historyAsk}
             />

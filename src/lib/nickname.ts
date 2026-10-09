@@ -7,8 +7,6 @@
  * case-insensitively), not UI copy — deliberately NOT localized.
  */
 
-import { en } from '../i18n/en'
-
 export const NICKNAME_MIN_LENGTH = 2
 export const NICKNAME_MAX_LENGTH = 24
 
@@ -207,20 +205,14 @@ export function generateNickname(): string {
 }
 
 /**
- * RF-01 — inline validation message for an invalid nickname. Issue #119
- * phase 2 — i18n: the string lives in `src/i18n/en.ts` under
- * `errors.nicknameInvalid`; this export is a LEGACY SHIM resolved ONCE at
- * module load (NOT locale-live), kept for the test suites and the two
- * not-yet-migrated consumers (OnboardingScreen, DebugPanel — both phase 3).
- *
- * It reads the `en` dictionary DIRECTLY (pure data, no imports) instead of
- * calling `t()`: this module sits on the import cycle i18n → settings
- * store → lib/crypto/dm → lib/p2p/protocol → lib/nickname → i18n, and a
- * module-load `t()` here would run while `i18n/index` is still partially
- * initialized. Module-load time is always pre-boot in every entry order,
- * so the resolved value is the same English string `t` would return.
+ * RF-01 — inline validation for an invalid nickname. Issue #119 phase 3 —
+ * the LEGACY SHIM is gone: the wording lives in `src/i18n/en.ts` under
+ * `errors.nicknameInvalid`, and every consumer (OnboardingScreen, the
+ * settings modal, /nick's executor line) resolves it through live `t()`
+ * calls. This module imports no i18n at all: it sits on the import cycle
+ * i18n → settings store → lib/crypto/dm → lib/p2p/protocol →
+ * lib/nickname → i18n, and no nickname-module code needs translated text.
  */
-export const NICKNAME_ERROR_TEXT = en['errors.nicknameInvalid']
 
 /**
  * RF-06 — duplicate-nickname disambiguation: when two or more peers in the

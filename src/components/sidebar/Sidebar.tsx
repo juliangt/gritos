@@ -7,6 +7,7 @@ import { useAppStore } from '../../stores/useAppStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useUiStore } from '../../stores/useUiStore'
 import { useRoomManager } from '../../hooks/useRoomManager'
+import { useT } from '../../i18n/index'
 
 /**
  * Collapsible sidebar (spec §10.1): *Activas*, *Sugeridas*, *Recientes*
@@ -20,6 +21,7 @@ export function Sidebar(props: {
   onOpenManualDm?: () => void
   onOpenContact?: () => void
 }) {
+  const t = useT()
   const rooms = useAppStore((state) => state.rooms)
   const dms = useAppStore((state) => state.dms)
   const manualDms = useAppStore((state) => state.manualDms)
@@ -91,7 +93,7 @@ export function Sidebar(props: {
           aria-expanded={joinFormOpen}
           className="rounded-md border border-border px-2 py-1.5 text-left text-sm font-medium hover:border-accent"
         >
-          [+ Join]
+          {t('sidebar.joinEntry')}
         </button>
         {joinFormOpen && (
           <JoinRoomPopover

@@ -287,7 +287,9 @@ async function joinFocused(name: string): Promise<{ roomId: string | null; error
   } catch (error) {
     return {
       roomId: null,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      // The manager owns the wording (the errors.* templates); a non-Error
+      // rejection falls back to the shared `errors.unknown` line (#119).
+      error: error instanceof Error ? error.message : t('errors.unknown'),
     }
   }
 }

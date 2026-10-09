@@ -354,7 +354,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
   return (
     <>
       <form
-        aria-label="Message"
+        aria-label={t('chat.composerLabel')}
         onSubmit={handleSubmit}
         className="relative flex flex-col gap-1 border-t border-border bg-surface px-3 py-2"
       >
@@ -389,8 +389,8 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
         <textarea
           ref={textareaRef}
           rows={1}
-          aria-label="Write a message"
-          placeholder="Message (Markdown)…"
+          aria-label={t('chat.messageAria')}
+          placeholder={t('chat.messagePlaceholder')}
           value={value}
           disabled={blocked}
           // Issue #99 — ARIA combobox pattern for the slash popup: the
@@ -454,7 +454,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
           className="max-h-36 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm focus:border-accent disabled:opacity-50"
         />
         <div className="flex items-center gap-3 text-xs text-muted">
-          <span className="hidden sm:inline">**bold** · *italic* · `code`</span>
+          <span className="hidden sm:inline">{t('chat.markdownHint')}</span>
           {/* Issue #96 — native select (keyboard-operable by construction);
             hard-blocked together with the composer on a disconnected or
             legacy DM peer, still usable while a room is queueing. */}
@@ -489,7 +489,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
               onClick={() => setFileDialogOpen(true)}
               className="rounded-md border border-border px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
             >
-              Attach
+              {t('files.attachButton')}
             </button>
           )}
           {disconnected && (
@@ -504,7 +504,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
           )}
           {queued && (
             <span className="text-accent" role="status">
-              Queued until connected…
+              {t('chat.queuedHint')}
             </span>
           )}
           {/* Issue #99 — the rejected-submit hint (unknown verb, parse-level
@@ -528,7 +528,7 @@ export function ChatInput(props: { room?: Room; dm?: DmComposerContext }) {
             disabled={!canSend}
             className="ml-auto rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-text disabled:opacity-40"
           >
-            Send
+            {t('common.send')}
           </button>
         </div>
       </form>

@@ -16,7 +16,7 @@ import {
   TURN_CREDENTIAL_MEMORY_HINT,
   TURN_CREDENTIAL_STORAGE_HINT,
 } from '../src/components/settings/messages'
-import { NICKNAME_ERROR_TEXT } from '../src/lib/nickname'
+import { en } from '../src/i18n/en'
 import { SETTINGS_STORAGE_KEY, useSettingsStore } from '../src/stores/useSettingsStore'
 import { useUiStore } from '../src/stores/useUiStore'
 import { useAppStore, INITIAL_APP_STATE } from '../src/stores/useAppStore'
@@ -582,7 +582,7 @@ describe('nickname change from the modal (RF-01/RF-07)', () => {
     fireEvent.change(input, { target: { value: 'a' } })
     fireEvent.blur(input)
 
-    expect(screen.getByRole('alert')).toHaveTextContent(NICKNAME_ERROR_TEXT)
+    expect(screen.getByRole('alert')).toHaveTextContent(en['errors.nicknameInvalid'])
     expect(useAppStore.getState().identity?.nickname).not.toBe('a')
   })
 })

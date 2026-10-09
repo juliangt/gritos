@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as manager from '../src/lib/p2p/roomManager'
+import { en } from '../src/i18n/en'
 import {
   createSlashExecutorContext,
   executeSlashCommand,
@@ -12,7 +13,6 @@ import { useAppStore } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { useUiStore } from '../src/stores/useUiStore'
 import { INVALID_ROOM_NAME_TEXT } from '../src/lib/rooms'
-import { NICKNAME_ERROR_TEXT } from '../src/lib/nickname'
 import {
   NO_ACTIVE_ROOM_TEXT,
   UNKNOWN_COMMAND_HINT,
@@ -104,7 +104,7 @@ describe('dispatch against a fake context', () => {
       ['/nick', 'Usage: /nick <name>'],
       ['/leave 1', 'Usage: /leave'],
       ['/me', 'Usage: /me <action>'],
-      ['/nick x!', `${NICKNAME_ERROR_TEXT} Usage: /nick <name>`],
+      ['/nick x!', `${en['errors.nicknameInvalid']} Usage: /nick <name>`],
       ['/room mal nombre!', `${INVALID_ROOM_NAME_TEXT} Usage: /room <name>`],
       ['/rooms extra', 'Usage: /rooms'],
     ]
@@ -462,7 +462,7 @@ describe('slashErrorLine', () => {
     const parsed = parseSlashCommand('/nick x!')
     expect(parsed).toMatchObject({ kind: 'error', error: 'invalid-nick' })
     expect(slashErrorLine(parsed as Extract<NonNullable<typeof parsed>, { kind: 'error' }>)).toBe(
-      `${NICKNAME_ERROR_TEXT} Usage: /nick <name>`,
+      `${en['errors.nicknameInvalid']} Usage: /nick <name>`,
     )
   })
 })

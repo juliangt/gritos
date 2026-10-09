@@ -21,6 +21,7 @@ import {
   unmuteSystemLine,
 } from '../src/lib/feed'
 import { dmNotificationTitle, mentionNotificationTitle, notificationBody } from '../src/lib/notifications'
+import { RoomLimitError } from '../src/lib/p2p/roomManager'
 import {
   fileCardLabel,
   fileFailureText,
@@ -36,8 +37,9 @@ import { SLASH_COMMANDS, slashUsageText } from '../src/lib/slashCommands'
  * Issue #119 phase 2 — the copy-migration contract. The centralized copy of
  * settings/messages.ts, lib/feed.ts, lib/rooms.ts, lib/notifications.ts,
  * lib/nickname.ts and the §10.3 status templates moved into `src/i18n/en.ts`
- * (first-pass Spanish in ./es, compile-pinned by `Translations`). This suite
- * proves, per migrated surface:
+ * (first-pass Spanish in ./es, compile-pinned by `Translations`; phase 3
+ * added the inline component literals and the engine-thrown UI errors).
+ * This suite proves, per migrated surface:
  *
  *  1. the migrated builders resolve the EXACT legacy strings under 'en'
  *     (spot-checking the load-bearing ones — the §10.3 trio, the RNF-07
@@ -195,6 +197,20 @@ describe('builders are call-time live (no boot-frozen strings)', () => {
 })
 
 describe('runtime concatenations render through single templates', () => {
+  it('interpolates the engine-thrown room-cap message through the errors template', () => {
+    // Issue #119 phase 3 — RoomLimitError's message (surfaced verbatim in
+    // the join popover, the recovery form and /room lines) is the
+    // single-sourced `errors.roomLimitReached` template, resolved through
+    // `t` at throw time (tests pin 'en', so the legacy exact string holds).
+    expect(new RoomLimitError(4).message).toBe('Active room limit reached (4)')
+    expect(t('errors.roomLimitReached', { count: 4 })).toBe('Active room limit reached (4)')
+    setLocale('es')
+    expect(t('errors.roomLimitReached', { count: 2 })).toBe(
+      'Límite de salas activas alcanzado (2)',
+    )
+    setLocale('en')
+  })
+
   it('renders slashUsageText through slash.usageLine with the usage injected', () => {
     expect(t('slash.usageLine')).toBe('Usage: {usage}')
     expect(slashUsageText('nick')).toBe('Usage: /nick <name>')

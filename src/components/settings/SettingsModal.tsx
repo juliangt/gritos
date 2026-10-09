@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Modal } from '../common/Modal'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { isValidNickname, normalizeNickname } from '../../lib/nickname'
-import { useT } from '../../i18n/index'
+import { useT, type TranslationKey } from '../../i18n/index'
 import { useAppStore } from '../../stores/useAppStore'
 import { AppearanceTab } from './AppearanceTab'
 import { NetworkTab } from './NetworkTab'
@@ -15,17 +15,20 @@ import { PrivacyTab } from './PrivacyTab'
  * change persists to its store instantly (spec: "All changes are
  * saved to localStorage instantly"). The nickname field at the top of
  * the modal applies on blur/Enter with the RF-01 validation, persists the
- * §8.2 identity record and re-announces presence (RF-01).
+ * §8.2 identity record and re-announces presence (RF-01). Every rendered
+ * string resolves through `t` (issue #119 — locale-live).
  */
 
 type SettingsTab = 'network' | 'privacy' | 'appearance'
 
 export type { SettingsTab }
 
-const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'network', label: 'Network' },
-  { id: 'privacy', label: 'Privacy' },
-  { id: 'appearance', label: 'Appearance' },
+/** Labels are dictionary KEYS: they resolve through `t` at render time, so
+ * a tab row is never frozen at module-load locale (issue #119). */
+const TABS: { id: SettingsTab; labelKey: TranslationKey }[] = [
+  { id: 'network', labelKey: 'settings.tabNetwork' },
+  { id: 'privacy', labelKey: 'settings.tabPrivacy' },
+  { id: 'appearance', labelKey: 'settings.tabAppearance' },
 ]
 
 export function SettingsModal(props: {
@@ -34,6 +37,7 @@ export function SettingsModal(props: {
   /** Tab shown on open (defaults to Network — the network-error banner shortcut). */
   initialTab?: SettingsTab
 }) {
+  const t = useT()
   // The content mounts only while open, so its drafts and tab start fresh
   // on every open without any reset effects.
   if (!props.open) return null
@@ -41,7 +45,7 @@ export function SettingsModal(props: {
     <Modal
       open
       onClose={props.onClose}
-      label="Settings"
+      label={t('common.settings')}
       className="flex max-h-[90vh] w-full max-w-md flex-col rounded-lg border border-border bg-surface p-4 outline-none"
     >
       <SettingsModalContent initialTab={props.initialTab ?? 'network'} onClose={props.onClose} />
@@ -86,10 +90,10 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
   return (
     <>
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">Settings</h2>
+        <h2 className="text-base font-semibold">{t('common.settings')}</h2>
         <button
           type="button"
-          aria-label="Close settings"
+          aria-label={t('settings.closeAria')}
           onClick={props.onClose}
           className="rounded px-1.5 py-1 text-sm text-muted hover:bg-bg hover:text-text"
         >
@@ -98,12 +102,12 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
       </div>
 
       <form
-        aria-label="Change nickname"
+        aria-label={t('settings.changeNicknameLabel')}
         onSubmit={submitNickname}
         className="mt-3 flex flex-col gap-1"
       >
         <label className="text-xs font-medium text-muted" htmlFor="settings-nickname">
-          Your nickname
+          {t('common.yourNickname')}
         </label>
         <div className="flex items-center gap-1">
           <input
@@ -124,7 +128,7 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
             type="submit"
             className="shrink-0 rounded-md border border-border px-2 py-1.5 text-xs hover:border-accent"
           >
-            Save nickname
+            {t('settings.saveNickname')}
           </button>
         </div>
         {nicknameError !== null && (
@@ -136,7 +140,7 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
 
       <div
         role="tablist"
-        aria-label="Settings sections"
+        aria-label={t('settings.sectionsAria')}
         className="mt-3 flex gap-1 border-b border-border"
       >
         {TABS.map((tab) => (
@@ -152,14 +156,14 @@ function SettingsModalContent(props: { initialTab: SettingsTab; onClose: () => v
                 : 'rounded-t-md border-b-2 border-transparent px-3 py-1.5 text-sm text-muted hover:text-text'
             }
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
 
       <div
         role="tabpanel"
-        aria-label={TABS.find((tab) => tab.id === activeTab)?.label}
+        aria-label={t(TABS.find((tab) => tab.id === activeTab)?.labelKey ?? 'settings.tabNetwork')}
         className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
       >
         {activeTab === 'network' && <NetworkTab />}

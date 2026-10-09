@@ -30,9 +30,13 @@ export function RoomList(props: {
 
   return (
     <div className="flex flex-col gap-4">
-      <section aria-label="Active rooms" className="flex flex-col gap-1">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Active</h2>
-        {props.rooms.length === 0 && <p className="text-xs text-muted">No active rooms yet.</p>}
+      <section aria-label={t('sidebar.activeRoomsLabel')} className="flex flex-col gap-1">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+          {t('sidebar.activeHeading')}
+        </h2>
+        {props.rooms.length === 0 && (
+          <p className="text-xs text-muted">{t('sidebar.emptyActive')}</p>
+        )}
         <ul className="flex flex-col">
           {props.rooms.map((room) => (
             <li key={room.id} className="group flex items-center gap-1">
@@ -47,7 +51,11 @@ export function RoomList(props: {
                 <StatusDot status={room.status} />
                 <span className="truncate">#{room.name}</span>
                 {room.hasPassword && (
-                  <span role="img" aria-label="encrypted room" title="Password-protected room">
+                  <span
+                    role="img"
+                    aria-label={t('common.encryptedRoomAria')}
+                    title={t('common.encryptedRoomTitle')}
+                  >
                     🔒
                   </span>
                 )}
@@ -56,8 +64,8 @@ export function RoomList(props: {
               <button
                 type="button"
                 onClick={() => props.onLeaveRoom(room.id)}
-                aria-label={`Leave ${room.name}`}
-                title={`Leave ${room.name}`}
+                aria-label={t('sidebar.leaveRoom', { name: room.name })}
+                title={t('sidebar.leaveRoom', { name: room.name })}
                 className="rounded px-1 text-muted opacity-0 hover:text-accent group-hover:opacity-100 focus-visible:opacity-100"
               >
                 ✕
@@ -68,8 +76,10 @@ export function RoomList(props: {
       </section>
 
       {suggested.length > 0 && (
-        <section aria-label="Suggested rooms" className="flex flex-col gap-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Suggested</h2>
+        <section aria-label={t('sidebar.suggestedRoomsLabel')} className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            {t('sidebar.suggestedHeading')}
+          </h2>
           <ul className="flex flex-col">
             {suggested.map((name) => (
               <li key={name}>
@@ -87,15 +97,19 @@ export function RoomList(props: {
       )}
 
       {props.showRecents && props.recentRooms.length === 0 && (
-        <section aria-label="Recent rooms" className="flex flex-col gap-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recent</h2>
+        <section aria-label={t('sidebar.recentRoomsLabel')} className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            {t('sidebar.recentHeading')}
+          </h2>
           <p className="text-xs text-muted">{t('feed.emptyRecents')}</p>
         </section>
       )}
 
       {recents.length > 0 && (
-        <section aria-label="Recent rooms" className="flex flex-col gap-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Recent</h2>
+        <section aria-label={t('sidebar.recentRoomsLabel')} className="flex flex-col gap-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            {t('sidebar.recentHeading')}
+          </h2>
           <ul className="flex flex-col">
             {recents.map((name) => (
               <li key={name}>

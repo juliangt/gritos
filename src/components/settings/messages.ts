@@ -52,11 +52,10 @@ export const TURN_CREDENTIAL_MEMORY_HINT = t('settings.turnCredentialMemoryHint'
  * Issue #35 — P2P exposure disclosure (onboarding line): direct WebRTC
  * connections reveal the IP to room peers (and, in less detail, to tracker
  * operators); a configured TURN does not hide it (the browser still
- * announces the public address among the ICE candidates).
- * Legacy shim: still imported by OnboardingScreen (untouched until phase 3)
- * and tests/onboarding.test.ts.
+ * announces the public address among the ICE candidates). Phase 3: the
+ * `P2P_DISCLOSURE_TEXT` shim is gone — OnboardingScreen renders
+ * `t('settings.p2pDisclosure')` live.
  */
-export const P2P_DISCLOSURE_TEXT = t('settings.p2pDisclosure')
 
 /**
  * Issue #35 — the Privacy-tab long-form of the exposure note (see above).

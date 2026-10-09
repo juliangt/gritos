@@ -11,7 +11,7 @@ import {
   UNKNOWN_COMMAND_HINT,
   TYPING_SIGNAL_THROTTLE_MS,
 } from '../src/lib/feed'
-import { NICKNAME_ERROR_TEXT } from '../src/lib/nickname'
+import { en } from '../src/i18n/en'
 import { SLASH_COMMANDS } from '../src/lib/slashCommands'
 import {
   NO_EXPIRY_LABEL,
@@ -517,7 +517,7 @@ describe('ChatInput slash submit (issue #99 Phase 3)', () => {
     fireEvent.keyDown(textarea(), { key: 'Enter' })
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      `${NICKNAME_ERROR_TEXT} Usage: /nick <name>`,
+      `${en['errors.nicknameInvalid']} Usage: /nick <name>`,
     )
     expect(sendChat).not.toHaveBeenCalled()
     expect(textarea()).toHaveValue('/nick x!')

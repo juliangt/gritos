@@ -30,7 +30,7 @@ export function UpdateToast() {
   return (
     <div
       role="status"
-      aria-label="New app version"
+      aria-label={t('common.updateToastLabel')}
       className="fixed bottom-4 right-4 z-50 flex items-center gap-3 border border-border bg-surface px-3 py-2 text-xs shadow-lg"
     >
       <p className="min-w-0 flex-1 text-muted">{t('common.updateAvailable')}</p>

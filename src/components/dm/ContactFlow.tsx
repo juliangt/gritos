@@ -213,7 +213,7 @@ export function ContactFlow(props: {
           <>
             {identity === null ? (
               <p role="note" className="text-xs text-accent">
-                No identity in this session.
+                {t('contact.noIdentity')}
               </p>
             ) : (
               <>
