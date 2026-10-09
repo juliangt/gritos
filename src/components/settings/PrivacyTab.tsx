@@ -24,7 +24,7 @@ import {
 } from './messages'
 
 /**
- * Privacidad tab (RF-07/RF-08): the notifications toggle with its
+ * Privacy tab (RF-07/RF-08): the notifications toggle with its
  * permission request flow, remember-recents, the opt-in history-gossip
  * consent (issue #102), the opt-in global-DM channel with its honest
  * §9.5 exposure disclosure (issue #105), the local mute list with per-row

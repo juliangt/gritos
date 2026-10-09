@@ -37,12 +37,12 @@ import {
  * «+ contacto» entry (the manual-wizard entry precedent: one sidebar entry
  * opening one dialog with a pick screen). Two flows:
  *
- * - «Mi contacto»: the own fingerprint in the 8×4 display form, copyable
+ * "My contact": the own fingerprint in the 8×4 display form, copyable
  *   (clipboard with the readonly-textarea fallback), plus a QR encoding the
  *   `#contact=<fp>` deep link — the #100 QR machinery reused
  *   (`buildQrMatrix`/`paintQr`/PNG download over `buildContactLink`) with
  *   the same-install caveat.
- * - «Contacto por huella»: paste a fingerprint → the local canonical-form
+ * - "Contact by fingerprint": paste a fingerprint → the local canonical-form
  *   check → `knockPeer` (the manager validates presence and throws the typed
  *   `KnockError`, surfaced as its inline line) → waiting → resolved through
  *   the manager's `onKnockResolved` seam: an accept lands the user in the

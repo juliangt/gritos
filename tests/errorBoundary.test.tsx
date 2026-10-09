@@ -7,7 +7,7 @@ import { ErrorBoundary } from '../src/components/common/ErrorBoundary'
 
 /**
  * Top-level error boundary (issue #38): a render crash swaps the tree for a
- * Spanish fallback with a working reload action, and a healthy tree passes
+ * English fallback with a working reload action, and a healthy tree passes
  * through untouched. console.error is muted because React logs the
  * intentional crashes in these tests.
  */

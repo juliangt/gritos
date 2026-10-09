@@ -19,7 +19,7 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  *  4. the fingerprint-keyed TOFU decision: pins ride the same flat
  *     `gritos:tofu` map under the reserved `manual:` prefix (five-key
  *     invariant of §8.2 intact, same panic wipe),
- *  5. the exact Spanish SDP privacy warning the UI reuses verbatim,
+ *  5. the exact SDP privacy warning the UI reuses verbatim,
  *  6. the phase-4 status flip: §12.2 leads with the implemented state and
  *     names the shipped surfaces (engine, manager, RF-07 seam),
  *  7. the §9.2 / §8.2 one-line cross-references (ephemeral keys ride the
@@ -53,7 +53,7 @@ describe('manual DM design note documentation (issue #97)', () => {
     expect(spec).toContain('reserved `manual:` prefix')
   })
 
-  it('pins the exact Spanish SDP privacy warning for the future UI', () => {
+  it('pins the exact SDP privacy warning for the future UI', () => {
     expect(spec).toContain('The invitation may contain information about your network')
   })
 })

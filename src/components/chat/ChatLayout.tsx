@@ -71,7 +71,7 @@ export function ChatLayout() {
   const manualDms = useAppStore((state) => state.manualDms)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Issue #97 — the manual-DM wizard is layout-level state: both entry
-  // points (sidebar «+ invitación», tracker-error banner shortcut) flip it
+  // points (sidebar "+ invite", tracker-error banner shortcut) flip it
   // and the modal renders once, over everything.
   const [manualWizardOpen, setManualWizardOpen] = useState(false)
   // Issue #105 — the contact flow is layout-level state like the wizard:

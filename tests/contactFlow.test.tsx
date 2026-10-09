@@ -68,7 +68,7 @@ import {
 
 /**
  * Issue #105 phase 3 (spec §12.5) — the contact flow UI over the REAL
- * signal-channel manager and the fake transport: the Privacidad toggle
+ * signal-channel manager and the fake transport: the Privacy toggle
  * joins/leaves the swarm, «My contact» shares the fingerprint (copy + QR +
  * PNG + caveat), «Contact by fingerprint» knocks out and lands in the DM view
  * on the accept ack (one E2EE round trip through the manager), the inbound
@@ -262,7 +262,7 @@ function countDark(matrix: QrMatrix): number {
 }
 
 // ---------------------------------------------------------------------------
-// Toggle in Privacidad
+// Toggle in Privacy
 // ---------------------------------------------------------------------------
 
 describe('PrivacyTab globalDm toggle (spec §12.5)', () => {

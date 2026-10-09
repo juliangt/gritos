@@ -26,9 +26,9 @@
  * internal whitespace survives for /me and is folded by the domain rules for
  * /nick (RF-01: runs collapse to one space) and /room (RF-02: runs → '-').
  *
- * VERBS (issue #112, Phase 1 — clean break): the pre-release rename
- * /sala→/room, /salas→/rooms, /limpiar→/clear, /salir→/leave, /ayuda→/help
- * keeps NO Spanish aliases — the app has no released users, so there is no
+ * VERBS (issue #112, Phase 1 — clean break): the pre-release rename of the
+ * original Spanish command verbs to their English counterparts keeps NO
+ * Spanish aliases — the app has no released users, so there is no
  * compatibility burden to carry. English is the primary language of the
  * table: usage and help strings below are the shipped copy.
  *

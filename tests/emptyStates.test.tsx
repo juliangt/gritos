@@ -50,7 +50,7 @@ function userMessage(text: string): Message {
   }
 }
 
-describe('M6 empty states (Spanish, discrete)', () => {
+describe('M6 empty states (discrete)', () => {
   it('MessageFeed shows the room invitation only while empty', () => {
     const { rerender } = render(
       <MessageFeed

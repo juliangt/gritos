@@ -1,7 +1,7 @@
 import { newMessagesButtonText } from '../../lib/feed'
 
 /**
- * Floating '↓ N mensajes nuevos' button (RF-03): shown while auto-scroll is
+ * Floating '↓ N new messages' button (RF-03): shown while auto-scroll is
  * disengaged; clicking jumps to the bottom and clears the counter.
  */
 export function NewMessagesButton(props: { count: number; onClick: () => void }) {

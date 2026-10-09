@@ -117,7 +117,7 @@ describe('frame-bust bootstrap (issues #27, #104 phase 3)', () => {
       'window.stop() must halt the parser before the bundle boots',
     ).toHaveBeenCalledTimes(1)
     // The document was replaced: the app head (CSP meta, hashed bootstrap,
-    // entry bundle tag) is gone and the Spanish deny warning is all that
+    // entry bundle tag) is gone and the deny warning is all that
     // remains — the module bundle below never executes.
     expect(document.head).toBeNull()
     expect(document.querySelector('h1')?.textContent).toBe('gritos cannot run inside a frame')

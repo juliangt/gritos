@@ -511,7 +511,7 @@ function transitionTerminal(
   clearStallTimer(session)
   record.state = state
   record.failureReason = state === 'failed' ? reason : null
-  // Release the big buffers immediately — the §12.4 "liberación inmediata".
+  // Release the big buffers immediately — the §12.4 immediate-release rule.
   session.file = null
   session.parts = null
   if (options.notifyPeer === true) {

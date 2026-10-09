@@ -187,7 +187,7 @@ import {
  * encrypted placeholders or already-expired rows. Phase 3 wires the
  * recovered-state append at module level (`appendRecoveredToStore`: the
  * 50-per-join recipient cap, the muted-AUTHOR gate, receiver-clock TTL and
- * the `recovered: true` rows under the "mensajes recuperados" separator)
+ * the `recovered: true` rows under the "messages recovered from peers" separator)
  * plus the request side the UI card drives (`requestHistory`, the
  * per-room HISTORY_ASK_RATE_CAP budget with the §10.3 park-while-searching
  * flush).
@@ -1384,7 +1384,7 @@ function safeSend<T>(
  * every peer — senders pass UI-produced values only.
  *
  * Issue #99 — `opts.isAction` marks the LOCAL echo of a /me message so
- * MessageItem renders it as the italic «*nick acción*» line. It never
+ * MessageItem renders it as the italic "*nick action*" line. It never
  * touches the envelope (the wire form is byte-identical with or without
  * it): peers rebuild received messages through parseEnvelope, which drops
  * unknown fields, so their copy renders as plain text — an accepted
@@ -2097,7 +2097,7 @@ export function muteFromUi(fingerprint: string, nickname: string): boolean {
 }
 
 /**
- * Issue #95 — lifts a mute from the UI (PeerList menu, Privacidad mute
+ * Issue #95 — lifts a mute from the UI (PeerList menu, Privacy-tab mute
  * list): removes it via the settings helper and, when a last-seen nickname
  * is still known (it rides memory-only and dies with the session), appends
  * '@nick is no longer muted' to the active room. False when the

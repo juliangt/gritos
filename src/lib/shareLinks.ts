@@ -23,7 +23,7 @@ export const CONTACT_HASH_PARAM = 'contact='
  * the requested room name. Returns null when the hash carries no usable
  * room: missing/foreign hash, empty value, malformed percent-encoding, or a
  * decoded name that fails the join validation rules (RF-02 normalization
- * applies first, so 'Mi%20Sala' lands as 'mi-sala').
+ * applies first, so {'My%20Room' lands as 'my-room')}.
  */
 export function parseRoomHash(hash: string | null | undefined): string | null {
   if (hash === null || hash === undefined) return null

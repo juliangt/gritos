@@ -17,11 +17,11 @@ import {
  * *Pares* section (RF-06): peers of the active view with nickname and
  * latency dot (🟢 <150 ms, 🟡 150–400, 🔴 >400, ⚪ degraded/no data).
  * Duplicate nicknames get a short peerId suffix ('nick·a3f1'). Clicking a
- * peer opens the menu (§10.1): 'Mensaje directo' (M3, RF-04) opens the
- * E2EE DM view; 'Copiar fingerprint' uses the clipboard; issue #95 adds
- * 'Silenciar' (local mute keyed by the identity fingerprint, with a
+ * peer opens the menu (§10.1): 'Direct message' (M3, RF-04) opens the
+ * E2EE DM view; 'Copy fingerprint' uses the clipboard; issue #95 adds
+ * 'Mute' (local mute keyed by the identity fingerprint, with a
  * confirm when the peer has an open DM channel — muting also ignores its
- * future DMs) or 'Dejar de silenciar' while muted. The menu closes
+ * future DMs) or 'Unmute' while muted. The menu closes
  * on Esc, outside clicks and after any action. Issue #22 (TOFU): peers
  * whose DM channel is flagged `keyChanged` show the pinned first-seen
  * fingerprint (tooltip and copy) plus a visible rotation warning.

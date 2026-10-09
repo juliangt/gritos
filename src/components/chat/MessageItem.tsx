@@ -210,7 +210,7 @@ export const MessageItem = memo(function MessageItem(props: {
       </div>
       <div className="max-w-[85%] break-words text-sm leading-relaxed">
         {props.message.isAction === true ? (
-          // Issue #99 — /me rendering convention: the italic «*nick acción*»
+          // Issue #99 — /me rendering convention: the italic "*nick action*"
           // line, no Markdown parsing (a literal '*' inside the action prose
           // must not flip emphasis). LOCAL ONLY: the wire envelope carries no
           // marker (parseEnvelope drops unknown fields), so a peer's copy of

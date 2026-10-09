@@ -11,8 +11,8 @@ import { PrivacyTab } from './PrivacyTab'
  * Settings modal (RF-07, RNF-05): three tabs — Network / Privacy /
  * Appearance — inside a focus-trapped modal that closes with Esc, the ✕
  * button or a backdrop click, and restores focus to the opener. Every
- * change persists to its store instantly (spec: "Todos los cambios se
- * guardan en localStorage al instante"). The nickname field at the top of
+ * change persists to its store instantly (spec: "All changes are
+ * saved to localStorage instantly"). The nickname field at the top of
  * the modal applies on blur/Enter with the RF-01 validation, persists the
  * §8.2 identity record and re-announces presence (RF-01).
  */

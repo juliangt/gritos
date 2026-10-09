@@ -23,8 +23,8 @@ import { useAppStore, INITIAL_APP_STATE } from '../src/stores/useAppStore'
 import { installFakeTrystero } from './fakeTrystero'
 
 /**
- * M5 (RF-07/RF-08/RF-10): the settings modal with the Red / Privacidad /
- * Apariencia tabs — exact Spanish control wording, instant persistence to
+ * M5 (RF-07/RF-08/RF-10): the settings modal with the Network / Privacy /
+ * Appearance tabs — exact English control wording, instant persistence to
  * the stores, inline validation errors, the permission flow, identity
  * regeneration, the panic double confirmation and the nickname change with
  * persistence + presence re-announce.
@@ -276,7 +276,7 @@ describe('Red tab (RF-07)', () => {
   })
 })
 
-describe('Privacidad tab (RF-07/RF-08)', () => {
+describe('Privacy tab (RF-07/RF-08)', () => {
   it('shows the permission states and enables the toggle only when granted', async () => {
     stubNotification('default')
     const { unmount } = render(<SettingsModal open onClose={() => {}} />)
@@ -457,7 +457,7 @@ describe('Privacidad tab (RF-07/RF-08)', () => {
   })
 })
 
-describe('Privacidad mute list (issue #95)', () => {
+describe('Privacy mute list (issue #95)', () => {
   const PEER_FP = 'A31F 09BC 77D2 4E5A 0F1E 2D3C 4B5A 6978'
   const CANONICAL_FP = 'A31F09BC77D24E5A0F1E2D3C4B5A6978'
   const OTHER_FP = 'B31F09BC77D24E5A0F1E2D3C4B5A6978'
@@ -509,7 +509,7 @@ describe('Privacidad mute list (issue #95)', () => {
   })
 })
 
-describe('Apariencia tab (RF-07/RF-10)', () => {
+describe('Appearance tab (RF-07/RF-10)', () => {
   it('the theme radio group drives the settings store (single source of truth)', () => {
     renderModal()
     openTab('Appearance')

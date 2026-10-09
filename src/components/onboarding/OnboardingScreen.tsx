@@ -27,10 +27,10 @@ export function OnboardingScreen() {
   const [error, setError] = useState<string | null>(null)
   const [entering, setEntering] = useState(false)
   // Issue #41 — room requested by a share link, read once on mount for the
-  // hint line (the join re-reads the hash on 'Entrar').
+  // hint line (the join re-reads the hash on 'Enter').
   const [linkedRoom] = useState(() => parseRoomHash(window.location.hash))
   const { enterWithNickname, joinRoomFocused } = useRoomManager({
-    // The identity is created on 'Entrar' with the chosen nickname; an
+    // The identity is created on 'Enter' with the chosen nickname; an
     // anonymous ephemeral identity must not be generated on mount.
     ensureIdentity: false,
   })

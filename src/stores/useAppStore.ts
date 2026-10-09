@@ -132,7 +132,7 @@ export interface Message {
   reactions?: Partial<Record<ReactEmoji, string[]>>
   /**
    * Issue #99 — local rendering convention for a message sent through /me:
-   * MessageItem renders the row as the italic «*nick acción*» line. LOCAL
+   * MessageItem renders the row as the italic "*nick action*" line. LOCAL
    * ONLY by design (no protocol change): the wire envelope carries no marker
    * and parseEnvelope rebuilds received messages without it, so a peer's
    * copy of the same message renders as plain text. Set exclusively by
@@ -142,7 +142,7 @@ export interface Message {
   /**
    * Issue #102 — provenance marker: the row was recovered through opt-in
    * history gossip, not received live. Rendered slightly dimmed under the
-   * "mensajes recuperados" separator (MessageItem/MessageFeed). Purely
+   * "messages recovered from peers" separator (MessageItem/MessageFeed). Purely
    * presentational: recovered rows never badge, never notify and never
    * receipt (the recovered append path guarantees it), and the marker is
    * memory-only like every feed field.
@@ -170,7 +170,7 @@ export interface Room {
   fifoTrimmed: boolean
   /**
    * Issue #96 — how many TTL messages the expiry sweep has removed from this
-   * feed (drives the local "— N mensajes expirados —" separator). Same
+   * feed (drives the local "N expired messages" separator). Same
    * semantics as `fifoTrimmed`: per-feed, latched for the feed's lifetime
    * (a leave/rejoin starts a fresh room at 0), memory-only.
    */
@@ -178,7 +178,7 @@ export interface Room {
   /**
    * Issue #102 — how many chat rows this feed accepted through the opt-in
    * history-gossip recovery path (drives the local
-   * "— mensajes recuperados de pares —" separator). Same latched semantics
+   * "— messages recovered from peers —" separator). Same latched semantics
    * as `expiredCount`: per-feed, never decrements (FIFO or TTL may later
    * remove rows — the separator records what already happened), and a
    * leave/rejoin starts a fresh room at 0.
@@ -234,14 +234,14 @@ export interface DmChannel {
   /**
    * Issue #97 (spec §12.2) — additive marker, true ONLY on trackerless
    * manual channels (keyed `manual:<fingerprint>` in `manualDms`): DmList
-   * shows the «(sin sala)» marker for them. Room-backed channels never set
+   * shows the "(no room)" marker for them. Room-backed channels never set
    * it; the room-DM shapes and behavior are untouched.
    */
   manual?: boolean
   /**
    * Issue #105 (spec §12.5) — additive marker, true ONLY on signal-swarm
    * channels (keyed by the canonical identity fingerprint in `dms`): DmList
-   * shows the «(global)» marker for them, the sibling of the «(sin sala)»
+   * shows the «(global)» marker for them, the sibling of the "(no room)"
    * manual marker. Room-backed channels never set it (their keys are
    * Trystero peerIds, a disjoint namespace from 32-hex fingerprints).
    */
@@ -501,7 +501,7 @@ export interface AppActions {
    * CONNECTION and its identity in the store — this is a view clear, never a
    * leave. The latched separator facts (`fifoTrimmed`, `expiredCount`) stay
    * as-is: they record what ALREADY happened to the session's history, so
-   * the «mensajes anteriores descartados» / expired separators keep
+   * the "earlier messages discarded" / expired separators keep
    * rendering above the emptied feed. Unknown roomId no-ops.
    */
   clearRoomFeed: (roomId: string) => void
@@ -1076,7 +1076,7 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
   // slice as room DMs (keyed by the canonical identity fingerprint, a
   // namespace disjoint from Trystero peerIds); only the CREATOR differs: it
   // stamps the additive `global: true` marker, the «(global)» sibling of the
-  // manual «(sin sala)» marker. Every other mutation rides the `dms` actions.
+  // manual "(no room)" marker. Every other mutation rides the `dms` actions.
   // ---------------------------------------------------------------------------
 
   ensureGlobalDmChannel: (key, peerNick, peerFingerprint) =>

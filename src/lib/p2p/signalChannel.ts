@@ -71,7 +71,7 @@ import { getTofuFingerprint, pinMatchesFingerprint, pinTofuFingerprint } from '.
  * Keying (§12.5): signal channels live in the SAME `dms` store slice as room
  * DMs, keyed by the CANONICAL IDENTITY FINGERPRINT (the fp is the product's
  * address; the swarm peerId is ephemeral per session), marked `global: true`
- * — the «(global)» sibling of the manual «(sin sala)» marker. Room channels
+ * — the «(global)» sibling of the manual "(no room)" marker. Room channels
  * are keyed by Trystero peerId, a disjoint namespace (46-char ids vs 32-hex
  * fingerprints), so the two DM kinds coexist in `DmList` without colliding.
  *
@@ -625,7 +625,7 @@ function pruneSignalTyping(now: number): boolean {
 function handleSignalPeerJoin(swarm: SignalSwarm, peerId: string): void {
   // Announce whoami + identity keys + session-ephemeral key, directed at the
   // joiner — the room join burst over the signal swarm (§12.5: keys/ephkeys
-  // "anuncio como en sala").
+  // announce as in a room).
   const identity = getSessionIdentity()
   if (identity !== null) {
     safeSend(
@@ -779,8 +779,7 @@ useSettingsStore.subscribe((state, prev) => {
 // Boot: join immediately when the persisted setting is already on.
 if (globalDmEnabled()) void joinSignalSwarm()
 
-// Nickname changes re-announce presence (spec §12.5: "difusión al conectar
-// y al cambiar apodo"), watched through the store the room path writes.
+// Nickname changes re-announce presence (spec §12.5: x// and on nickname change"), watched through the store the room path writes.
 useAppStore.subscribe((state, prev) => {
   const swarm = swarmRef
   if (swarm === null) return
@@ -818,7 +817,7 @@ export function isGlobalDmEnabled(): boolean {
 }
 
 /**
- * The toggle (phase 3's Ajustes → Privacidad switch): writes the setting;
+ * The toggle (phase 3's Settings → Privacy switch): writes the setting;
  * the module-level subscription performs the actual join/leave, so UI wiring
  * stays declarative.
  */
@@ -834,7 +833,7 @@ export function isSignalChannelJoined(): boolean {
 /**
  * Engine-state presence snapshot (spec §12.5: engine state, never a
  * browsable UI directory — this exists for tests and the phase-3 «Contacto
- * por huella» lookup, capped at MAX_SIGNAL_PRESENCE by construction).
+ * "Contact by fingerprint" lookup, capped at MAX_SIGNAL_PRESENCE by construction).
  */
 export function getSignalPresence(): Array<{ fp: string; nick: string }> {
   const swarm = swarmRef
@@ -854,7 +853,7 @@ export function getPendingKnocks(): SignalKnock[] {
 }
 
 /**
- * Knocking OUT (§12.5 «Contacto por huella»): sends a directed knock to the
+ * Knocking OUT (§12.5 "Contact by fingerprint"): sends a directed knock to the
  * peer whose PRESENCE entry declares `fp`. Throws the typed KnockError when
  * the swarm is off (`signal-off`), the fingerprint is not present
  * (`peer-not-present`) or the knock cannot be built (`invalid-knock`). The
@@ -880,7 +879,7 @@ export function knockPeer(fp: string, note?: string): void {
 }
 
 /**
- * Consent (phase 3's [Aceptar]): answers the knocker with
+ * Consent (phase 3's [Accept]): answers the knocker with
  * `knock-ack {accept: true, fp: <knocker>}` and opens the signal-backed
  * channel on BOTH sides' convention — here (the acceptor's) immediately; the
  * knocker opens on its ack. No-op for an unknown/stale knock.
@@ -899,7 +898,7 @@ export function acceptKnock(fp: string): void {
 }
 
 /**
- * Rejection (phase 3's [Rechazar]): answers `knock-ack {accept: false}` and
+ * Rejection (phase 3's [Decline]): answers `knock-ack {accept: false}` and
  * forgets the knocker — no channel, nothing remembered (no contact store;
  * per-session state, spec §12.5). No-op for an unknown/stale knock.
  */

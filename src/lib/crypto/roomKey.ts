@@ -11,7 +11,7 @@ import {
  * 1. `salt = SHA-256('gritos/room-salt/v1/' + normalizedName)` —
  *    deterministic and public by design (it only prevents per-room rainbow
  *    tables; it is not secret).
- * 2. `claveSala = PBKDF2-SHA256(password, salt, 600 000 iterations, 32 B)`
+ * 2. `roomKey = PBKDF2-SHA256(password, salt, 600 000 iterations, 32 B)`
  *    → non-extractable AES-GCM-256 key. A pure function of (password,
  *    name): independent of the identity — regenerating the identity never
  *    changes room keys (RF-05).
