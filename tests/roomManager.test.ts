@@ -42,6 +42,7 @@ beforeEach(() => {
 afterEach(() => {
   manager.resetManagerForTests()
   manager.setJoinRoomFactory(null)
+  manager.setRelaySocketsProvider(null)
   vi.useRealTimers()
 })
 
@@ -209,6 +210,136 @@ describe('status transitions (spec §10.3)', () => {
     expect(storedRoom(roomId).peers).toHaveLength(0)
     await vi.advanceTimersByTimeAsync(15_000)
     expect(storedRoom(roomId).status).toBe('error')
+  })
+
+  // Issue #125 — an empty room is not a broken network: with at least one
+  // OPEN relay socket (readyState === 1) the §10.3 error never fires and the
+  // heuristic re-arms; only a dead-tracker expiry (no open socket) does.
+  it('stays searching and re-arms at expiry while a relay socket is open', async () => {
+    const { connection, roomId } = await join('lobby')
+    const sockets: Record<string, { readonly readyState: number }> = {
+      'wss://tracker.example': { readyState: 1 },
+    }
+    manager.setRelaySocketsProvider(() => sockets)
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(connection.status).toBe('searching')
+    expect(storedRoom(roomId).status).toBe('searching')
+
+    // The heuristic re-armed: the SAME tracker dying later still fires.
+    sockets['wss://tracker.example'] = { readyState: 3 }
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(manager.getRoomConnection(roomId)?.status).toBe('error')
+    expect(storedRoom(roomId).status).toBe('error')
+  })
+
+  it('fires error at expiry when every relay socket is closed (no re-arm)', async () => {
+    const { roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 3 },
+      'wss://other.example': { readyState: 3 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(manager.getRoomConnection(roomId)?.status).toBe('error')
+    expect(storedRoom(roomId).status).toBe('error')
+
+    // Terminal state: no re-armed timer may flip it back to searching.
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(storedRoom(roomId).status).toBe('error')
+  })
+
+  it('disarms the re-armed heuristic on a peer join after a reachable expiry', async () => {
+    const { room, roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 1 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).status).toBe('searching')
+
+    // Peer activity disproves the heuristic instantly, re-armed timer or not.
+    room.peerJoin('peer-1')
+    expect(storedRoom(roomId).status).toBe('connected')
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(storedRoom(roomId).status).toBe('connected')
+  })
+
+  it('trackersReachable is true only with at least one open (readyState 1) socket', () => {
+    manager.setRelaySocketsProvider(() => ({}))
+    expect(manager.trackersReachable()).toBe(false)
+
+    manager.setRelaySocketsProvider(() => ({
+      'wss://closed.example': { readyState: 3 },
+    }))
+    expect(manager.trackersReachable()).toBe(false)
+
+    manager.setRelaySocketsProvider(() => ({
+      'wss://closed.example': { readyState: 3 },
+      'wss://open.example': { readyState: 1 },
+    }))
+    expect(manager.trackersReachable()).toBe(true)
+  })
+
+  // Issue #125 phase 2 — the reachable expiry latches the store's
+  // `peerlessHint` so the UI can say "the room may be empty" without the
+  // error semantics; every state change that disproves it clears it.
+  it('latches peerlessHint on a reachable expiry with zero peers', async () => {
+    const { roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 1 },
+    }))
+    expect(storedRoom(roomId).peerlessHint).toBeUndefined()
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).status).toBe('searching')
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
+  })
+
+  it('a peer join clears the latched peerlessHint', async () => {
+    const { room, roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 1 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
+
+    room.peerJoin('peer-1')
+    expect(storedRoom(roomId).status).toBe('connected')
+    expect(storedRoom(roomId).peerlessHint).toBe(false)
+  })
+
+  it('an unreachable-tracker expiry fires the error with the hint cleared', async () => {
+    const { roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 3 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).status).toBe('error')
+    expect(storedRoom(roomId).peerlessHint).toBe(false)
+  })
+
+  it('the last peer leaving clears the hint and the next reachable expiry re-latches it', async () => {
+    const { room, roomId } = await join('lobby')
+    manager.setRelaySocketsProvider(() => ({
+      'wss://tracker.example': { readyState: 1 },
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
+
+    room.peerJoin('peer-1')
+    room.peerLeave('peer-1')
+    // The leave's re-arm branch resets the hint with the status…
+    expect(storedRoom(roomId).status).toBe('searching')
+    expect(storedRoom(roomId).peerlessHint).toBe(false)
+
+    // …and a still-peerless room re-latches it at the next expiry.
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(storedRoom(roomId).status).toBe('searching')
+    expect(storedRoom(roomId).peerlessHint).toBe(true)
   })
 })
 

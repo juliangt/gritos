@@ -192,6 +192,19 @@ export interface Room {
    * rate-limits the actual sends.
    */
   historyAskDismissed: boolean
+  /**
+   * Issue #125 — latched hint that the §10.3 error heuristic expired while
+   * the trackers were REACHABLE and the room had no peers (a genuinely empty
+   * room stays `searching` instead of erroring): ChatHeader shows the
+   * "may be empty" line and ChatLayout offers the prefilled password join.
+   * Same semantics family as `fifoTrimmed`/`expiredCount`: per-feed, latched
+   * for the feed's lifetime, memory-only (never persisted, never notified).
+   * Cleared when peers arrive, when the heuristic fires the real error or
+   * when the last peer leaves (it may re-latch at the next peerless expiry);
+   * a leave/rejoin starts a fresh room without it. Optional so Room literals
+   * written before the hint existed stay valid.
+   */
+  peerlessHint?: boolean
 }
 
 export interface DmChannel {
@@ -472,6 +485,13 @@ export interface AppActions {
   upsertRoom: (room: Room) => void
   removeRoom: (roomId: string) => void
   setRoomStatus: (roomId: string, status: RoomStatus) => void
+  /**
+   * Issue #125 — flips the room's latched `peerlessHint` (true: the §10.3
+   * heuristic expired over reachable trackers with zero peers; false: peers
+   * arrived, the heuristic fired the real error or the last peer left).
+   * Memory-only Room state like the field itself. Unknown roomId no-ops.
+   */
+  setRoomPeerlessHint: (roomId: string, hint: boolean) => void
   addPeer: (roomId: string, peer: Peer) => void
   updatePeer: (roomId: string, peerId: string, patch: Partial<Peer>) => void
   removePeer: (roomId: string, peerId: string) => void
@@ -616,6 +636,15 @@ export const useAppStore = create<AppState & AppActions>()((set) => ({
       if (!room || room.status === status) return state
       return {
         rooms: { ...state.rooms, [roomId]: { ...room, status } },
+      }
+    }),
+
+  setRoomPeerlessHint: (roomId, hint) =>
+    set((state) => {
+      const room = state.rooms[roomId]
+      if (!room || room.peerlessHint === hint) return state
+      return {
+        rooms: { ...state.rooms, [roomId]: { ...room, peerlessHint: hint } },
       }
     }),
 

@@ -1,4 +1,5 @@
 import {
+  getRelaySockets,
   joinRoom as trysteroJoinRoom,
   selfId as trysteroSelfId,
   type JoinRoomConfig,
@@ -214,7 +215,11 @@ import {
 /** RF-02 — normalized names: 1–32 chars of [a-z0-9_-]. */
 export const ROOM_NAME_PATTERN = /^[a-z0-9_-]{1,32}$/
 
-/** §10.3 heuristic — no tracker/peer activity within 15 s → 'error'. */
+/**
+ * §10.3 heuristic — no CONNECTION to any tracker within 15 s → 'error'
+ * (issue #125: a peerless room with an open relay socket stays 'searching'
+ * and the check re-arms; peer activity still disarms instantly).
+ */
 export const ERROR_HEURISTIC_MS = 15_000
 
 /** RF-03 — a typing signal expires after 4 s. */
@@ -296,6 +301,18 @@ export const RAW_PUBLIC_KEY_LENGTH = 65
 
 /** Trystero joinRoom signature — the injection seam used by the tests. */
 export type TrysteroJoinRoom = typeof trysteroJoinRoom
+
+/**
+ * Issue #125 — the live relay (tracker) sockets Trystero holds, keyed by
+ * relay URL. Structural on purpose: the heuristic only reads `readyState`
+ * and the DOM `WebSocket` type does not exist in the node test environment
+ * (mirrors how `TrysteroJoinRoom` keeps the module's single Trystero
+ * surface injectable).
+ */
+export type RelaySockets = Record<string, { readonly readyState: number }>
+
+/** Returns Trystero's current url → relay socket record (`getRelaySockets`). */
+export type RelaySocketsProvider = () => RelaySockets
 
 /** RF-02 — exceeding settings.maxActiveRooms rejects with this typed error. */
 export class RoomLimitError extends Error {
@@ -524,6 +541,29 @@ let joinRoomImpl: TrysteroJoinRoom = trysteroJoinRoom
  */
 export function setJoinRoomFactory(factory: TrysteroJoinRoom | null): void {
   joinRoomImpl = factory ?? trysteroJoinRoom
+}
+
+/**
+ * Issue #125 — the live relay sockets behind the §10.3 heuristic. Like the
+ * joinRoom factory above, it sits behind an injectable provider so tests
+ * (and only tests) decide which tracker sockets are open. null restores the
+ * real implementation.
+ */
+let relaySocketsImpl: RelaySocketsProvider = getRelaySockets as RelaySocketsProvider
+
+export function setRelaySocketsProvider(provider: RelaySocketsProvider | null): void {
+  relaySocketsImpl = provider ?? (getRelaySockets as RelaySocketsProvider)
+}
+
+/**
+ * §10.3 reachability check (issue #125): true iff at least one relay socket
+ * is OPEN (readyState === 1). An empty or missing record counts as NOT
+ * reachable — the conservative default that preserves today's behavior when
+ * no socket was ever opened.
+ */
+export function trackersReachable(): boolean {
+  const sockets = relaySocketsImpl() ?? {}
+  return Object.values(sockets).some((socket) => socket.readyState === 1)
 }
 
 /**
@@ -2511,6 +2551,8 @@ function handlePeerJoin(connection: RoomInternals, peerId: string): void {
   // First peer activity disproves the tracker-dead heuristic (§10.3).
   disarmErrorHeuristic(connection)
   setConnectionStatus(connection, 'connected')
+  // Issue #125 — peers arrived, so the "may be empty" hint is obsolete.
+  useAppStore.getState().setRoomPeerlessHint(connection.roomId, false)
   // Issue #102 phase 3 — a history ask tapped while the room was still
   // hunting goes out now that a DataChannel exists (budget already paid at
   // accept time; the payload dies with the connection if no peer ever
@@ -2586,8 +2628,12 @@ function handlePeerLeave(connection: RoomInternals, peerId: string): void {
     useAppStore.getState().rooms[connection.roomId] !== undefined &&
     (useAppStore.getState().rooms[connection.roomId]?.peers.length ?? 1) === 0
   ) {
-    // No DataChannel left: back to hunting (§10.3 searching).
+    // No DataChannel left: back to hunting (§10.3 searching). Issue #125 —
+    // drop the stale hint with the status reset: the room may find peers
+    // again, and a still-peerless one re-latches the hint at the next
+    // reachable expiry of the freshly armed heuristic.
     setConnectionStatus(connection, 'searching')
+    useAppStore.getState().setRoomPeerlessHint(connection.roomId, false)
     armErrorHeuristic(connection)
   }
 }
@@ -2956,12 +3002,37 @@ function setConnectionStatus(connection: RoomInternals, status: RoomStatus): voi
   useAppStore.getState().setRoomStatus(connection.roomId, status)
 }
 
-/** §10.3 heuristic — 15 s with zero peer activity while searching → 'error'. */
+/**
+ * §10.3 heuristic — 15 s with no connection to any tracker while searching
+ * → 'error' (issue #125). Peer activity disarms it instantly (handlePeerJoin);
+ * an empty room over an OPEN relay socket is signaling, not breakage, so the
+ * timer re-arms and a later outage is still caught by a future check. That
+ * reachable branch also latches the store's `peerlessHint` (issue #125) while
+ * the room has zero peers, so the UI can say "the room may be empty" without
+ * claiming a network failure; the hint is cleared wherever the state is
+ * disproven (peer join, real error, last peer leaving).
+ */
 function armErrorHeuristic(connection: RoomInternals): void {
   disarmErrorHeuristic(connection)
   connection.errorTimer = setTimeout(() => {
     connection.errorTimer = null
     if (connection.status === 'searching') {
+      if (trackersReachable()) {
+        // Issue #125 — signaling is up, the room is just peerless: keep
+        // hunting instead of firing the error, and re-check after another
+        // window so a tracker that dies LATER still trips the heuristic.
+        // The hint latches ONLY on a truly empty room: a `searching` room
+        // that still lists peers is mid-handshake (found, no DataChannel
+        // yet), not empty.
+        if (useAppStore.getState().rooms[connection.roomId]?.peers.length === 0) {
+          useAppStore.getState().setRoomPeerlessHint(connection.roomId, true)
+        }
+        armErrorHeuristic(connection)
+        return
+      }
+      // Issue #125 — a real (dead-tracker) expiry owns the error state: the
+      // hint must not outlive it, or the UI would under-report the outage.
+      useAppStore.getState().setRoomPeerlessHint(connection.roomId, false)
       setConnectionStatus(connection, 'error')
     }
   }, ERROR_HEURISTIC_MS)

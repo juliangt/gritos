@@ -38,6 +38,14 @@ export const NETWORK_ERROR_BANNER_TEXT =
   'No tracker access — check your connection or configure alternative trackers'
 
 /**
+ * Issue #125 — subtle line under the header status while a room latched the
+ * peerless hint: the §10.3 heuristic expired over REACHABLE trackers with
+ * zero peers, so the room stays `searching` (an empty room is not a broken
+ * network) and this says so without the error banner's wording.
+ */
+export const PEERLESS_ROOM_HINT_TEXT = 'Still waiting for peers — the room may be empty'
+
+/**
  * Issue #43 — text of the non-blocking banner shown at the top of the chat
  * area when the page runs outside a secure context (plain HTTP on a LAN IP):
  * Web Crypto and WebRTC are unavailable, so the #lobby auto-join is skipped

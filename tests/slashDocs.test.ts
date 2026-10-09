@@ -61,6 +61,9 @@ describe('slash commands documentation (issue #99)', () => {
   it('pins the /me asymmetry, /room popover arming and memory-only /clear in the spec', () => {
     expect(spec).toContain('peers see plain text')
     expect(spec).toContain('arms the password offer')
+    // Issue #125 — the offer arms on the error state OR the latched
+    // peerless "room may be empty" hint over healthy trackers.
+    expect(spec).toContain('whose "room may be empty" hint latched')
     expect(spec).toContain('peers keep their history')
   })
 
