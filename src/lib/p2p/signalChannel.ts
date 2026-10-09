@@ -368,7 +368,8 @@ function handleKeys(swarm: SignalSwarm, data: unknown, peerId: string): void {
     // canonical, so the keys-derived fp must live in the same one (the room
     // path keeps the spaced display form; the v2 derivation canonicalizes
     // either way — this only normalizes the signal swarm's own maps).
-    swarm.peerKeyFps.set(peerId, canonicalFingerprint(fingerprint))
+    const canonicalFp = canonicalFingerprint(fingerprint)
+    swarm.peerKeyFps.set(peerId, canonicalFp)
     const channelKey = swarm.declaredFps.get(peerId)
     if (channelKey === undefined) return
     // TOFU pin under the CHANNEL key — the identity fp only, and ONLY when a
@@ -377,10 +378,13 @@ function handleKeys(swarm: SignalSwarm, data: unknown, peerId: string): void {
     // write `gritos:tofu`, so sweeping the signal swarm cannot leave a
     // persisted stranger directory behind (spec §12.5's no-directory
     // constraint — the room swarm pins every peer, the signal swarm pins
-    // every CONTACT).
+    // every CONTACT). Issue #122: pinned and reconciled in the SAME
+    // canonical form `openSignalChannel` uses, so a channel opened by an
+    // inbound dm before this handler ran no longer lands a differently
+    // spelled pin (display normalizes at the DmHeader boundary anyway).
     if (useAppStore.getState().dms[channelKey] === undefined) return
-    pinTofuFingerprint(channelKey, fingerprint)
-    reconcileExistingSignalChannel(channelKey, fingerprint)
+    pinTofuFingerprint(channelKey, canonicalFp)
+    reconcileExistingSignalChannel(channelKey, canonicalFp)
   })
 }
 

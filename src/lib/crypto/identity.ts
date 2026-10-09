@@ -1,4 +1,5 @@
 import type { Identity } from '../../stores/useAppStore'
+import { canonicalFingerprint } from './dm'
 import { sha256Hex } from './hashes'
 import { unwrapPrivateKey, wrapPrivateKey } from './keyVault'
 
@@ -143,6 +144,17 @@ export function formatFingerprint(digestHex: string): string {
 /** SHA-256 of the raw public key, formatted per §9.1. */
 export async function computeFingerprint(rawPublicKey: Uint8Array): Promise<string> {
   return formatFingerprint(await sha256Hex(rawPublicKey))
+}
+
+/**
+ * Normalizes any fingerprint spelling (spaced 8×4 display form, canonical
+ * 32-hex, mixed case, stale TOFU pins) into THE display form every surface
+ * renders: 8 uppercased space-separated groups of 4 hex chars (issue #122).
+ * Inputs longer than 32 hex chars are cut like `formatFingerprint`; the
+ * canonicalization first is what lets either stored form round-trip.
+ */
+export function displayFingerprint(fingerprint: string): string {
+  return formatFingerprint(canonicalFingerprint(fingerprint))
 }
 
 /**
