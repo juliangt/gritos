@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { latencyDot, type Peer, type Room, useAppStore } from '../../stores/useAppStore'
 import { canonicalFingerprint } from '../../lib/crypto/dm'
+import { displayFingerprint } from '../../lib/crypto/identity'
 import { disambiguatedNickname } from '../../lib/nickname'
 import { useRoomManager } from '../../hooks/useRoomManager'
 import { useSettingsStore } from '../../stores/useSettingsStore'
@@ -58,13 +59,17 @@ export function PeerList({ room }: { room: Room | null }) {
   if (room === null) return null
 
   // Issue #22 — for a flagged peer the DM channel holds the pinned
-  // first-seen fingerprint; it is what gets displayed and copied.
+  // first-seen fingerprint; it is what gets displayed and copied. Issue
+  // #122 — normalized to the spaced 8×4 form so the tooltip and the copied
+  // string match the DM header regardless of which form the transport
+  // stored (the mute comparisons canonicalize either way).
   const displayedFingerprint = (peer: Peer): string | null => {
     const channel = dms[peer.id]
-    if (channel !== undefined && channel.keyChanged && channel.peerFingerprint !== null) {
-      return channel.peerFingerprint
-    }
-    return peer.fingerprint
+    const fingerprint =
+      channel !== undefined && channel.keyChanged && channel.peerFingerprint !== null
+        ? channel.peerFingerprint
+        : peer.fingerprint
+    return fingerprint === null ? null : displayFingerprint(fingerprint)
   }
 
   const copyFingerprint = (peer: Peer) => {
