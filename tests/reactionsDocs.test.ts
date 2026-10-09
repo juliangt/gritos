@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
 import spec from '../docs/spec.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 
@@ -7,7 +7,7 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  * Release guard for issue #98 (emoji reactions) — the docs phase of the
  * issue. Pins the documentation to the shipped behavior:
  *
- *  1. the README's feature bullet documents the whitelist, the aggregated
+ *  1. the features reference bullet documents the whitelist, the aggregated
  *     chips, the cosmetic control-plane class, the directed DM semantics and
  *     the nothing-persisted guarantee,
  *  2. spec §7.1 adds the `react` action row (payload shape with the optional
@@ -32,18 +32,18 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  */
 
 describe('emoji reactions documentation (issue #98)', () => {
-  it('documents the reactions under a README feature bullet', () => {
-    expect(readme).toContain('**Emoji reactions (issue #98)**')
+  it('documents the reactions under a features-reference bullet', () => {
+    expect(features).toContain('**Emoji reactions (issue #98)**')
     // The fixed whitelist of seven, as shipped in REACT_EMOJIS.
-    expect(readme).toContain('seven reactions (👍 ❤️ 😂 😮 😢 🎉 👎)')
+    expect(features).toContain('seven reactions (👍 ❤️ 😂 😮 😢 🎉 👎)')
     // Cosmetic control plane: unauthenticated traffic, capped, never persisted.
-    expect(readme).toContain('cosmetic control-plane traffic')
-    expect(readme).toContain('≤50 ids')
-    expect(readme).toContain('≤30 payloads per peer per minute')
+    expect(features).toContain('cosmetic control-plane traffic')
+    expect(features).toContain('≤50 ids')
+    expect(features).toContain('≤30 payloads per peer per minute')
     // Directed DM reactions and the no-side-effects/no-persistence guarantees.
-    expect(readme).toContain('directed at the recipient')
-    expect(readme).toContain('never raise notifications or unread badges')
-    expect(readme).toContain('nothing is persisted')
+    expect(features).toContain('directed at the recipient')
+    expect(features).toContain('never raise notifications or unread badges')
+    expect(features).toContain('nothing is persisted')
   })
 
   it('adds the react action to the §7.1 table, between receipt and ping', () => {

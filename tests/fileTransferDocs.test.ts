@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
+import limitations from '../docs/limitations.md?raw'
 import spec from '../docs/spec.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 import {
@@ -45,7 +46,7 @@ import {
  *     engine, NOT in `AppState`; no new `localStorage` key) and the §11
  *     RAM limitation,
  * 10. the §12 roadmap item 1 marked implemented,
- * 11. the README feature bullet plus its Limits entry, and
+ * 11. the features-reference bullet plus its limitations entry, and
  * 12. the manual QA matrix in `docs/qa-checklist.md` (QA-103-1..10).
  *
  * The markdown is read through vite's `?raw` transform (no `node:fs` — the
@@ -55,9 +56,7 @@ import {
 
 describe('file transfer documentation (issue #103, phases 1 + 5)', () => {
   it('adds the §12.4 design note and its §12 roadmap reference', () => {
-    expect(spec).toContain(
-      '### 12.4 Design note: P2P file transfer over DataChannel (issue #103)',
-    )
+    expect(spec).toContain('### 12.4 Design note: P2P file transfer over DataChannel (issue #103)')
     expect(spec).toContain('design note in 12.4')
   })
 
@@ -79,9 +78,7 @@ describe('file transfer documentation (issue #103, phases 1 + 5)', () => {
     // Ambiguity 4: gap chunks are dropped (contiguous discipline).
     expect(spec).toContain('a gapped chunk is DROPPED')
     // The §12.2 bridge: the note below is the approved design the code followed.
-    expect(spec).toContain(
-      'What follows is the approved design note the implementation followed.',
-    )
+    expect(spec).toContain('What follows is the approved design note the implementation followed.')
   })
 
   it('pins the exact file-chunk binary framing byte layout', () => {
@@ -184,25 +181,27 @@ describe('file transfer documentation (issue #103, phases 1 + 5)', () => {
     expect(spec).toContain('the sealed meta and compression remain future work')
   })
 
-  it('documents the feature under a README bullet with consent-first, the cap and memory-only', () => {
-    expect(readme).toContain('**P2P file and image transfer (issue #103)**')
-    expect(readme).toContain('"Attach" button offers a file')
-    expect(readme).toContain('≤ 20 MB')
-    expect(readme).toContain('must be accepted before a single byte flows')
-    expect(readme).toContain('no auto-download, ever')
-    expect(readme).toContain('public rooms are DTLS-only')
-    expect(readme).toContain('explicit pre-send warning')
-    expect(readme).toContain('Memory-only end to end')
-    expect(readme).toContain('nothing touches `localStorage`/IndexedDB')
-    expect(readme).toContain('a reload loses everything')
-    expect(readme).toContain('reconnect mid-transfer fails the transfer with no resume')
+  it('documents the feature under a features-reference bullet with consent-first, the cap and memory-only', () => {
+    expect(features).toContain('**P2P file and image transfer (issue #103)**')
+    expect(features).toContain('"Attach" button offers a file')
+    expect(features).toContain('≤ 20 MB')
+    expect(features).toContain('must be accepted before a single byte flows')
+    expect(features).toContain('no auto-download, ever')
+    expect(features).toContain('public rooms are DTLS-only')
+    expect(features).toContain('explicit pre-send warning')
+    expect(features).toContain('Memory-only end to end')
+    expect(features).toContain('nothing touches `localStorage`/IndexedDB')
+    expect(features).toContain('a reload loses everything')
+    expect(features).toContain('reconnect mid-transfer fails the transfer with no resume')
   })
 
-  it('adds the RAM limitation to the README Limits section', () => {
-    expect(readme).toContain('9. **File transfers live in RAM (issue #103):**')
-    expect(readme).toContain('up to 20 MB per file')
-    expect(readme).toContain(`${MAX_TRANSFERS_PER_PEER} concurrent transfers per peer (both sides)`)
-    expect(readme).toContain('Nothing is persisted: a reload loses every transfer')
+  it('adds the RAM limitation to the limitations reference', () => {
+    expect(limitations).toContain('9. **File transfers live in RAM (issue #103):**')
+    expect(limitations).toContain('up to 20 MB per file')
+    expect(limitations).toContain(
+      `${MAX_TRANSFERS_PER_PEER} concurrent transfers per peer (both sides)`,
+    )
+    expect(limitations).toContain('Nothing is persisted: a reload loses every transfer')
   })
 
   it('ships the manual file-transfer matrix in docs/qa-checklist.md', () => {

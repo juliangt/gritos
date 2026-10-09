@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
+import limitations from '../docs/limitations.md?raw'
 import spec from '../docs/spec.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 import {
@@ -20,12 +21,12 @@ import { HISTORY_ASK_TEXT, SHARE_HISTORY_LABEL } from '../src/components/setting
  * recent messages from peers) — the docs phase of the issue. Pins the
  * documentation to the shipped behavior:
  *
- *  1. the README's feature bullet documents the two-sided consent (the
+ *  1. the features reference bullet documents the two-sided consent (the
  *     request card plus the Privacidad toggle, off by default), the 50-cap,
  *     the separator with its dimmed provenance rows, the replay guarantees
  *     (freshness bypass only, dedup both directions, zero arrival side
  *     effects), the password-room re-seal and the trust note,
- *  2. README limitation 5 is softened with exactly that opt-in caveat,
+ *  2. limitations reference item 5 is softened with exactly that opt-in caveat,
  *  3. spec §7.1 documents the `hist-req`/`hist` actions in lockstep with the
  *     shipped protocol constants (n ≤ 50, batches of ≤ 20 envelopes ≤ 48 KiB,
  *     1 req/min ask budget, 6 batches/min receive budget),
@@ -48,35 +49,37 @@ import { HISTORY_ASK_TEXT, SHARE_HISTORY_LABEL } from '../src/components/setting
  */
 
 describe('history gossip documentation (issue #102)', () => {
-  it('documents the feature under a README bullet with the two-sided consent', () => {
-    expect(readme).toContain('**Opt-in history gossip (issue #102)**')
-    expect(readme).toContain(HISTORY_ASK_TEXT)
-    expect(readme).toContain(SHARE_HISTORY_LABEL)
-    expect(readme).toContain('off by default')
-    expect(readme).toContain('at most the last 50 chat messages')
-    expect(readme).toContain(RECOVERED_SEPARATOR_TEXT)
-    expect(readme).toContain('slightly dimmed')
-    expect(readme).toContain('capped at 50 per join session')
+  it('documents the feature under a features-reference bullet with the two-sided consent', () => {
+    expect(features).toContain('**Opt-in history gossip (issue #102)**')
+    expect(features).toContain(HISTORY_ASK_TEXT)
+    expect(features).toContain(SHARE_HISTORY_LABEL)
+    expect(features).toContain('off by default')
+    expect(features).toContain('at most the last 50 chat messages')
+    expect(features).toContain(RECOVERED_SEPARATOR_TEXT)
+    expect(features).toContain('slightly dimmed')
+    expect(features).toContain('capped at 50 per join session')
   })
 
-  it('pins the README replay guarantees: bypass-only, dedup, zero side effects, re-seal, trust note', () => {
-    expect(readme).toContain('bypasses only the 5-minute freshness window')
-    expect(readme).toContain('±90 s future-skew check stays')
-    expect(readme).toContain('dedups in both directions')
-    expect(readme).toContain('never duplicates a row')
-    expect(readme).toContain('zero arrival side effects')
-    expect(readme).toContain('never notify and never receipt')
-    expect(readme).toContain('re-sealed with the room key')
-    expect(readme).toContain('same password')
-    expect(readme).toContain('Nothing is persisted anywhere')
-    expect(readme).toContain('labels provenance, not veracity')
+  it('pins the features-reference replay guarantees: bypass-only, dedup, zero side effects, re-seal, trust note', () => {
+    expect(features).toContain('bypasses only the 5-minute freshness window')
+    expect(features).toContain('±90 s future-skew check stays')
+    expect(features).toContain('dedups in both directions')
+    expect(features).toContain('never duplicates a row')
+    expect(features).toContain('zero arrival side effects')
+    expect(features).toContain('never notify and never receipt')
+    expect(features).toContain('re-sealed with the room key')
+    expect(features).toContain('same password')
+    expect(features).toContain('Nothing is persisted anywhere')
+    expect(features).toContain('labels provenance, not veracity')
   })
 
-  it('softens README limitation 5 with the opt-in caveat', () => {
-    expect(readme).toContain('5. **No server:** history is not kept for late joiners by default')
-    expect(readme).toContain('opt-in history gossip (issue #102) softens exactly that case')
-    expect(readme).toContain('only when the joiner explicitly asks AND a peer has consented')
-    expect(readme).toContain('with nothing persisted')
+  it('softens limitations-reference item 5 with the opt-in caveat', () => {
+    expect(limitations).toContain(
+      '5. **No server:** history is not kept for late joiners by default',
+    )
+    expect(limitations).toContain('opt-in history gossip (issue #102) softens exactly that case')
+    expect(limitations).toContain('only when the joiner explicitly asks AND a peer has consented')
+    expect(limitations).toContain('with nothing persisted')
   })
 
   it('documents hist-req and hist in the spec §7.1 table, in lockstep with the protocol constants', () => {

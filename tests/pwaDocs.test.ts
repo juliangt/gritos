@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
+import deployment from '../docs/deployment.md?raw'
+import security from '../docs/security.md?raw'
 import spec from '../docs/spec.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 
@@ -8,13 +10,13 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  * shell + update toast) — the docs phase of the issue. Pins the
  * documentation to the shipped behavior:
  *
- *  1. the README's feature bullet documents the installable shell with its
+ *  1. the features reference bullet documents the installable shell with its
  *     honest limits (offline = shell only, P2P still needs connectivity)
  *     and the update toast,
- *  2. the README deployment section documents the SW behavior (build-time
+ *  2. the deployment guide documents the SW behavior (build-time
  *     precache, waiting worker + toast, no silent swap, dev stays SW-free,
  *     HTTPS, iOS partial support),
- *  3. the README security model keeps the worker's promise visible:
+ *  3. the security reference keeps the worker's promise visible:
  *     same-origin caching only, no push — notifications stay tab-scoped,
  *  4. spec §10.9 records the phase-4 status (installability, offline shell,
  *     the update flow and its decision: the worker never skipWaiting()s —
@@ -29,38 +31,38 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
  */
 
 describe('PWA shell documentation (issue #104)', () => {
-  it('documents the installable offline shell under a README feature bullet, honestly', () => {
-    expect(readme).toContain('**Installable PWA with an offline shell (issue #104)**')
+  it('documents the installable offline shell under a features-reference bullet, honestly', () => {
+    expect(features).toContain('**Installable PWA with an offline shell (issue #104)**')
     // Honest scope: the shell boots offline; the P2P layer does not.
-    expect(readme).toContain('boots with **no network**')
-    expect(readme).toContain('P2P chat still needs WebRTC and the trackers')
+    expect(features).toContain('boots with **no network**')
+    expect(features).toContain('P2P chat still needs WebRTC and the trackers')
     // The update toast, with its exact wording, never a silent swap.
-    expect(readme).toContain('New version available')
-    expect(readme).toContain('the new worker waits')
+    expect(features).toContain('New version available')
+    expect(features).toContain('the new worker waits')
     // Subpath installs stay part of the promise.
-    expect(readme).toContain('GitHub Pages project sites and any subpath')
+    expect(features).toContain('GitHub Pages project sites and any subpath')
   })
 
-  it('documents the service worker in the README deployment section', () => {
-    expect(readme).toContain('**Service worker / offline shell (issue #104).**')
-    expect(readme).toContain('content-hashed precache of that exact build')
-    expect(readme).toContain('installs and **waits**')
-    expect(readme).toContain('There is no `skipWaiting` and no silent swap')
-    expect(readme).toContain('`npm run dev` stays SW-free')
-    expect(readme).toContain('Service workers share the HTTPS requirement')
+  it('documents the service worker in the deployment guide', () => {
+    expect(deployment).toContain('## Service worker / offline shell (issue #104)')
+    expect(deployment).toContain('content-hashed precache of that exact build')
+    expect(deployment).toContain('installs and **waits**')
+    expect(deployment).toContain('There is no `skipWaiting` and no silent swap')
+    expect(deployment).toContain('`npm run dev` stays SW-free')
+    expect(deployment).toContain('Service workers share the HTTPS requirement')
     // iOS partial support, named as such.
-    expect(readme).toContain('iOS Safari caveat')
-    expect(readme).toContain('best-effort/partial support')
+    expect(deployment).toContain('iOS Safari caveat')
+    expect(deployment).toContain('best-effort/partial support')
   })
 
   it('keeps the security model honest: same-origin worker, no push', () => {
-    expect(readme).toContain(
+    expect(security).toContain(
       'The offline service worker (issue #104) is same-origin by construction',
     )
-    expect(readme).toContain(
+    expect(security).toContain(
       'cross-origin traffic (the `wss:` trackers first of all) passes through untouched',
     )
-    expect(readme).toContain('adds no push channel — notifications remain tab-scoped')
+    expect(security).toContain('adds no push channel — notifications remain tab-scoped')
   })
 
   it('records the phase-4 status in spec §10.9 with the skipWaiting decision', () => {

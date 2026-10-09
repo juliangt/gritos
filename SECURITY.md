@@ -43,7 +43,7 @@ The following are documented trade-offs, not vulnerabilities (threat model: [doc
 - WebRTC metadata exposure: connected peers and trackers see your IP address; discovery leaks join timing and opaque room ids.
 - Weak room passwords: PBKDF2 raises the cost, but a trivial password remains brute-forceable offline by anyone who knows the room name.
 - _Harvest now, decrypt later_ on DMs: static-static ECDH means a future compromise of one private key decrypts the whole recorded history; the fix is planned via the forward-secrecy roadmap (issue #25).
-- Tracker availability or malice: trackers are third-party infrastructure and are documented as untrusted (see "Public trackers notice" in the README).
+- Tracker availability or malice: trackers are third-party infrastructure and are documented as untrusted (see the ["Public trackers notice"](docs/security.md#public-trackers-notice)).
 - Physical or device compromise where the app already documents the residual risk.
 
-For the complete picture, read the threat model in [docs/spec.md §9.5](docs/spec.md) plus the README's **Security model** bullet under "How it works" and its **"Limits of the model"** pointer.
+For the complete picture, read the threat model in [docs/spec.md §9.5](docs/spec.md) plus the [security model](docs/security.md) and the [limitations reference](docs/limitations.md).

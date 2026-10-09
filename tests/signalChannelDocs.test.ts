@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
+import limitations from '../docs/limitations.md?raw'
+import security from '../docs/security.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 import spec from '../docs/spec.md?raw'
 import { DM_DISCONNECTED_TEXT } from '../src/lib/feed'
@@ -37,7 +39,7 @@ import { DM_DISCONNECTED_TEXT } from '../src/lib/feed'
  * 10. the §8.1 state model: Settings.globalDm, the additive DmChannel
  *     `global?` marker, the fp-keyed `dms` key space and the memory-only
  *     presence/knock state (five-key invariant intact),
- * 11. the phase 4 user docs: the README feature bullet + softened
+ * 11. the phase 4 user docs: the features-reference bullet + softened
  *     limitation 7 + security-model disclosure, and the QA-105 manual
  *     matrix in docs/qa-checklist.md.
  *
@@ -206,28 +208,30 @@ describe('global signal channel design note (issue #105)', () => {
     expect(spec).toContain('except for two deliberate paths')
   })
 
-  it('adds the README feature bullet with the disclosed exposure and (global) marker', () => {
-    expect(readme).toContain('Global DMs by fingerprint knock (issue #105, opt-in)')
-    expect(readme).toContain('"Global DM channel" (Settings → Privacy, **off by default**')
-    expect(readme).toContain(
+  it('adds the features-reference bullet with the disclosed exposure and (global) marker', () => {
+    expect(features).toContain('Global DMs by fingerprint knock (issue #105, opt-in)')
+    expect(features).toContain('"Global DM channel" (Settings → Privacy, **off by default**')
+    expect(features).toContain(
       'joining exposes your IP, fingerprint and nickname to every opted-in peer',
     )
-    expect(readme).toContain('shows the "(global)" marker in the sidebar')
-    expect(readme).toContain('never a browsable directory')
+    expect(features).toContain('shows the "(global)" marker in the sidebar')
+    expect(features).toContain('never a browsable directory')
   })
 
-  it('softens README limitation 7 with the second path', () => {
-    expect(readme).toContain('two deliberate, non-automatic paths soften it')
-    expect(readme).toContain('the opt-in global channel (issue #105)')
-    expect(readme).toContain('knock each other by fingerprint across the shared signaling swarm')
+  it('softens limitations-reference item 7 with the second path', () => {
+    expect(limitations).toContain('two deliberate, non-automatic paths soften it')
+    expect(limitations).toContain('the opt-in global channel (issue #105)')
+    expect(limitations).toContain(
+      'knock each other by fingerprint across the shared signaling swarm',
+    )
   })
 
-  it('discloses the swarm exposure in the README security model', () => {
-    expect(readme).toContain(
+  it('discloses the swarm exposure in the security reference', () => {
+    expect(security).toContain(
       'The opt-in global DM channel (issue #105) widens the exposure honestly',
     )
-    expect(readme).toContain("a knock reveals the knocker's interest in the target fingerprint")
-    expect(readme).toContain(
+    expect(security).toContain("a knock reveals the knocker's interest in the target fingerprint")
+    expect(security).toContain(
       'the swarm never carries message content, only presence, knocks and key announces',
     )
   })

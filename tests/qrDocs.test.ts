@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import readme from '../README.md?raw'
+import features from '../docs/features.md?raw'
+import security from '../docs/security.md?raw'
 import spec from '../docs/spec.md?raw'
 import qaChecklist from '../docs/qa-checklist.md?raw'
 import packageJsonRaw from '../package.json?raw'
@@ -13,10 +14,10 @@ import {
  * Release guard for issue #100 (QR invite codes) — the docs phase of the
  * issue. Pins the documentation to the shipped behavior:
  *
- *  1. the README's feature bullet documents the QR under the share story:
+ *  1. the features reference bullet documents the QR under the share story:
  *     scan-to-join, the same password-free deep link the share button copies,
  *     the PNG download and the same-deployment caveat,
- *  2. the README's supply-chain paragraph names the new dependency with its
+ *  2. the security reference's supply-chain paragraph names the new dependency with its
  *     exact installed pin (`qrcode-generator@<pin>`, MIT, zero transitive
  *     deps) — a Dependabot bump fails here until the docs follow,
  *  3. spec §10.8 documents the share affordance and the QR popover next to
@@ -33,21 +34,21 @@ import {
  */
 
 describe('QR invite codes documentation (issue #100)', () => {
-  it('documents the QR under a README feature bullet with the scan-to-join story', () => {
-    expect(readme).toContain('**QR invite codes (issue #100)**')
-    expect(readme).toContain('stock camera')
+  it('documents the QR under a features-reference bullet with the scan-to-join story', () => {
+    expect(features).toContain('**QR invite codes (issue #100)**')
+    expect(features).toContain('stock camera')
     // Same link as the share button — and therefore never the password.
-    expect(readme).toContain('exactly the link the share button copies')
-    expect(readme).toContain('never the password')
-    expect(readme).toContain('still prompts for it (RF-05)')
+    expect(features).toContain('exactly the link the share button copies')
+    expect(features).toContain('never the password')
+    expect(features).toContain('still prompts for it (RF-05)')
   })
 
-  it('documents the PNG download and the same-deployment caveat in the README bullet', () => {
-    expect(readme).toContain(QR_DOWNLOAD_BUTTON)
-    expect(readme).toContain('fixed near-black-on-white')
-    expect(readme).toContain('same deployment')
-    expect(readme).toContain('`VITE_TRYSTERO_APP_ID`')
-    expect(readme).toContain(`"${QR_SAME_INSTALL_NOTE}"`)
+  it('documents the PNG download and the same-deployment caveat in the features bullet', () => {
+    expect(features).toContain(QR_DOWNLOAD_BUTTON)
+    expect(features).toContain('fixed near-black-on-white')
+    expect(features).toContain('same deployment')
+    expect(features).toContain('`VITE_TRYSTERO_APP_ID`')
+    expect(features).toContain(`"${QR_SAME_INSTALL_NOTE}"`)
   })
 
   it('names the new dependency with its exact installed pin in the supply-chain paragraph', () => {
@@ -58,9 +59,9 @@ describe('QR invite codes documentation (issue #100)', () => {
     expect(pin).toMatch(/^\d+\.\d+\.\d+$/)
     // Lockstep with the qr.test.ts supply-chain guard: bumping the pin
     // without re-reading the docs fails here.
-    expect(readme).toContain(`qrcode-generator@${pin}`)
-    expect(readme).toContain('MIT')
-    expect(readme).toContain('zero transitive dependencies')
+    expect(security).toContain(`qrcode-generator@${pin}`)
+    expect(security).toContain('MIT')
+    expect(security).toContain('zero transitive dependencies')
   })
 
   it('documents the share flow and the QR affordance in spec §10.8', () => {
