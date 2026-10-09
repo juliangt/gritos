@@ -301,7 +301,7 @@ describe('manualDmManager (issue #97, spec §12.2)', () => {
 
   it('a drop after connect mirrors the room disconnected state, history intact', async () => {
     const { key, pair } = await connectThroughManager()
-    await sendManualDm(key, 'antes de la caída')
+    await sendManualDm(key, 'before the drop')
     await flushCrypto()
 
     dropPair(pair)
@@ -312,7 +312,7 @@ describe('manualDmManager (issue #97, spec §12.2)', () => {
     const channel = useAppStore.getState().manualDms[key]
     expect(channel?.messages).toHaveLength(1)
     // A dropped channel refuses sends (single-use engine, §12.2).
-    expect(await sendManualDm(key, 'tras la caída')).toBe(false)
+    expect(await sendManualDm(key, 'after the drop')).toBe(false)
   })
 
   it('cancel disposes the pending engine and leaves no store trace', async () => {
@@ -407,8 +407,8 @@ describe('manualDmManager (issue #97, spec §12.2)', () => {
 
     await regenerateSessionIdentity()
 
-    // The channel dies with its keys: RF-04 disconnected state («El par se
-    // ha desconectado»), history in memory, sends refused. The remote pin
+    // The channel dies with its keys: RF-04 disconnected state ("The peer
+    // has disconnected"), history in memory, sends refused. The remote pin
     // (a public value) survives the regeneration, like the room pins.
     expect(pair.pcA.closed).toBe(true)
     const channel = useAppStore.getState().manualDms[key]
@@ -434,7 +434,7 @@ describe('manualDmManager (issue #97, spec §12.2)', () => {
     expect(pair.pcA.closed).toBe(true)
     expect(useAppStore.getState().manualDms).toEqual({})
     expect(useAppStore.getState().activeView).toBeNull()
-    expect(await sendManualDm(key, 'tras el pánico')).toBe(false)
+    expect(await sendManualDm(key, 'after the panic')).toBe(false)
     expect(reload).not.toHaveBeenCalled()
   })
 })

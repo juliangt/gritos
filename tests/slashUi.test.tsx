@@ -158,7 +158,7 @@ describe('Sidebar join-popover prefill (/room password flow seam)', () => {
 })
 
 describe('/me rendering convention (MessageItem)', () => {
-  it('renders an isAction row as the italic «*nick acción*» line, no Markdown pass', () => {
+  it('renders an isAction row as the italic "*nick action*" line, no Markdown pass', () => {
     render(
       <MessageItem
         message={userMessage({ text: 'se estira **despacio**', isAction: true })}

@@ -328,7 +328,7 @@ describe('receipts and ping/pong stay honest (issue #95)', () => {
     useSettingsStore.getState().muteFingerprint(A.fingerprint, 'zorro-bravo')
 
     // Receipts flip own messages to ✓✓ regardless of the mute.
-    const envelope = manager.sendChat(roomId, 'mía')
+    const envelope = manager.sendChat(roomId, 'mine')
     expect(envelope).not.toBeNull()
     room.receive('receipt', { ids: [envelope?.id] }, A.id)
     expect(storedRoom(roomId).messages[0]?.status).toBe('delivered')

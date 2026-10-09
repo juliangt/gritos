@@ -33,13 +33,13 @@ describe('slash commands documentation (issue #99)', () => {
     expect(readme).toContain('**Slash commands (issue #99)**')
     expect(readme).toContain('keyboard-first command line')
     expect(readme).toContain('never sent')
-    expect(readme).toContain('`\\/hola`')
+    expect(readme).toContain('`\\/hello`')
     expect(readme).toContain('while peers see plain text')
     expect(readme).toContain('`/help`')
   })
 
   it('documents every verb in the spec §10.7 entry, in lockstep with the parser table', () => {
-    expect(spec).toContain('### 10.7 Comandos de barra (issue #99)')
+    expect(spec).toContain('### 10.7 Slash commands (issue #99)')
     for (const def of SLASH_COMMANDS) {
       expect(spec).toContain(def.usage)
       expect(readme).toContain(`/${def.verb}`)
@@ -47,21 +47,21 @@ describe('slash commands documentation (issue #99)', () => {
   })
 
   it('pins the unknown-verb guarantee and the backslash escape hatch in the spec', () => {
-    expect(spec).toContain('Verbo desconocido jamás se envía')
+    expect(spec).toContain('An unknown verb is never sent')
     expect(spec).toContain('Unknown command — /help')
-    expect(spec).toContain('\\/hola` envía «/hola»')
+    expect(spec).toContain('\\/hello` sends "/hello"')
   })
 
   it('pins the ARIA combobox autocomplete pattern in the spec', () => {
-    expect(spec).toContain('patrón ARIA combobox')
+    expect(spec).toContain('ARIA combobox pattern')
     expect(spec).toContain('aria-activedescendant')
-    expect(spec).toContain('el foco no abandona jamás el textarea')
+    expect(spec).toContain('focus never leaves the textarea')
   })
 
   it('pins the /me asymmetry, /room popover arming and memory-only /clear in the spec', () => {
-    expect(spec).toContain('los pares ven texto plano')
-    expect(spec).toContain('arma la oferta de contraseña')
-    expect(spec).toContain('los pares conservan su historial')
+    expect(spec).toContain('peers see plain text')
+    expect(spec).toContain('arms the password offer')
+    expect(spec).toContain('peers keep their history')
   })
 
   it('ships the manual slash-command matrix in docs/qa-checklist.md', () => {

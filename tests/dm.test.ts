@@ -111,8 +111,8 @@ describe('DM key derivation (spec §9.2)', () => {
     const keyA = await deriveDmKey(A.keypair.privateKey, B.rawPublicKey, A.fingerprint, B.fingerprint)
     const keyB = await deriveDmKey(B.keypair.privateKey, A.rawPublicKey, B.fingerprint, announced)
 
-    const sealed = await encryptDm(keyA, 'mismos orígenes')
-    await expect(decryptDm(keyB, sealed)).resolves.toBe('mismos orígenes')
+    const sealed = await encryptDm(keyA, 'same origins')
+    await expect(decryptDm(keyB, sealed)).resolves.toBe('same origins')
   })
 
   it('derives different keys for different fingerprint pairs', async () => {
@@ -128,7 +128,7 @@ describe('DM key derivation (spec §9.2)', () => {
 describe('encrypt/decrypt roundtrip (§9.2 step 4)', () => {
   it('roundtrips plaintext through base64(IV ‖ ciphertext)', async () => {
     const key = await deriveDmKey(A.keypair.privateKey, B.rawPublicKey, A.fingerprint, B.fingerprint)
-    const text = '¡hola **mundo**! — utf-8 ✓ emoji 🙈'
+    const text = 'café naïve — utf-8 ✓ emoji 🙈'
     const sealed = await encryptDm(key, text)
 
     // Wire shape: base64 payload of IV ‖ ct, plus the §7.2 iv field.

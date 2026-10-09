@@ -106,20 +106,20 @@ describe('mention matcher (M2 reuse, RF-09)', () => {
     expect(mentionsNickname('ey @luna-cauta,', 'luna-cauta')).toBe(true)
     expect(mentionsNickname('hola @luna-cautax', 'luna-cauta')).toBe(false)
     expect(mentionsNickname('correo x@luna-cauta', 'luna-cauta')).toBe(false)
-    expect(mentionsNickname('sin mención', 'luna-cauta')).toBe(false)
+    expect(mentionsNickname('no mention here', 'luna-cauta')).toBe(false)
     expect(mentionsNickname('hola @luna-cauta', '')).toBe(false)
   })
 })
 
 describe('notifyIncomingDm (full M5 gate)', () => {
-  const dm = { peerId: 'peer-1', nick: 'luna-cauta', text: '¿ahí?' }
+  const dm = { peerId: 'peer-1', nick: 'luna-cauta', text: 'you there?' }
 
   it('shows the notification when hidden AND granted AND toggled on', () => {
     stubEnvironment({ hidden: true, permission: 'granted', notificationsSetting: true })
     expect(notifyIncomingDm(dm)).toBe(true)
     expect(FakeNotification.instances).toHaveLength(1)
     expect(FakeNotification.instances[0]?.title).toBe('gritos — DM from luna-cauta')
-    expect(FakeNotification.instances[0]?.options?.body).toBe('luna-cauta: ¿ahí?')
+    expect(FakeNotification.instances[0]?.options?.body).toBe('luna-cauta: you there?')
   })
 
   it('does not fire for a visible tab', () => {

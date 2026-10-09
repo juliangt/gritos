@@ -35,7 +35,7 @@ describe('PWA shell documentation (issue #104)', () => {
     expect(readme).toContain('boots with **no network**')
     expect(readme).toContain('P2P chat still needs WebRTC and the trackers')
     // The update toast, with its exact wording, never a silent swap.
-    expect(readme).toContain('Nueva versión disponible')
+    expect(readme).toContain('New version available')
     expect(readme).toContain('the new worker waits')
     // Subpath installs stay part of the promise.
     expect(readme).toContain('GitHub Pages project sites and any subpath')
@@ -64,29 +64,29 @@ describe('PWA shell documentation (issue #104)', () => {
   })
 
   it('records the phase-4 status in spec §10.9 with the skipWaiting decision', () => {
-    expect(spec).toContain('### 10.9 Instalación PWA y flujo de actualización (issue #104)')
-    expect(spec).toContain('**Estado: implementado (issue #104).**')
+    expect(spec).toContain('### 10.9 PWA installation and update flow (issue #104)')
+    expect(spec).toContain('**Status: implemented (issue #104).**')
     // The decision: waiting is the update flow's whole mechanism.
-    expect(spec).toContain('El worker jamás llama `skipWaiting()`')
+    expect(spec).toContain('The worker never calls `skipWaiting()`')
     // The issue's exact toast wording, role and session-only dismiss.
-    expect(spec).toContain('«Nueva versión disponible — [Recargar]»')
+    expect(spec).toContain('"New version available — [Reload]"')
     expect(spec).toContain('role="status"')
-    expect(spec).toContain('Descartar el toast vale solo por la sesión')
+    expect(spec).toContain('Dismissing the toast lasts only for the session')
     // No auto-swap: no controllerchange listener, on purpose.
-    expect(spec).toContain('no hay `controllerchange` a la escucha a propósito')
+    expect(spec).toContain('there is deliberately no `controllerchange` listener')
     // The offline shell stays honest and same-origin only.
-    expect(spec).toContain('El shell offline es **honesto**')
-    expect(spec).toContain('jamás se cachea')
+    expect(spec).toContain('The offline shell is **honest**')
+    expect(spec).toContain('is never cached')
     // Notifications stay tab-scoped — the SW adds no push.
-    expect(spec).toContain('sin push, sin background sync')
+    expect(spec).toContain('no push, no background sync')
   })
 
   it('marks the roadmap item implemented and grows the iOS limitation (spec §12, §11.10)', () => {
     expect(spec).toContain(
-      'PWA (service worker, iconos, offline shell; issue #104): **implementado**',
+      'PWA (service worker, icons, offline shell; issue #104): **implemented**',
     )
-    expect(spec).toContain('lo offline es SOLO el shell')
-    expect(spec).toContain('10. **Soporte PWA parcial en iOS (issue #104, 10.9)**')
+    expect(spec).toContain('offline is the SHELL ONLY')
+    expect(spec).toContain('10. **Partial PWA support on iOS (issue #104, 10.9)**')
   })
 
   it('ships the install/offline/update manual matrix in docs/qa-checklist.md', () => {

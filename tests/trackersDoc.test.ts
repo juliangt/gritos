@@ -47,6 +47,6 @@ describe('tracker documentation (issue #51)', () => {
   })
 
   it('runbook names the tracker-error banner', () => {
-    expect(runbook).toContain('Sin acceso a trackers')
+    expect(runbook).toContain('No tracker access')
   })
 })

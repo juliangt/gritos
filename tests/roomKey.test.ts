@@ -63,7 +63,7 @@ describe('deriveRoomKey (spec §9.3 step 2)', () => {
   it('derives the SAME key in different clients for the same password+name', async () => {
     // The keys are non-extractable; equality is proven through AES-GCM: what
     // one client seals, the other opens.
-    const [keyA, keyB] = await deriveTwice('contraseña-compartida', 'sala-secreta')
+    const [keyA, keyB] = await deriveTwice('shared-password', 'secret-room')
     const sealed = await encryptRoomMessage(keyA, 'hola sala')
     await expect(decryptRoomMessage(keyB, sealed)).resolves.toBe('hola sala')
   })
@@ -81,8 +81,8 @@ describe('deriveRoomKey (spec §9.3 step 2)', () => {
     expect(saltB).not.toEqual(saltA)
 
     const [keyA, keyB] = await Promise.all([
-      deriveRoomKey('misma-contraseña', 'sala'),
-      deriveRoomKey('misma-contraseña', 'otra'),
+      deriveRoomKey('same-password', 'room'),
+      deriveRoomKey('same-password', 'other'),
     ])
     const sealed = await encryptRoomMessage(keyA, 'contenido')
     await expect(decryptRoomMessage(keyB, sealed)).rejects.toThrowError()
@@ -90,8 +90,8 @@ describe('deriveRoomKey (spec §9.3 step 2)', () => {
 
   it('is case- and whitespace-sensitive in the password', async () => {
     const [keyA, keyB] = await Promise.all([
-      deriveRoomKey('Contraseña', 'sala'),
-      deriveRoomKey('contraseña', 'sala'),
+      deriveRoomKey('Password', 'room'),
+      deriveRoomKey('password', 'room'),
     ])
     const sealed = await encryptRoomMessage(keyA, 'x')
     await expect(decryptRoomMessage(keyB, sealed)).rejects.toThrowError()
@@ -115,7 +115,7 @@ describe('deriveRoomKey (spec §9.3 step 2)', () => {
 describe('encrypt/decrypt roundtrip (spec §9.3 step 3)', () => {
   it('roundtrips plaintext through base64(IV ‖ ciphertext)', async () => {
     const key = await deriveRoomKey('pw', 'sala')
-    const text = '¡hola **sala**! — utf-8 ✓ emoji 🙈'
+    const text = '**bold** café — utf-8 ✓ emoji 🙈'
     const sealed = await encryptRoomMessage(key, text)
 
     // Wire shape identical to the DM format: base64 blob of IV ‖ ct plus the
@@ -133,8 +133,8 @@ describe('encrypt/decrypt roundtrip (spec §9.3 step 3)', () => {
     const roomSealed = await encryptRoomMessage(key, 'mismo formato')
     // A room payload decrypts through the DM helper and vice versa.
     await expect(decryptDm(key, roomSealed)).resolves.toBe('mismo formato')
-    const dmSealed = await encryptDm(key, 'y al revés')
-    await expect(decryptRoomMessage(key, dmSealed as SealedPayload)).resolves.toBe('y al revés')
+    const dmSealed = await encryptDm(key, 'and back again')
+    await expect(decryptRoomMessage(key, dmSealed as SealedPayload)).resolves.toBe('and back again')
   })
 
   it('uses a fresh random IV per message', async () => {
@@ -172,7 +172,7 @@ describe('encrypt/decrypt roundtrip (spec §9.3 step 3)', () => {
 describe('identity-regeneration invariance (RF-05)', () => {
   it('room keys are a function of name+password only: regenerating the identity changes nothing', async () => {
     const keyBefore = await deriveRoomKey('pw-de-sala', 'sala-estable')
-    const sealedBefore = await encryptRoomMessage(keyBefore, 'sobrevive a la regeneración')
+    const sealedBefore = await encryptRoomMessage(keyBefore, 'survives the regeneration')
 
     // Regenerate the cryptographic identity (new ECDH keypair + fingerprint).
     const regenerated = await regenerateIdentity('nuevo-apodo')
@@ -182,7 +182,7 @@ describe('identity-regeneration invariance (RF-05)', () => {
     // Same key material: the pre-regeneration message still opens, and a
     // post-regeneration seal is identical in shape.
     await expect(decryptRoomMessage(keyAfter, sealedBefore)).resolves.toBe(
-      'sobrevive a la regeneración',
+      'survives the regeneration',
     )
     const sealedAfter = await encryptRoomMessage(keyAfter, 'tras regenerar')
     await expect(decryptRoomMessage(keyBefore, sealedAfter)).resolves.toBe('tras regenerar')

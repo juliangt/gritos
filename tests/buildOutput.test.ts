@@ -65,7 +65,7 @@ import swSource from '../public/sw.js?raw'
  *   phase-2 tests above).
  * - Issue #104 (phase 4): the update flow ships as designed. The worker
  *   never calls skipWaiting() (a new deploy waits for the toast's
- *   «Recargar» reload, which is what activates it and triggers the
+ *   [Reload] click, which is what activates it and triggers the
  *   activate-time cleanup), and the bundle carries the waiting-worker
  *   detection (updatefound/statechange) plus the App-level toast with its
  *   exact wording — string literals survive minification, so their
@@ -826,8 +826,8 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
 
   it('leaves new versions waiting for the toast reload — no skipWaiting call anywhere (issue #104, phase 4)', () => {
     // The phase-4 decision: the worker never calls skipWaiting(), so a new
-    // deploy installs and WAITS while the page's toast («Nueva versión
-    // disponible — [Recargar]») offers the swap; location.reload() is what
+    // deploy installs and WAITS while the page's toast ("New version
+    // available — [Reload]") offers the swap; location.reload() is what
     // activates it. Pinning the shipped dist copy AND the public/ source it
     // is generated from: a re-added skipWaiting() would swap the shell
     // under a live chat session with no consent, exactly what the toast

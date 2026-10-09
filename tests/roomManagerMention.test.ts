@@ -71,7 +71,7 @@ describe('mention seam (RF-09)', () => {
     const unsubscribe = manager.onMentionReceived(listener)
 
     const ownNick = manager.getSessionIdentity()?.identity.nickname as string
-    room.receive('chat', chatEnvelope({ body: 'sin mención' }), 'peer-1')
+    room.receive('chat', chatEnvelope({ body: 'no mention' }), 'peer-1')
     room.receive('chat', chatEnvelope({ body: `@${ownNick}extra` }), 'peer-1') // no word boundary
     room.receive('chat', chatEnvelope({ body: `correo x@${ownNick}` }), 'peer-1')
 

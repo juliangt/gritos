@@ -64,11 +64,11 @@ describe('v2 key derivation (spec §12.1)', () => {
 
     // Non-extractable keys: equality is proven through AES-GCM roundtrips
     // in both directions.
-    const sealed = await encryptDm(keyA, 'secreto efímero')
-    await expect(decryptDm(keyB, sealed)).resolves.toBe('secreto efímero')
+    const sealed = await encryptDm(keyA, 'ephemeral secret')
+    await expect(decryptDm(keyB, sealed)).resolves.toBe('ephemeral secret')
 
-    const reply = await encryptDm(keyB, 'respuesta efímera')
-    await expect(decryptDm(keyA, reply)).resolves.toBe('respuesta efímera')
+    const reply = await encryptDm(keyB, 'ephemeral reply')
+    await expect(decryptDm(keyA, reply)).resolves.toBe('ephemeral reply')
   })
 
   it('derives the same salt under ANY role swap of the four fingerprints', async () => {
@@ -124,7 +124,7 @@ describe('v2 key derivation (spec §12.1)', () => {
       sessionA.fingerprint,
       sessionB.fingerprint,
     )
-    const sealed = await encryptDm(honestKey, 'integridad efímera')
+    const sealed = await encryptDm(honestKey, 'ephemeral integrity')
 
     // An attacker substitutes their own ephemeral key for the peer's: any
     // derivation that mixes the stranger's fingerprint into the salt lands

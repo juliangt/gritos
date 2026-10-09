@@ -447,7 +447,7 @@ describe('Contact by fingerprint (knock out)', () => {
       peer.ephFingerprint,
       canon(await computeFingerprint(myEphRaw)),
     )
-    const sealed = await encryptDm(sharedKey, 'hola señal')
+    const sealed = await encryptDm(sharedKey, 'hello signal')
     room.receive(
       'dm',
       createEnvelope({
@@ -464,7 +464,7 @@ describe('Contact by fingerprint (knock out)', () => {
     )
     await flushCrypto()
     await waitFor(() => {
-      expect(channelMessages(canon(peer.fingerprint)).some((m) => m.text === 'hola señal')).toBe(
+      expect(channelMessages(canon(peer.fingerprint)).some((m) => m.text === 'hello signal')).toBe(
         true,
       )
     })

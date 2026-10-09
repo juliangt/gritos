@@ -18,7 +18,7 @@ describe('parseSlashCommand — non-command input', () => {
   it('returns null for plain chat text, including the empty string', () => {
     expect(parseSlashCommand('hola')).toBeNull()
     expect(parseSlashCommand('')).toBeNull()
-    expect(parseSlashCommand('¿probamos? /help')).toBeNull()
+    expect(parseSlashCommand('shall we? /help')).toBeNull()
   })
 
   it('requires the slash to be the first character', () => {
@@ -213,7 +213,7 @@ describe('parseSlashCommand — /room via the real RF-02 rules', () => {
   })
 
   it('rejects non-normalizable names with invalid-room, quoting the raw argument', () => {
-    for (const bad of ['mal nombre!', 'ñ', 'sala pigeon🐦']) {
+    for (const bad of ['bad name!', 'ñ', 'room pigeon🐦']) {
       expect(parseSlashCommand(`/room ${bad}`)).toEqual({
         kind: 'error',
         verb: 'room',

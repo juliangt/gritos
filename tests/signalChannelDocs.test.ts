@@ -49,9 +49,9 @@ import { DM_DISCONNECTED_TEXT } from '../src/lib/feed'
 describe('global signal channel design note (issue #105)', () => {
   it('adds the §12.5 design note and its §12 roadmap reference', () => {
     expect(spec).toContain(
-      '### 12.5 Nota de diseño: canal global de señalización — golpes por huella (issue #105)',
+      '### 12.5 Design note: global signaling channel — fingerprint knocks (issue #105)',
     )
-    expect(spec).toContain('nota de diseño en 12.5')
+    expect(spec).toContain('design note in 12.5')
   })
 
   it('pins the single home of the constants and the well-known swarm name', () => {
@@ -69,7 +69,7 @@ describe('global signal channel design note (issue #105)', () => {
     expect(spec).toContain("`knock {type:'knock', from:{fp, nick}, note?}`")
     expect(spec).toContain('`knock-ack {accept, fp}`')
     expect(spec).toContain('`whoami {nick, fp}`')
-    expect(spec).toContain('Sin campo de contenido')
+    expect(spec).toContain('No content field')
     expect(spec).toContain('`keys` / `ephkeys`')
   })
 
@@ -77,14 +77,14 @@ describe('global signal channel design note (issue #105)', () => {
     expect(spec).toContain('`parseKnock`')
     expect(spec).toContain('`parseWhoami`')
     expect(spec).toContain('`parseKnockAck`')
-    expect(spec).toContain('descarta el payload ENTERO y en silencio')
+    expect(spec).toContain('discards the ENTIRE payload silently')
     expect(spec).toContain('NOTE_MAX_LENGTH')
   })
 
   it('pins the caps: presence 100 LRU and 5 knocks per peer per minute', () => {
     expect(spec).toContain('MAX_SIGNAL_PRESENCE = 100')
     expect(spec).toContain('KNOCK_RATE_CAP = 5')
-    expect(spec).toContain('expulsión LRU')
+    expect(spec).toContain('LRU eviction')
   })
 
   it('pins the default-off lifecycle bound to Settings.globalDm', () => {
@@ -94,121 +94,121 @@ describe('global signal channel design note (issue #105)', () => {
   })
 
   it('pins the teardown contract: leaving destroys swarm state and signal-backed DMs', () => {
-    expect(spec).toContain('cualquier canal DM respaldado por él')
-    expect(spec).toContain(`«${DM_DISCONNECTED_TEXT}»`)
+    expect(spec).toContain('any DM channel backed by it')
+    expect(spec).toContain(`"${DM_DISCONNECTED_TEXT}"`)
   })
 
   it('pins the DmTransport abstraction (one interface, same DmChannel slice)', () => {
     expect(spec).toContain('DmTransport')
-    expect(spec).toContain('alimentan la MISMA porción `DmChannel`')
-    expect(spec).toContain('derivación v2 SIN cambios (9.2)')
+    expect(spec).toContain('feed the SAME `DmChannel` slice')
+    expect(spec).toContain('the v2 derivation UNCHANGED (9.2)')
   })
 
   it('pins the §9.5 addition: exposure, default-off mitigation, knock interest', () => {
-    expect(spec).toContain('Exposición del canal global de señalización (issue #105, 12.5)')
-    expect(spec).toContain('cada par opt-in ve tu IP')
-    expect(spec).toContain('desactivado por defecto')
-    expect(spec).toContain('revela además el interés del golpeador')
+    expect(spec).toContain('Global signaling channel exposure (issue #105, 12.5)')
+    expect(spec).toContain('every opt-in peer sees your IP')
+    expect(spec).toContain('off by default')
+    expect(spec).toContain("reveals the knocker's interest")
   })
 
   it('pins the #contacto deep-link parameter and its parse rules', () => {
     expect(spec).toContain('`#contacto=<fp>`')
-    expect(spec).toContain('MISMA disciplina que `#sala=`')
-    expect(spec).toContain('no canonicalice a 32 hex no enruta')
+    expect(spec).toContain('SAME discipline as `#sala=`')
+    expect(spec).toContain('does not canonicalize to 32 hex does not route')
   })
 
   it('pins the exact consent card of the contact flow', () => {
-    expect(spec).toContain('«@nick quiere abrir un DM contigo — [Aceptar] [Rechazar] [Silenciar]»')
+    expect(spec).toContain('"@nick wants to open a DM with you — [Accept] [Decline] [Mute]"')
   })
 
   it('pins rejected senders not remembered and the mute gate before parsing', () => {
-    expect(spec).toContain('no recuerda al rechazado')
-    expect(spec).toContain('se descarta antes de parsear')
+    expect(spec).toContain('does not remember the rejected sender')
+    expect(spec).toContain('is discarded before parsing')
   })
 
   it('pins the (global) DmList marker next to the manual (sin sala) precedent', () => {
-    expect(spec).toContain('«(global)»')
-    expect(spec).toContain('«(sin sala)»')
+    expect(spec).toContain('"(global)"')
+    expect(spec).toContain('"(no room)"')
   })
 
   it('pins the mixed-version stance: old peers never join; §12.3 spike applies', () => {
-    expect(spec).toContain('jamás se une')
-    expect(spec).toContain('spike de 12.3')
+    expect(spec).toContain('never joins')
+    expect(spec).toContain("the 12.3 spike's conclusion")
   })
 
   it('flips the §12.5 status to implemented with the shipped homes', () => {
-    expect(spec).toContain('**Estado: implementado (issue #105).**')
-    expect(spec).toContain('el gestor del enjambre en `lib/p2p/signalChannel.ts`')
-    expect(spec).toContain('la interfaz `DmTransport` en `lib/p2p/dmTransport.ts`')
-    expect(spec).toContain('la entrada «+ contacto» de `DmList`')
-    expect(spec).toContain('«Mi contacto»')
-    expect(spec).toContain('«Contacto por huella»')
+    expect(spec).toContain('**Status: implemented (issue #105).**')
+    expect(spec).toContain('the swarm manager in `lib/p2p/signalChannel.ts`')
+    expect(spec).toContain('the `DmTransport` interface in `lib/p2p/dmTransport.ts`')
+    expect(spec).toContain('the "+ contact" entry of `DmList`')
+    expect(spec).toContain('"My contact"')
+    expect(spec).toContain('"Contact by fingerprint"')
   })
 
   it('pins the four ambiguities the implementation resolved', () => {
     // (1) fp-keyed channels in the SAME dms slice with the additive marker.
     expect(spec).toContain(
-      'la MISMA porción `dms` del store (8.1) con la huella canónica como clave y el marcador aditivo `global: true`',
+      'the SAME `dms` slice of the store (8.1) keyed by the canonical fingerprint with the additive `global: true` marker',
     )
-    expect(spec).toContain('peerIds Trystero de ~46 caracteres contra 32 hex')
+    expect(spec).toContain('Trystero peerIds of ~46 characters versus 32 hex')
     // (2) pins only for OPENED channels: presence never writes gritos:tofu —
     // the swarm cannot become a persisted stranger directory.
-    expect(spec).toContain('los pins TOFU (8.2) solo se escriben al ABRIR canal')
-    expect(spec).toContain('la presencia sola jamás toca `gritos:tofu`')
+    expect(spec).toContain('the TOFU pins (8.2) are only written when a channel is OPENED')
+    expect(spec).toContain('presence alone never touches `gritos:tofu`')
     // (3) non-blocking consent cards (a status strip, never a modal).
-    expect(spec).toContain('las tarjetas de consentimiento son NO bloqueantes')
+    expect(spec).toContain('the consent cards are NON-blocking')
     // (4) the onKnockResolved seam limitation: resolves once per acked
     // knock, after the channel opens; unanswered knocks never resolve.
-    expect(spec).toContain('la costura `onKnockResolved` resuelve UNA vez por golpe con acuse')
-    expect(spec).toContain('sin timeout de cable')
+    expect(spec).toContain('the `onKnockResolved` seam resolves ONCE per acknowledged knock')
+    expect(spec).toContain('no wire timeout')
   })
 
   it('documents the three signal actions as §7.1 rows scoped to the signal swarm', () => {
     expect(spec).toContain(
-      'Las tres acciones del canal global de señal (issue #105: `whoami`, `knock`, `knock-ack`) se listan aquí por completitud',
+      'The three actions of the global signal channel (issue #105: `whoami`, `knock`, `knock-ack`) are listed here for completeness',
     )
     expect(spec).toContain(
-      'enjambre de señal global (12.5), no los de sala: difusión al conectar y al cambiar apodo',
+      'the global signal swarm (12.5), not the room ones: broadcast on connect and on nickname change',
     )
     expect(spec).toContain(
-      'dirigido al par destino DENTRO del enjambre de señal global (`target`; 12.5)',
+      'directed at the destination peer INSIDE the global signal swarm (`target`; 12.5)',
     )
-    expect(spec).toContain('dirigido de vuelta al golpeador (`target`; 12.5)')
+    expect(spec).toContain('directed back at the knocker (`target`; 12.5)')
     // The rows carry the caps and the mute gate.
-    expect(spec).toContain('puerta de silenciado ANTES de parsear')
-    expect(spec).toContain('tope de `KNOCK_RATE_CAP = 5` golpes RECIBIDOS por par y minuto')
+    expect(spec).toContain('mute gate BEFORE parsing')
+    expect(spec).toContain('a cap of `KNOCK_RATE_CAP = 5` RECEIVED knocks per peer per minute')
   })
 
   it('pins the §8.1 state model: globalDm, the global? marker, memory-only swarm state', () => {
     expect(spec).toContain('globalDm: boolean // issue #105')
     expect(spec).toContain('global?: boolean // issue #105')
     expect(spec).toContain(
-      'key: peerId (canales de sala) | huella canónica (canales globales, 12.5 — namespaces disjuntos)',
+      'key: peerId (room channels) | canonical fingerprint (global channels, 12.5 — disjoint namespaces)',
     )
     expect(spec).toContain(
-      'Canal global de señal (issue #105, 12.5): los canales respaldados por él viven en ESTA porción `dms`',
+      'Global signal channel (issue #105, 12.5): the channels backed by it live in THIS `dms` slice',
     )
-    expect(spec).toContain('el invariante de las cinco claves `gritos:*` (8.2) queda intacto')
+    expect(spec).toContain('the five-`gritos:*`-keys invariant (8.2) stays intact')
     expect(spec).toContain(
-      'los pins TOFU de los pares con canal ABIERTO (8.2, bajo su huella canónica',
+      'the TOFU pins of the peers with an OPEN channel (8.2, under their canonical fingerprint',
     )
   })
 
   it('marks §12 roadmap item 3 implemented and un-stales item 8', () => {
     expect(spec).toContain(
-      '3. Canal global de DMs (sala de señalización dedicada) para DMs sin sala compartida (issue #105; nota de diseño en 12.5): **implementado**',
+      '3. Global DM channel (a dedicated signaling room) for DMs with no shared room (issue #105; design note in 12.5): **implemented**',
     )
-    expect(spec).toContain('canal claveado por huella y marcado «(global)» en DmList')
+    expect(spec).toContain('a fingerprint-keyed channel marked "(global)" in DmList')
     expect(spec).toContain(
-      'complementario del ítem 3 (canal global de señalización), ya implementado este también',
+      'complementary to item 3 (the global signaling channel), also already implemented',
     )
     // §11 limitation 7 names both softening paths.
-    expect(spec).toContain('salvo dos caminos deliberados')
+    expect(spec).toContain('except for two deliberate paths')
   })
 
   it('adds the README feature bullet with the disclosed exposure and (global) marker', () => {
     expect(readme).toContain('Global DMs by fingerprint knock (issue #105, opt-in)')
-    expect(readme).toContain('"Canal global de DM" (Ajustes → Privacidad, **off by default**')
+    expect(readme).toContain('"Global DM channel" (Settings → Privacy, **off by default**')
     expect(readme).toContain(
       'joining exposes your IP, fingerprint and nickname to every opted-in peer',
     )
@@ -257,6 +257,6 @@ describe('global signal channel design note (issue #105)', () => {
     expect(qaChecklist).toContain('the settings reset tears the swarm down')
     // Room DMs unaffected; the (global) DmList marker.
     expect(qaChecklist).toContain('room discovery and room DMs unaffected')
-    expect(qaChecklist).toContain('the global channel shows its «(global)» marker')
+    expect(qaChecklist).toContain('the global channel shows its "(global)" marker')
   })
 })

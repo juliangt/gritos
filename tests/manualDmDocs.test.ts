@@ -36,32 +36,32 @@ import qaChecklist from '../docs/qa-checklist.md?raw'
 describe('manual DM design note documentation (issue #97)', () => {
   it('adds the §12.2 design note and its §12 roadmap entry', () => {
     expect(spec).toContain(
-      '### 12.2 Nota de diseño: DMs sin trackers — conexión manual de pares (issue #97)',
+      '### 12.2 Design note: trackerless DMs — manual peer connection (issue #97)',
     )
-    expect(spec).toContain('nota de diseño en 12.2')
+    expect(spec).toContain('design note in 12.2')
   })
 
   it('pins the RTCPeerConnection architecture rule (mirror of the roomManager rule)', () => {
-    expect(spec).toContain('`RTCPeerConnection` solo puede aparecer en `lib/p2p/manualPeer.ts`')
+    expect(spec).toContain('`RTCPeerConnection` may only appear in `lib/p2p/manualPeer.ts`')
   })
 
   it('pins the no-relay non-goal for manual peers', () => {
-    expect(spec).toContain('Ningún par manual actúa de relé')
+    expect(spec).toContain('No manual peer acts as a relay')
   })
 
   it('pins the fingerprint-keyed TOFU decision under the same gritos:tofu key', () => {
-    expect(spec).toContain('prefijo reservado `manual:`')
+    expect(spec).toContain('reserved `manual:` prefix')
   })
 
   it('pins the exact Spanish SDP privacy warning for the future UI', () => {
-    expect(spec).toContain('La invitación puede contener información de tu red')
+    expect(spec).toContain('The invitation may contain information about your network')
   })
 })
 
 describe('manual DM phase-4 documentation (issue #97)', () => {
   it('flips the §12.2 status to implemented and names the shipped surfaces', () => {
-    expect(spec).toContain('**Estado: implementado (issue #97).**')
-    expect(spec).not.toContain('pendiente de implementación (issue #97)')
+    expect(spec).toContain('**Status: implemented (issue #97).**')
+    expect(spec).not.toContain('pending implementation (issue #97)')
     expect(spec).toContain('`lib/p2p/manualDmManager.ts`')
     expect(spec).toContain('`onSessionIdentityRegenerated`')
     expect(spec).toContain('`abortAllManualDms`')
@@ -69,18 +69,18 @@ describe('manual DM phase-4 documentation (issue #97)', () => {
 
   it('marks the §12 roadmap entry implemented (mirroring the #93 entry)', () => {
     expect(spec).toContain(
-      '8. DMs sin sala compartida por conexión manual de pares (issue #97; nota de diseño en 12.2): **implementado**',
+      '8. DMs with no shared room via manual peer connection (issue #97; design note in 12.2): **implemented**',
     )
   })
 
   it('cross-references the manual path from §9.2 (the ephemeral rides the blob)', () => {
-    expect(spec).toContain('no tienen anuncio `ephkeys`')
-    expect(spec).toContain('su efímera viaja dentro del blob de invitación')
+    expect(spec).toContain('have no `ephkeys` announce')
+    expect(spec).toContain('their ephemeral key travels inside the invite blob')
   })
 
   it('cross-references the reserved manual: keys from §8.2 (same key, same wipe)', () => {
     expect(spec).toContain(
-      'comparten `gritos:tofu` bajo el prefijo reservado `manual:<huella-canónica>`',
+      'share `gritos:tofu` under the reserved `manual:<canonical-fingerprint>` prefix',
     )
   })
 
@@ -103,8 +103,8 @@ describe('manual DM phase-4 documentation (issue #97)', () => {
   })
 
   it('runbook: the zero-infrastructure path when trackers are unreachable', () => {
-    expect(runbook).toContain('## El camino sin infraestructura: DM por invitación manual')
-    expect(runbook).toContain('o conéctate sin trackers')
+    expect(runbook).toContain('## The zero-infrastructure path: DM via manual invite')
+    expect(runbook).toContain('or connect without trackers')
     expect(runbook).toContain('(spec §12.2)')
   })
 

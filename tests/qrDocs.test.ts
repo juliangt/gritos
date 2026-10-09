@@ -64,24 +64,24 @@ describe('QR invite codes documentation (issue #100)', () => {
   })
 
   it('documents the share flow and the QR affordance in spec §10.8', () => {
-    expect(spec).toContain('### 10.8 Compartir sala y código QR (issues #41 y #100)')
+    expect(spec).toContain('### 10.8 Room sharing and QR invite code (issues #41 and #100)')
     // The QR encodes exactly the share link, never anything else.
-    expect(spec).toContain('exactamente ese mismo enlace')
-    expect(spec).toContain('solo el nombre, jamás la contraseña')
+    expect(spec).toContain('exactly that same link')
+    expect(spec).toContain('only the name, never the password')
     expect(spec).toContain('(RF-05)')
   })
 
   it('pins the fixed scan surface, the PNG export and the same-install note in the spec', () => {
-    expect(spec).toContain('módulos casi negros sobre blanco')
-    expect(spec).toContain('la escaneabilidad manda sobre el tema')
-    expect(spec).toContain(`«${QR_DOWNLOAD_BUTTON}»`)
-    expect(spec).toContain('gritos-room-<nombre>.png')
-    expect(spec).toContain(`«${QR_SAME_INSTALL_NOTE}»`)
+    expect(spec).toContain('near-black modules on white')
+    expect(spec).toContain('scannability trumps the theme')
+    expect(spec).toContain(`"${QR_DOWNLOAD_BUTTON}"`)
+    expect(spec).toContain('gritos-room-<name>.png')
+    expect(spec).toContain(`"${QR_SAME_INSTALL_NOTE}"`)
     expect(spec).toContain('`VITE_TRYSTERO_APP_ID`')
   })
 
   it('keeps the spec §10.1 header inventory pointing at the new section', () => {
-    expect(spec).toContain('compartir y QR de invitación (sección 10.8)')
+    expect(spec).toContain('share and QR invite (section 10.8)')
   })
 
   it('ships the manual QR matrix in docs/qa-checklist.md', () => {
@@ -97,7 +97,7 @@ describe('QR invite codes documentation (issue #100)', () => {
       'iOS Camera',
       'Android Camera/Google Lens',
       'no password anywhere in the QR',
-      '«Download PNG»',
+      '"Download PNG"',
       'BOTH themes',
       '32 chars of [a-z0-9_-]',
       'subpath',

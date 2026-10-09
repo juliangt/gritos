@@ -655,7 +655,7 @@ describe('M2 outgoing chat (RF-03, §10.3)', () => {
     expect(first).not.toBeNull()
     expect(room.action('chat').sends).toHaveLength(0)
 
-    const second = manager.sendChat(roomId, 'también en cola')
+    const second = manager.sendChat(roomId, 'also queued')
     room.peerJoin('peer-1')
     await flushMicrotasks()
 
@@ -663,7 +663,7 @@ describe('M2 outgoing chat (RF-03, §10.3)', () => {
     const sends = room.action('chat').sends
     expect(sends).toHaveLength(2)
     expect(sends[0]?.data).toMatchObject({ body: 'en cola' })
-    expect(sends[1]?.data).toMatchObject({ body: 'también en cola' })
+    expect(sends[1]?.data).toMatchObject({ body: 'also queued' })
 
     const messages = storedRoom(roomId).messages
     expect(messages.filter((message) => message.authorId === 'self')).toHaveLength(2)

@@ -555,10 +555,10 @@ describe('DM over the signal swarm (E2EE v2 round trip)', () => {
   it('sendSignalDm seals v2, delivers directed and echoes into the fp-keyed channel', async () => {
     const { room, peer, key } = await connectPair()
 
-    expect(await sendSignalDm(peer.fingerprint, 'hola señal')).toBe(true)
+    expect(await sendSignalDm(peer.fingerprint, 'hello signal')).toBe(true)
 
     const own = useAppStore.getState().dms[canon(peer.fingerprint)]?.messages[0]
-    expect(own?.text).toBe('hola señal')
+    expect(own?.text).toBe('hello signal')
     expect(own?.authorId).toBe('self')
     expect(own?.status).toBe('sent')
 
@@ -570,7 +570,7 @@ describe('DM over the signal swarm (E2EE v2 round trip)', () => {
     expect(envelope.v).toBe(DM_PROTOCOL_VERSION)
     expect(envelope.to).toBe(peer.id)
     const opened = await decryptDm(key, { iv: envelope.iv ?? '', payload: envelope.body })
-    expect(opened).toBe('hola señal')
+    expect(opened).toBe('hello signal')
   })
 
   it('a received dm lands on the channel and answers with the debounced receipt', async () => {
@@ -614,7 +614,7 @@ describe('DM over the signal swarm (E2EE v2 round trip)', () => {
 
   it('an incoming receipt flips own messages to delivered (✓✓)', async () => {
     const { room, peer } = await connectPair()
-    expect(await sendSignalDm(peer.fingerprint, 'confírmame')).toBe(true)
+    expect(await sendSignalDm(peer.fingerprint, 'confirm me')).toBe(true)
     const id = useAppStore.getState().dms[canon(peer.fingerprint)]?.messages[0]?.id as string
 
     room.receive('receipt', { ids: [id] }, peer.id)

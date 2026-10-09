@@ -46,4 +46,4 @@ The following are documented trade-offs, not vulnerabilities (threat model: [doc
 - Tracker availability or malice: trackers are third-party infrastructure and are documented as untrusted (see "Public trackers notice" in the README).
 - Physical or device compromise where the app already documents the residual risk.
 
-For the complete picture, read the threat model in [docs/spec.md §9.5](docs/spec.md) (in Spanish, like the rest of the spec) plus the README's **Security model** bullet under "How it works" and its **"Limits of the model"** pointer.
+For the complete picture, read the threat model in [docs/spec.md §9.5](docs/spec.md) plus the README's **Security model** bullet under "How it works" and its **"Limits of the model"** pointer.

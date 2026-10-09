@@ -115,7 +115,7 @@ describe('useNotifications (RF-09 end to end)', () => {
     const connection = await manager.joinRoom('general')
     const room = fake.rooms[fake.rooms.length - 1]
     room.peerJoin('peer-1')
-    room.receive('chat', chatEnvelope({ body: 'sin mención' }), 'peer-1')
+    room.receive('chat', chatEnvelope({ body: 'no mention' }), 'peer-1')
     if (ownNick !== undefined) {
       room.receive('chat', chatEnvelope({ body: `x@${ownNick}` }), 'peer-1')
     }
@@ -173,7 +173,7 @@ describe('useNotifications (RF-09 end to end)', () => {
       a.ephFingerprint,
       await computeFingerprint(mineEph),
     )
-    const sealed = await encryptDm(dmKey, '¿me ves?')
+    const sealed = await encryptDm(dmKey, 'can you see me?')
     room.receive(
       'dm',
       createEnvelope({
@@ -192,7 +192,7 @@ describe('useNotifications (RF-09 end to end)', () => {
 
     expect(FakeNotification.instances).toHaveLength(1)
     expect(FakeNotification.instances[0]?.title).toBe('gritos — DM from luna-cauta')
-    expect(FakeNotification.instances[0]?.options?.body).toBe('luna-cauta: ¿me ves?')
+    expect(FakeNotification.instances[0]?.options?.body).toBe('luna-cauta: can you see me?')
 
     FakeNotification.instances[0]?.onclick?.()
     expect(window.focus).toHaveBeenCalledTimes(1)

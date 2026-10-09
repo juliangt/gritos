@@ -80,20 +80,20 @@ describe('ChatInput (RF-03)', () => {
 
   it('inserts a newline on Shift+Enter without sending', () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: 'línea 1' } })
+    fireEvent.change(textarea(), { target: { value: 'line 1' } })
     fireEvent.keyDown(textarea(), { key: 'Enter', shiftKey: true })
     expect(sendChat).not.toHaveBeenCalled()
 
-    fireEvent.change(textarea(), { target: { value: 'línea 1\nlínea 2' } })
-    expect(textarea().value).toBe('línea 1\nlínea 2')
+    fireEvent.change(textarea(), { target: { value: 'line 1\nline 2' } })
+    expect(textarea().value).toBe('line 1\nline 2')
     expect(sendChat).not.toHaveBeenCalled()
   })
 
   it('also sends via the Send button', () => {
     render(<ChatInput room={makeRoom()} />)
-    fireEvent.change(textarea(), { target: { value: 'por botón' } })
+    fireEvent.change(textarea(), { target: { value: 'via button' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    expect(sendChat).toHaveBeenCalledWith('room-1', 'por botón')
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'via button')
   })
 
   it('blocks sending above 4000 chars and shows the counter', () => {
@@ -250,9 +250,9 @@ describe('ChatInput TTL selector (issue #96)', () => {
   ])('picking %s sends ttl %i through sendChat', (_label, raw, ttl) => {
     render(<ChatInput room={makeRoom()} />)
     pickTtl(raw)
-    fireEvent.change(textarea(), { target: { value: 'expírame' } })
+    fireEvent.change(textarea(), { target: { value: 'send me' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
-    expect(sendChat).toHaveBeenCalledWith('room-1', 'expírame', ttl)
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'send me', ttl)
   })
 
   it('sends a DM with the picked ttl through sendDm', () => {
@@ -292,15 +292,15 @@ describe('ChatInput TTL selector (issue #96)', () => {
   it('resets to No expiry on remount (memory-only state)', () => {
     const first = render(<ChatInput room={makeRoom()} />)
     pickTtl('30')
-    fireEvent.change(textarea(), { target: { value: 'primera sesión' } })
+    fireEvent.change(textarea(), { target: { value: 'first session' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
-    expect(sendChat).toHaveBeenCalledWith('room-1', 'primera sesión', 30)
+    expect(sendChat).toHaveBeenCalledWith('room-1', 'first session', 30)
     first.unmount()
 
     sendChat.mockClear() // Judge only the second mount's calls.
     render(<ChatInput room={makeRoom()} />)
     expect(ttlSelect()).toHaveValue('')
-    fireEvent.change(textarea(), { target: { value: 'segunda sesión' } })
+    fireEvent.change(textarea(), { target: { value: 'second session' } })
     fireEvent.keyDown(textarea(), { key: 'Enter' })
     expect(sendChat.mock.calls[0]).toHaveLength(2)
   })
