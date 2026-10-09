@@ -66,6 +66,10 @@ A keyboard-first, two-pane chat: multiple rooms with live presence, Markdown, ty
 
 Every guarantee, cap and edge case is spelled out in the **[feature reference](docs/features.md)**.
 
+## Language
+
+Gritos speaks English and Spanish (issue #119). On first boot the UI follows your browser — a `navigator.language` starting with `es` gets Spanish, everything else English — and the choice, `Settings → Appearance → Language` (or `auto`), persists in `gritos:settings` and wins over the browser on later boots. Switching is instant: every visible string, aria-label and `<html lang>` updates without a reload, and desktop notifications follow the locale at fire time. Protocol grammar stays English in both locales — the slash verbs (`/nick`, `/room`…) and their usage strings are documented grammar, not prose.
+
 ## How it works
 
 1. **Discover** — [Trystero](https://github.com/tinychat/trystero) (torrent strategy, exact-pinned) introduces peers through public WebTorrent trackers over `wss:`. Only the handshake touches a tracker — the room name is hashed to an opaque id first.

@@ -345,6 +345,7 @@ interface Settings {
   mutedFingerprints: string[] // issue #95 — muted peers, by fingerprint in canonical form (9.2: no spaces, uppercase); default: []. Cap of 100: the 101st is rejected and a list found over the cap at load is discarded whole (never trimmed). Lives inside gritos:settings (8.2), so the panic button wipes it
   shareHistory: boolean // issue #102 — opt-in history gossip (the "Share my recent history with late joiners" toggle of Settings → Privacy): only when true may an explicit `hist-req` request (7.1) be answered with at most the last 50 chat messages of that room held in memory (never DMs or system lines, 7.3). Default: false — silence by default. Lives inside gritos:settings (8.2), so the panic button wipes it
   globalDm: boolean // issue #105 — opt-in global DM channel (12.5): joining the well-known signal swarm and admitting fingerprint knocks (the "Global DM channel" toggle of Settings → Privacy). Default: false — off; joining exposes IP, fingerprint and nickname to the swarm (9.5), so turning it on is a visible privacy decision, never a silent one. Lives inside gritos:settings (8.2), so the panic button wipes it; turning it off leaves the swarm ON THE SPOT and destroys its in-memory state and its channels (12.5)
+  language: 'en' | 'es' | 'auto' // issue #119 — UI language (10.10). Default: 'auto' follows the browser (Spanish when navigator.language starts with "es", English otherwise); an explicit 'en'/'es' wins over the browser. Validated by normalizeSettings like every other field (any other value falls back to the default) and persisted inside gritos:settings (8.2) — no sixth localStorage key, so the panic button wipes it with the rest
 }
 
 interface Identity {
@@ -417,13 +418,13 @@ interface AppState {
 
 | Key               | Content                                                                                                                                     | Wiped by panic |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `gritos:settings` | `Settings` (JSON), including the mute list (issue #95)                                                                                      | ✅             |
+| `gritos:settings` | `Settings` (JSON), including the mute list (issue #95) and the UI language (issue #119)                                                                                                                     | ✅             |
 | `gritos:identity` | `{nickname, fingerprint, createdAt, pubJwk, priv}` (JSON) — `priv` is an encrypted envelope (issue #24), never the private JWK in the clear | ✅             |
 | `gritos:rooms`    | `{recent: string[]}` — names only if `rememberRooms`; never password-room names (issue #31: creation excludes them and joining purges them) | ✅             |
 | `gritos:ui`       | `{sidebarCollapsed: boolean}`                                                                                                               | ✅             |
 | `gritos:tofu`     | `{peerId: fingerprint}` — the first fingerprint seen per peer; detects key rotation (issue #22, TOFU)                                       | ✅             |
 
-The mute list (issue #95) introduces no new key: it rides in the `mutedFingerprints` field of `gritos:settings` (8.1), so the exactly-five-`gritos:*`-keys invariant stays intact and the _panic button_ (RF-08) wipes it with no extra code. The pins of #97's manual peers (12.2) introduce no new key either: they share `gritos:tofu` under the reserved `manual:<canonical-fingerprint>` prefix — the same key, the same panic wipe.
+The mute list (issue #95) introduces no new key: it rides in the `mutedFingerprints` field of `gritos:settings` (8.1), so the exactly-five-`gritos:*`-keys invariant stays intact and the _panic button_ (RF-08) wipes it with no extra code. The pins of #97's manual peers (12.2) introduce no new key either: they share `gritos:tofu` under the reserved `manual:<canonical-fingerprint>` prefix — the same key, the same panic wipe. The UI language (issue #119, 10.10) is the same story: it rides in the `language` field of `gritos:settings` (8.1), schema-validated by normalizeSettings on every load, wiped by panic with the rest of the record.
 
 Besides `localStorage`, since issue #24 there is a small **IndexedDB** store (database `gritos`, store `keys`, record `identity-wrap`): the **non-extractable** AES-GCM-256 key that wraps the private JWK. It is wiped by panic. Without IndexedDB (or if it fails to open), the envelope degrades to `{v:0, plain}` — plaintext, behavior identical to pre-#24.
 
@@ -529,6 +530,8 @@ A centered screen over the theme background: the "gritos" typographic logo, the 
 
 Discovery on public trackers typically takes 2–6 s; the UI must communicate it subtly (an animated indicator, without blocking text input — sending queues locally until connected). Issue #125 — an empty room is not a broken network: when the expiry finds the tracker sockets still open, the peerless state surfaces as the subordinate header hint "Still waiting for peers — the room may be empty", never as the `error` above (peer activity disarms the check; a later real outage flips the room to `error` within one window).
 
+Issue #119 — the templates are count-aware: at exactly one peer the header renders the singular ("P2P channel established · 1 peer", "Connecting (1 peer found)…"); the plural renderings in the table above stay authoritative for N>1 (and the table remains the exact-text contract).
+
 ### 10.4 Feed and input
 
 - Flat bubbles (no per-message boxes): the author in a stable color derived from `hash(peerId)` → hue, `HH:MM` time, Markdown body.
@@ -540,6 +543,8 @@ Discovery on public trackers typically takes 2–6 s; the UI must communicate it
 
 - Title: "gritos — mention in #general" or "gritos — DM from moon-wary".
 - Body: "fox-bold: hello @you…". Click → focus + opening of the originating view.
+
+Issue #119: the titles and bodies localize with the app locale at fire time (§10.10) — only the "gritos — " prefix and the `#{room}`/`{nick}` protocol pieces stay literal in every locale.
 
 ### 10.6 Themes
 
@@ -578,6 +583,16 @@ The "QR" button (issue #100) opens a popover that encodes **exactly that same li
 **Status: implemented (issue #104).** The app is installable (a `standalone` manifest with 192/512 icons and maskable variants, all in relative URLs — `start_url`/`scope: './'`, registration of `./sw.js` — so installation works the same under subpaths, including GitHub Pages project pages) and boots without network: a minimal, hand-rolled service worker (`public/sw.js`) precaches each build's exact shell — the document, the manifest, the statics and the hashed assets, with the `gritos-shell-v<digest>` list and cache name injected at build by a Vite plugin — and serves it cache-first. The worker's scope is the shell only and same-origin only: cross-origin traffic (the trackers' `wss:` sockets first of all) passes through and is never cached; no push, no background sync, no new channel of any kind. The offline shell is **honest** (10.3): without network the app boots and shows its real connection state — P2P still needs connectivity.
 
 **The update flow.** The worker never calls `skipWaiting()`: a new version installs and **waits** while this page still runs the old one. The registration (`lib/pwa/registerSw.ts`) detects the waiting worker — already waiting when the registration resolves, or an `updatefound` whose install reaches `installed` while the page is still controlled by a previous worker (`controller != null`; on a first install there is nothing to update) — and the corner toast, "New version available — [Reload]" (`role="status"`, component-local state, no persistence), offers the swap. "Reload" runs `location.reload()`: the old client bows out, the waiting worker activates and the activation cleanup deletes the previous `gritos-shell-v*` caches. Dismissing the toast lasts only for the session (a NEW waiting worker notifies afresh — the per-occurrence rule of the network banner); there is deliberately no `controllerchange` listener: the swap is the user's explicit reload, never automatic — a live conversation does not lose its connections to a deploy. iOS remains documented partial support (11.10): no install prompt, occasional SW quirks. `vite dev` stays worker-free (the same philosophy as `stripCspMetaInDev`): only production builds register, only in a secure context, and a registration failure is never fatal.
+
+### 10.10 Internationalization (issue #119)
+
+**Status: implemented (issue #119).** The UI ships in English and Spanish. Both dictionaries live in `src/i18n/` — `en.ts` is the source of truth, `es.ts` the Spanish mirror — as flat dotted-key maps grouped by surface (`common.*`, `settings.*`, `chat.*`, `feed.*`, `dm.*`, `sidebar.*`, `slash.*`, `files.*`, `qr.*`, `wizard.*`, `contact.*`, `onboarding.*`, `notifications.*`, `panic.*`, `errors.*`). They are sync-loaded static imports in the main chunk: zero new dependencies, and no laziness worth a network round-trip on locale switch.
+
+- **Compile-enforced parity**: `es.ts` is typed `Record<TranslationKey, string>` against the `en` key union, so a key present on one side only is a `tsc -b` build error — the dictionaries cannot drift. The exact-text contract extends to tests: components AND tests import the same keys and assert the `en` strings verbatim, so a copy change is a compile-visible test change, never a silent one.
+- **Locale resolution**: the persisted `language` setting (8.1) wins; its `'auto'` default follows the `navigator.language` prefix — Spanish when it starts with `es`, English otherwise (including an undefined or empty value; plain prefix logic, no `Intl` guessing). The resolved locale drives `t()`/`tPlural()`/`useT()`: a switch re-renders every subscribed component instantly, without a reload, and mirrors into `<html lang>` for a11y and spellcheck. Desktop notifications (10.5) resolve their locale at fire time.
+- **Plurals**: English and Spanish only distinguish the CLDR `one`/`other` forms; countable concepts are `…One`/`…Other` key pairs selected by `tPlural` — the count-1 singular of 10.3 is one of them.
+- **What is NOT translated** (protocol grammar, or out of the UI's reach): the slash verbs and their `usage` strings (`/nick <name>` — documented English grammar per 10.7), user content, the wire strings (7.x), the `gritos` app name and the `gritos — ` notification prefix, the frozen `'(no room)'`/`'(global)'` DmList markers, the debug panel, and the `og:`/`description` meta of `index.html`.
+- **The Spanish copy is a native-quality review, not a literal mirror**: privacy/legal nuance outweighs literalness (the P2P/IP exposure disclosure, the TURN storage notes, the stored-unencrypted honesty lines, the panic copy, the identity-regeneration consequences, the knock/consent wording, the file-transfer warnings, the TOFU fingerprint-change warning). One rendering per concept is fixed by the glossary documented in the `es.ts` header (`tracker`, `par`, `sala`, `huella`, `knock` → «solicitud de contacto», `opt-in` → «activación voluntaria»…), and `tests/i18nSpanish.test.ts` pins the load-bearing disclosures verbatim plus the glossary invariants and the per-key `{placeholder}` token set.
 
 ## 11. Known limitations (visible or documented in the UI)
 

@@ -988,6 +988,19 @@ export const en = {
     'Use 2 to 24 characters: letters, numbers, spaces, hyphens and underscores.',
 
   /**
+   * Issue #38/#119 — the top-level crash fallback (ErrorBoundary), the
+   * phase-3 census's one missed surface. Consumed through plain `t`: a
+   * class component cannot call the `useT` hook, so the fallback reads the
+   * live locale snapshot once per render without subscribing — while
+   * crashed nothing re-renders on a locale switch, and the crash screen's
+   * only way out is the reload, which re-mounts everything in the chosen
+   * locale anyway.
+   */
+  'errors.crashTitle': 'Something went wrong',
+  'errors.crashBody': 'An unexpected error occurred. Reload the page to start over.',
+  'errors.crashReload': 'Reload',
+
+  /**
    * Phase 3 — the engine-thrown rejections that surface verbatim in the UI
    * (JoinRoomPopover/ChatLayout alert lines, the /room and /nick system
    * lines). They interpolate the offending value; the templates here are the

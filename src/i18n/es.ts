@@ -4,22 +4,63 @@ import type { Translations } from './en'
  * Issue #119 — Spanish dictionary, compile-pinned to the English keys:
  * `Translations = Record<TranslationKey, string>` makes a missing or extra
  * key a `tsc -b` error, so the two dictionaries can never drift apart.
- * First-pass mirrors of ./en (phase 2 moved the centralized copy in; phase 3
- * added the inline component literals — the phrasing is refined in phase 4,
- * once the full copy is in). Placeholders (`{nickname}`,
- * `{count}`, …) keep the exact `en` tokens — `t` fills them the same way in
- * both languages — and grammar/protocol fragments stay English inside every
- * locale: `{usage}` content ('/nick <name>'), the spec-frozen '(no room)' and
- * '(global)' markers and the '#name' pieces of /rooms output.
+ * Phase 4 is the native-quality review of the phase-2/3 first pass: every
+ * key below was re-read for meaning, gender/number agreement and natural
+ * word order — `{placeholder}` tokens move to where Spanish puts them,
+ * never mirroring the English position (the token set per key is enforced
+ * by tests/i18nSpanish.test.ts).
  *
- * Register: tuteo (informal tú), neutral Latin-American/Peninsular middle —
- * no vosotros forms; «knock» renders as «solicitud de contacto» and the
- * privacy/consent disclosures keep the precise, non-euphemistic tone of the
- * English copy.
+ * GLOSSARY — each concept renders ONE way, everywhere (never two synonyms
+ * for the same idea; the load-bearing rows are enforced by
+ * tests/i18nSpanish.test.ts):
+ *
+ *   tracker        «tracker»        loanword, standard in this domain — never «rastreador»
+ *   peer           «par»            masculine; plural «pares»
+ *   room           «sala»           never «habitación»/«canal»
+ *   DM             «DM»             masculine loanword in tight/technical copy («abrir un
+ *                                   DM», «clave DM»); full surface names spell
+ *                                   «mensaje(s) directo(s)»
+ *   fingerprint    «huella»         feminine
+ *   knock          «solicitud de contacto»   the verb: «solicitar el contacto»
+ *   opt-in         «activación voluntaria»   never the weaker «opcional»
+ *   feed           «historial»      or «mensajes» contextually; the noun "feed" never renders
+ *   nickname       «apodo»
+ *   sidebar        «barra lateral»
+ *   unread         «sin leer»       the badge; as a counted noun: «mensajes sin leer»
+ *   Settings       «Ajustes»        the app's modal (→ Ajustes → Privacidad); generic
+ *                                   configuration (the browser's, the ICE one) is «configuración»
+ *   remove         «quitar»         distinct from dismiss «descartar» and wipe/delete «borrar»
+ *   share          «compartir»
+ *   join           «unirse»
+ *   reload         «recargar»
+ *   swarm          «enjambre»
+ *   expiry/TTL     «caducidad»      expired: «caducado»
+ *   E2E            «E2E»            terse card states (mirroring en); prose notices spell
+ *                                   «de extremo a extremo» — the same mix as en
+ *   transfer       «transferencia»  feminine — the card status participles agree with it
+ *                                   («Completada», «Rechazada», «Cancelada»)
+ *
+ * Register: tuteo (informal tú) everywhere, no vosotros forms. System lines
+ * keep the perfect aspect consistently («se ha unido», «ha sido
+ * silenciado»); imperative help lines address the user in tú
+ * («Únete a una sala…»), never mixing in a third-person command voice.
+ *
+ * Privacy/legal nuance over literalness (the issue's explicit gate): the
+ * P2P/IP disclosure, the TURN storage notes, the 'stored unencrypted'
+ * honesty lines, the panic-wipe copy, the identity-regeneration
+ * consequences, the knock/consent wording, the file-transfer warnings and
+ * the TOFU fingerprint-change warning translate the MEANING and its weight
+ * — a mistranslated disclosure is a privacy problem. The load-bearing ones
+ * are pinned verbatim by tests/i18nSpanish.test.ts.
+ *
+ * Frozen fragments stay verbatim in both locales: the `{usage}` grammar
+ * ('/nick <name>'), the spec-frozen '(no room)' and '(global)' markers, the
+ * 'gritos — ' notification prefix, the 'zorro-bravo' nickname example and
+ * the '#name' pieces of /rooms output.
  */
 export const es: Translations = {
   // -------------------------------------------------------------------------
-  // common — verbos/etiquetas compartidos entre superficies.
+  // common — shared verbs/labels reused across surfaces.
   // -------------------------------------------------------------------------
 
   'common.cancel': 'Cancelar',
@@ -62,9 +103,9 @@ export const es: Translations = {
   'common.updateToastLabel': 'Nueva versión de la aplicación',
 
   // -------------------------------------------------------------------------
-  // settings — modal de ajustes: validación de red (RF-07), avisos de
-  // almacenamiento/exposición TURN/P2P (#30/#35), lista de silenciados (#95),
-  // consentimiento de historial (#102) y formulario de unión (RF-02/RF-05).
+  // settings — the settings modal: Network-tab validation (RF-07), the
+  // TURN/P2P storage & exposure disclosures (#30/#35), the mute list (#95),
+  // the history-gossip consent (#102) and the join-form texts (RF-02/RF-05).
   // -------------------------------------------------------------------------
 
   'settings.trackerError': 'Las URLs de los trackers deben empezar por wss://',
@@ -80,17 +121,17 @@ export const es: Translations = {
   'settings.turnCredentialMemoryHint':
     'Las credenciales TURN se mantienen solo en memoria y se pierden al cerrar la pestaña.',
   'settings.turnCredentialAtRestNote':
-    'Las credenciales TURN se guardan sin cifrar en este navegador. Se configuran en la pestaña Red; desactiva allí «Recordar las credenciales TURN en este navegador» para que solo vivan en la memoria de la sesión.',
+    'Las credenciales TURN se guardan sin cifrar en este navegador. Se configuran en la pestaña Red; desactiva allí «Recordar las credenciales TURN en este navegador» para que solo permanezcan en la memoria de la sesión.',
 
   'settings.p2pDisclosure':
     'Las conexiones son P2P: quien comparta una sala contigo puede ver tu dirección IP.',
   'settings.p2pIpExposureNote':
-    'Las conexiones son P2P por diseño: quien comparta una sala contigo puede ver tu dirección IP, y configurar TURN no la oculta ante los pares (el navegador sigue anunciando tu dirección pública). Los operadores de trackers ven los metadatos de conexión con menos detalle: tu IP, identificadores opacos e instantes de conexión.',
+    'Las conexiones son P2P por diseño: quien comparta una sala contigo puede ver tu dirección IP, y configurar TURN no la oculta a los pares (el navegador sigue anunciando tu dirección pública). Los operadores de trackers ven metadatos de conexión con menos detalle: tu IP, identificadores opacos e instantes de conexión.',
 
   'settings.muteAuthorAction': 'Silenciar a @{nickname}',
-  'settings.muteDmDialogTitle': 'Silenciar par',
+  'settings.muteDmDialogTitle': 'Silenciar al par',
   'settings.muteDmDialogBody':
-    'Tienes una conversación directa abierta con este par: al silenciarlo dejarán de llegarte sus mensajes de sala y sus mensajes directos serán ignorados. Puedes deshacerlo en Ajustes → Privacidad. ¿Continuar?',
+    'Tienes una conversación directa abierta con este par: al silenciarlo, dejarán de llegarte sus mensajes de sala y sus mensajes directos se ignorarán. Puedes deshacerlo en Ajustes → Privacidad. ¿Continuar?',
 
   'settings.mutedPeersHeading': 'Pares silenciados',
   'settings.mutedPeersHint':
@@ -100,7 +141,7 @@ export const es: Translations = {
 
   'settings.shareHistoryLabel': 'Compartir mi historial reciente con quienes lleguen tarde',
   'settings.shareHistoryHint':
-    'Solo si lo activas, quien se una tarde a una sala y lo pida explícitamente puede recibir hasta los últimos 50 mensajes de chat que esta pestaña mantiene en memoria. No se guarda ni se envía nada sin una petición; en las salas con contraseña los cuerpos viajan re-sellados con la clave de la sala, de modo que solo alguien que la conozca pueda leerlos.',
+    'Solo si lo activas, quien se una tarde a una sala y lo pida explícitamente puede recibir hasta los últimos 50 mensajes de chat que esta pestaña mantiene en memoria. Nada se guarda ni se envía sin una petición; en las salas con contraseña, los cuerpos viajan re-sellados con la clave de la sala, de modo que solo alguien que la conozca pueda leerlos.',
 
   'settings.historyAskLabel': 'Pedir mensajes recientes',
   'settings.historyAskText': '¿Pedir a la sala los últimos mensajes?',
@@ -113,8 +154,8 @@ export const es: Translations = {
     'Quien no tenga la contraseña no encontrará esta sala. Su nombre nunca se guarda en este navegador.',
   'settings.emptyRoomPassword': 'Escribe una contraseña para la sala cifrada',
 
-  // Fase 3 — literales en línea del propio modal y de sus tres pestañas. La
-  // etiqueta/encabezado del modal usan el texto compartido `common.settings`.
+  // Phase 3 — the inline literals of the modal itself and its three tabs. The
+  // modal label/heading render the shared `common.settings` wording.
 
   'settings.closeAria': 'Cerrar los ajustes',
   'settings.changeNicknameLabel': 'Cambiar el apodo',
@@ -156,7 +197,7 @@ export const es: Translations = {
   'settings.iceUrlRowLabel': 'URL del servidor ICE {index}',
   'settings.removeIceRowLabel': 'Quitar el servidor ICE {index}',
   'settings.removeIceTitle': 'Quitar el servidor ICE',
-  'settings.turnUsernameLabel': 'Usuario TURN {index}',
+  'settings.turnUsernameLabel': 'Nombre de usuario TURN {index}',
   'settings.turnPasswordLabel': 'Contraseña TURN {index}',
   'settings.turnUsernamePlaceholder': 'usuario',
   'settings.turnPasswordPlaceholder': 'contraseña',
@@ -169,11 +210,12 @@ export const es: Translations = {
   'settings.themeLight': 'Claro',
   'settings.themeDark': 'Oscuro',
   'settings.themeSystem': 'Sistema',
-  'settings.collapseSidebarLabel': 'Plegar la barra lateral al iniciar',
+  'settings.collapseSidebarLabel': 'Contraer la barra lateral al iniciar',
 
   // -------------------------------------------------------------------------
-  // chat — cabecera/compositor: plantillas de estado §10.3, banners de red
-  // (RNF-07, #43, #125) y la sala no encontrada (§10.3/RF-05).
+  // chat — the chat header/composer: the §10.3 connection-status templates,
+  // the network banners (RNF-07, #43, #125) and the password-room not-found
+  // status (§10.3/RF-05).
   // -------------------------------------------------------------------------
 
   'chat.searchingStatus': 'Buscando pares en la red torrent…',
@@ -183,14 +225,14 @@ export const es: Translations = {
   'chat.connectedStatusOther': 'Canal P2P establecido · {count} pares',
 
   'chat.networkErrorBanner':
-    'Sin acceso a trackers — comprueba tu conexión o configura trackers alternativos',
+    'Sin acceso a trackers — revisa tu conexión o configura trackers alternativos',
 
   'chat.peerlessHint': 'Aún esperando pares — la sala puede estar vacía',
 
   'chat.insecureContextBanner':
     'No se pudo conectar — WebRTC y el cifrado requieren HTTPS o localhost (contexto no seguro). Consulta el README para servir la aplicación por HTTPS.',
 
-  // Fase 3 — cromos en línea de cabecera/compositor.
+  // Phase 3 — the header/composer inline chrome.
 
   'chat.toggleSidebarAria': 'Mostrar u ocultar la barra lateral',
   'chat.toggleSidebarTitle': 'Mostrar u ocultar la barra lateral (Ctrl/Cmd+B)',
@@ -225,14 +267,15 @@ export const es: Translations = {
   'chat.receiptPending': 'enviado, pendiente de acuse',
 
   // -------------------------------------------------------------------------
-  // feed — líneas de sistema, separadores y estados vacíos (RF-03/RF-06,
-  // §10.4). Las líneas locales (silencio, separadores) nunca viajan por la red.
+  // feed — system lines, separators and empty states (RF-03/RF-06, §10.4).
+  // Local-only lines (mute, separators) never travel over the wire. System
+  // lines keep the perfect aspect («se ha unido») across the surface.
   // -------------------------------------------------------------------------
 
   'feed.fifoSeparator': '— mensajes anteriores descartados —',
   'feed.expiredSeparatorOne': '— {count} mensaje caducado —',
   'feed.expiredSeparatorOther': '— {count} mensajes caducados —',
-  'feed.recoveredSeparator': '— mensajes recuperados de pares —',
+  'feed.recoveredSeparator': '— mensajes recuperados de los pares —',
 
   'feed.emptyRoom': 'Comparte el nombre de la sala para que otros se unan.',
   'feed.emptyDm': 'Aún no hay mensajes. Escribe el primero.',
@@ -243,7 +286,7 @@ export const es: Translations = {
   'feed.joinLine': '— {nickname} se ha unido —',
   'feed.leaveLine': '— {nickname} ha salido —',
 
-  'feed.muteLine': '@{nickname} fue silenciado',
+  'feed.muteLine': '@{nickname} ha sido silenciado',
   'feed.unmuteLine': '@{nickname} ya no está silenciado',
 
   'feed.typingOne': '{nickname} está escribiendo…',
@@ -255,19 +298,19 @@ export const es: Translations = {
   'feed.encryptedPlaceholder': '🔒 mensaje cifrado',
 
   // -------------------------------------------------------------------------
-  // dm — superficies de mensaje directo (RF-04, TOFU/#22, par legacy #93).
+  // dm — direct-message surfaces (RF-04, TOFU/#22, legacy peer #93).
   // -------------------------------------------------------------------------
 
   'dm.peerDisconnected': 'El par se ha desconectado',
   'dm.legacyPeer': 'Este par usa una versión anterior sin DMs cifrados por sesión',
-  'dm.verifyNotice': 'Compara con tu contacto para verificar su identidad',
+  'dm.verifyNotice': 'Compárala con tu contacto para verificar su identidad',
   'dm.keyChangedWarning': '⚠ La huella cambió desde tu última verificación',
   'dm.keyChangedHint':
-    'El par puede haber reinstalado la aplicación o ser una suplantación: verifica su identidad a través de otro canal antes de volver a confiar en él.',
+    'El par puede haber reinstalado la aplicación o podría tratarse de una suplantación: verifica su identidad por otro canal antes de volver a confiar en él.',
   'dm.feedLabel': 'Mensajes directos con {peerNick}',
 
-  // Fase 3 — menú del par (PeerList) y cromos de desconexión de la DmList.
-  // La línea ⚠ de rotación usa `dm.keyChangedWarning`.
+  // Phase 3 — the peer menu (PeerList) and the DmList disconnected chrome.
+  // The ⚠ rotation line reuses `dm.keyChangedWarning`.
 
   'dm.directMessageAction': 'Mensaje directo',
   'dm.copyFingerprint': 'Copiar la huella',
@@ -275,9 +318,8 @@ export const es: Translations = {
   'dm.peerDisconnectedHistory': 'El par se ha desconectado — el historial permanece',
 
   // -------------------------------------------------------------------------
-  // sidebar — secciones de la barra lateral (RF-02/RF-06, §10.1): listas de
-  // salas, pares, lista de DM y formulario de unión. Espacio de nombres de
-  // la fase 3.
+  // sidebar — the sidebar sections (RF-02/RF-06, §10.1): room lists, the
+  // peers section, the DM list and the join-by-name form. Phase 3 namespace.
   // -------------------------------------------------------------------------
 
   'sidebar.joinEntry': '[+ Unirse]',
@@ -311,9 +353,11 @@ export const es: Translations = {
   'sidebar.roomPasswordPlaceholder': 'Contraseña de la sala',
 
   // -------------------------------------------------------------------------
-  // slash — documentación y líneas locales de feedback/error de los comandos
-  // (issue #99). `{usage}` («/nick <name>») queda en inglés en ambos idiomas:
-  // es gramática del protocolo, no prosa.
+  // slash — slash-command docs and local feedback/error lines (issue #99).
+  // Feedback lines are local-only (never sent over the wire). The help lines
+  // address the user in tú; the `{usage}` strings («/nick <name>») stay
+  // English grammar in both locales: they are the parser's protocol-shaped
+  // grammar tokens, not prose.
   // -------------------------------------------------------------------------
 
   'slash.helpLabel': 'Comandos de barra',
@@ -347,16 +391,16 @@ export const es: Translations = {
 
   'slash.nickHelp':
     'Cambia tu apodo (2–24 caracteres: letras, números, espacios, guiones y guiones bajos).',
-  'slash.roomHelp': 'Se une a una sala por su nombre (normalizado a minúsculas con guiones).',
+  'slash.roomHelp': 'Únete a una sala por su nombre (se normaliza a minúsculas con guiones).',
   'slash.dmHelp': 'Abre una conversación directa cifrada con un par.',
   'slash.meHelp': 'Envía una acción: se muestra en cursiva como "* apodo acción".',
-  'slash.roomsHelp': 'Lista las salas activas y sus contadores de no leídos.',
+  'slash.roomsHelp': 'Lista las salas activas y el número de mensajes sin leer de cada una.',
   'slash.clearHelp': 'Borra el historial local de esta sala (solo tu navegador).',
   'slash.leaveHelp': 'Abandona la sala activa.',
   'slash.helpHelp': 'Muestra esta lista de comandos.',
 
   // -------------------------------------------------------------------------
-  // files — transferencia P2P de archivos (issue #103, §12.4).
+  // files — P2P file transfer UI (issue #103, §12.4).
   // -------------------------------------------------------------------------
 
   'files.attachLabel': 'Adjuntar un archivo',
@@ -403,9 +447,10 @@ export const es: Translations = {
   'files.progressReceiving': 'Recibiendo…',
   'files.progressLabel': 'Progreso de la transferencia',
 
-  'files.done': 'Completado',
-  'files.rejected': 'Rechazado',
-  'files.aborted': 'Cancelado',
+  // The terminal states agree with «transferencia» (the card's subject).
+  'files.done': 'Completada',
+  'files.rejected': 'Rechazada',
+  'files.aborted': 'Cancelada',
 
   'files.failureStall': 'Falló: la transferencia se estancó.',
   'files.failurePeerDrop': 'Falló: el par se ha desconectado.',
@@ -414,14 +459,14 @@ export const es: Translations = {
   'files.failureBadFrame': 'Falló: se recibieron datos corruptos.',
   'files.failureCrypto': 'Falló: el contenido no se pudo descifrar.',
   'files.failureCompleteness': 'Falló: el archivo llegó incompleto.',
-  'files.failureIdentityRegenerated': 'Falló: la identidad de la sesión fue regenerada.',
+  'files.failureIdentityRegenerated': 'Falló: la identidad de la sesión se ha regenerado.',
 
   'files.downloadButton': 'Descargar',
   'files.dismissButton': 'Descartar',
 
   // -------------------------------------------------------------------------
-  // qr — la invitación QR (issue #100). El QR codifica exactamente la salida
-  // de buildRoomLink (solo el nombre de la sala, nunca la contraseña — RF-05).
+  // qr — the QR invite (issue #100). The QR encodes exactly buildRoomLink's
+  // output (the room name only, never the password — RF-05).
   // -------------------------------------------------------------------------
 
   'qr.buttonLabel': 'Código QR de la sala',
@@ -431,11 +476,11 @@ export const es: Translations = {
   'qr.sameInstallNote': 'El QR enlaza a esta misma instalación.',
 
   // -------------------------------------------------------------------------
-  // wizard — asistente de DM manual sin trackers (issue #97, §12.2). El
-  // marcador «(no room)» queda congelado por la especificación.
+  // wizard — the trackerless manual-DM wizard (issue #97, §12.2). The
+  // «(no room)» marker is spec-frozen (stays literal English in both locales).
   // -------------------------------------------------------------------------
 
-  'wizard.inviteEntry': '+ invitar',
+  'wizard.inviteEntry': '+ invitación',
   'wizard.inviteEntryTitle':
     'Inicia una conversación directa sin trackers intercambiando invitaciones',
   'wizard.bannerShortcut': 'o conéctate sin trackers',
@@ -444,7 +489,7 @@ export const es: Translations = {
 
   'wizard.label': 'Conexión manual sin trackers',
   'wizard.intro':
-    'Crea una conversación directa sin trackers: intercambias dos invitaciones por cualquier canal (correo, otra mensajería) y la conexión es directa entre ambos.',
+    'Crea una conversación directa sin trackers: intercambias dos invitaciones por cualquier canal (correo, otra mensajería) y la conexión es directa entre los dos.',
   'wizard.roleInviteButton': 'Crear invitación',
   'wizard.roleAnswerButton': 'Responder invitación',
 
@@ -477,22 +522,22 @@ export const es: Translations = {
   'wizard.peerErrorTooLong': 'El mensaje supera el límite de 4000 caracteres.',
 
   // -------------------------------------------------------------------------
-  // contact — flujo de contacto por DM global (issue #105, §12.5). El
-  // marcador «(global)» queda congelado por la especificación; «knock» se
-  // traduce como «solicitud de contacto».
+  // contact — the global-DM contact flow (issue #105, §12.5). The «(global)»
+  // marker is spec-frozen; «knock» renders as «solicitud de contacto» and
+  // «opt-in» as «activación voluntaria» (see the glossary above).
   // -------------------------------------------------------------------------
 
   'contact.toggleLabel': 'Canal DM global',
   'contact.toggleHint':
-    'Opcional: al activarlo entras en un enjambre público y bien conocido donde cada par con la opción activa puede ver tu IP, tu huella y tu apodo, y solicitarte contacto por huella para abrir un DM contigo. Desactivado por defecto; desactivarlo abandona el enjambre al instante y cierra sus canales. Las entradas «+ contacto» de la barra lateral solo aparecen mientras el canal está activo.',
+    'Activación voluntaria: al activarlo entras en un enjambre público y bien conocido donde cada par con la opción activada puede ver tu IP, tu huella y tu apodo, y solicitarte contacto por huella para abrir un DM contigo. Desactivado por defecto; desactivarlo abandona el enjambre al instante y cierra sus canales. Las entradas «+ contacto» de la barra lateral solo aparecen mientras el canal está activo.',
 
   'contact.entry': '+ contacto',
   'contact.entryTitle':
-    'Comparte tu huella («Mi contacto») o solicita el contacto de otro par por huella («Contacto por huella»)',
+    'Comparte tu huella («Mi contacto») o solicita el contacto de otro par mediante su huella («Contacto por huella»)',
 
   'contact.globalMarker': '(global)',
   'contact.globalMarkerTitle':
-    'Conversación directa abierta por huella a través del canal global (opcional)',
+    'Conversación directa abierta por huella a través del canal global (activación voluntaria)',
 
   'contact.dialogLabel': 'Contacto por huella',
   'contact.intro':
@@ -505,15 +550,15 @@ export const es: Translations = {
   'contact.qrCanvasLabel': 'Código QR con tu enlace de contacto',
 
   'contact.knockIntro':
-    'Pega la huella de tu contacto: si está presente en el canal global recibirá tu solicitud y decidirá si acepta. Mientras esperas, puedes añadir una nota opcional.',
+    'Pega la huella de tu contacto: si está presente en el canal global, recibirá tu solicitud y decidirá si la acepta. Mientras esperas, puedes añadir una nota opcional.',
   'contact.knockPasteLabel': 'Pega aquí la huella de tu contacto',
   'contact.knockNoteLabel': 'Nota opcional para tu solicitud',
   'contact.noteCounter': '{length}/140',
   'contact.knockSendButton': 'Enviar solicitud',
   'contact.knockWaiting': 'Solicitud enviada: esperando una respuesta…',
-  'contact.knockRejected': 'Rechazado: el par no ha aceptado tu contacto.',
+  'contact.knockRejected': 'Rechazada: el par no ha aceptado tu solicitud de contacto.',
   'contact.fpInvalid':
-    'Eso no es una huella válida: debe ser 8 grupos de 4 caracteres hexadecimales.',
+    'Eso no es una huella válida: debe constar de 8 grupos de 4 caracteres hexadecimales.',
 
   'contact.knockErrorSignalOff':
     'El canal global está desactivado: actívalo en Ajustes → Privacidad.',
@@ -530,7 +575,8 @@ export const es: Translations = {
   'contact.noIdentity': 'No hay identidad en esta sesión.',
 
   // -------------------------------------------------------------------------
-  // panic — flujo del botón de pánico (RF-08, pestaña Privacidad). Fase 3.
+  // panic — the panic-button flow (RF-08, Privacy tab). The double
+  // confirmation order is the component's, not this dictionary's.
   // -------------------------------------------------------------------------
 
   'panic.buttonLabel': 'Borrarlo todo y salir',
@@ -542,10 +588,10 @@ export const es: Translations = {
     'Esta acción es definitiva: se cerrarán todas las conexiones y la aplicación se recargará para empezar de cero.',
 
   // -------------------------------------------------------------------------
-  // onboarding — primera visita (RF-01, §10.2). Fase 3. El ejemplo
-  // «zorro-bravo» del placeholder es DATO (pareja del wordlist inglés, como
-  // cualquier salida de generateNickname) — solo traduce la etiqueta que lo
-  // rodea.
+  // onboarding — first-visit onboarding (RF-01, §10.2). The «zorro-bravo»
+  // example in the placeholder is DATA (an English-wordlist pair, like
+  // anything generateNickname may produce) — only the surrounding label
+  // translates.
   // -------------------------------------------------------------------------
 
   'onboarding.tagline':
@@ -561,7 +607,8 @@ export const es: Translations = {
   'onboarding.insecureContextError': 'No se pudo crear la identidad local (contexto no seguro).',
 
   // -------------------------------------------------------------------------
-  // notifications — notificaciones de escritorio (§10.5/RF-09).
+  // notifications — desktop notifications (§10.5/RF-09). The 'gritos — '
+  // title prefix stays literal in both locales (the app name is the brand).
   // -------------------------------------------------------------------------
 
   'notifications.dmTitle': 'gritos — DM de {nick}',
@@ -569,12 +616,23 @@ export const es: Translations = {
   'notifications.body': '{nick}: {text}',
 
   // -------------------------------------------------------------------------
-  // errors — líneas de error genéricas.
+  // errors — generic error lines, the engine-thrown UI rejections and the
+  // top-level crash fallback (ErrorBoundary, issue #38). The boundary is a
+  // class component, so it consumes these through plain `t` — no `useT`
+  // subscription is possible there; the crash screen re-mounts on reload
+  // anyway, picking up the current locale fresh.
   // -------------------------------------------------------------------------
 
   'errors.unknown': 'Error desconocido',
+
+  /** RF-01 — inline validation message for an invalid nickname. */
   'errors.nicknameInvalid':
     'Usa de 2 a 24 caracteres: letras, números, espacios, guiones y guiones bajos.',
+
+  'errors.crashTitle': 'Algo salió mal',
+  'errors.crashBody': 'Se produjo un error inesperado. Recarga la página para empezar de cero.',
+  'errors.crashReload': 'Recargar',
+
   'errors.roomLimitReached': 'Límite de salas activas alcanzado ({count})',
   'errors.roomNameInvalid': 'Nombre de sala no válido: "{name}"',
   'errors.invalidNickname': 'Apodo no válido: "{nickname}"',
