@@ -75,12 +75,12 @@ export function ChatLayout() {
   // and the modal renders once, over everything.
   const [manualWizardOpen, setManualWizardOpen] = useState(false)
   // Issue #105 — the contact flow is layout-level state like the wizard:
-  // the sidebar «+ contacto» entry opens it, and a `#contacto=<fp>` deep
+  // the sidebar «+ contact» entry opens it, and a `#contact=<fp>` deep
   // link opens it prefilled with the linked fingerprint. The linked fp is
   // read ONCE in this lazy initializer (the OnboardingScreen linked-room
   // precedent) — an invalid fp routes nothing, ignored at log level. The
   // flow works with the channel off too: the knock attempt surfaces the
-  // honest typed 'signal-off' line pointing at the Privacidad toggle.
+  // honest typed 'signal-off' line pointing at the Privacy toggle.
   const [contactFlow, setContactFlow] = useState<{ open: boolean; prefill: string | null }>(() => {
     const fp = parseContactHash(window.location.hash)
     return fp === null ? { open: false, prefill: null } : { open: true, prefill: fp }
@@ -94,7 +94,7 @@ export function ChatLayout() {
   // closed when the channel turns off mid-flow (its knock could never
   // resolve with the swarm gone).
   const globalDm = useSettingsStore((state) => state.settings.globalDm)
-  // Issue #41 — name of the room this session entered through a '#sala'
+  // Issue #41 — name of the room this session entered through a '#room'
   // deep link, kept only to offer the password join form when that room
   // cannot find peers (linked password rooms are indistinguishable from
   // nonexistent ones until then, RF-05).
@@ -126,7 +126,7 @@ export function ChatLayout() {
       })
   }, [])
 
-  // Issue #41 — '#sala=<name>' deep links: the linked room is the
+  // Issue #41 — '#room=<name>' deep links: the linked room is the
   // destination, so it joins on boot and takes the focus even when the
   // lobby auto-join above also runs. The hash is consumed up front (a
   // reload must never re-trigger the join) and never carries the password
@@ -428,7 +428,7 @@ export function ChatLayout() {
       <ManualDmWizard open={manualWizardOpen} onClose={() => setManualWizardOpen(false)} />
 
       {/* Issue #105 — one contact-flow instance for both entry points
-          (sidebar «+ contacto», `#contacto=` deep link prefill); the
+          (sidebar «+ contact», `#contact=` deep link prefill); the
           toggle-off effect above closes it with the channel. */}
       <ContactFlow
         open={contactFlow.open}

@@ -1,21 +1,22 @@
 /**
  * Room share deep links (issue #41): the URL hash carries ONLY the room
- * name — `#sala=<encoded-name>` — never the password (RF-05: whoever opens
+ * name — `#room=<encoded-name>` — never the password (RF-05: whoever opens
  * a link to a password room must enter it through the regular join flow).
  * Pure helpers, testable without a network; `parseRoomHash` reuses the exact
  * join-validation rules (RF-02 normalization) so a link can never smuggle a
- * room name the join popover would reject.
+ * room name the join popover would reject. English hash params per issue
+ * #121 (clean break, the slash-command precedent).
  */
 
 import { canonicalFingerprint } from './crypto/dm'
 import { normalizeRoomName } from './p2p/roomManager'
 import { isValidFingerprint } from './validateSettings'
 
-/** Hash parameter identifying a room deep link: `#sala=<name>`. */
-export const ROOM_HASH_PARAM = 'sala='
+/** Hash parameter identifying a room deep link: `#room=<name>`. */
+export const ROOM_HASH_PARAM = 'room='
 
 /** Issue #105 (spec §12.5) — hash parameter of a contact deep link. */
-export const CONTACT_HASH_PARAM = 'contacto='
+export const CONTACT_HASH_PARAM = 'contact='
 
 /**
  * Parses a raw URL hash (`window.location.hash`, leading '#' optional) into
@@ -40,20 +41,20 @@ export function parseRoomHash(hash: string | null | undefined): string | null {
 }
 
 /**
- * Builds the shareable link of a room: origin + path + `#sala=<encoded>`.
+ * Builds the shareable link of a room: origin + path + `#room=<encoded>`.
  * Only the hash routes the app, so the relative-base build (issue #40)
  * keeps working on any static host. The password is deliberately not part
  * of the signature.
  */
 export function buildRoomLink(roomName: string): string {
-  return `${window.location.origin}${window.location.pathname}#sala=${encodeURIComponent(roomName)}`
+  return `${window.location.origin}${window.location.pathname}#room=${encodeURIComponent(roomName)}`
 }
 
 /**
  * Consumes a deep link: drops the hash while keeping the path and the
  * query (the `?debug` flag survives) so a reload never re-triggers the
- * join. No-op without a hash. Shared by both hash params (`#sala=`,
- * `#contacto=`): only the value changes, the consumption discipline is
+ * join. No-op without a hash. Shared by both hash params (`#room=`,
+ * `#contact=`): only the value changes, the consumption discipline is
  * the same.
  */
 export function clearRoomHash(): void {
@@ -63,8 +64,8 @@ export function clearRoomHash(): void {
 
 // ---------------------------------------------------------------------------
 // Issue #105 phase 3 (spec §12.5) — the contact deep link: the hash carries
-// ONLY the identity fingerprint (`#contacto=<fp>`), never a nickname or any
-// secret. Same discipline as `#sala=`: leading '#' optional, percent-decoding
+// ONLY the identity fingerprint (`#contact=<fp>`), never a nickname or any
+// secret. Same discipline as `#room=`: leading '#' optional, percent-decoding
 // tolerated, and the value must canonicalize to exactly 32 hex chars (the
 // issue #95 rule — spaced display forms and either hex case are accepted);
 // anything else routes nothing.
@@ -95,12 +96,12 @@ export function parseContactHash(hash: string | null | undefined): string | null
 
 /**
  * Builds the shareable contact link of a fingerprint: origin + path +
- * `#contacto=<canonical-fp>`. The canonical (compact, uppercase) form is
+ * `#contact=<canonical-fp>`. The canonical (compact, uppercase) form is
  * what travels — recipients pasting it back hit the same validation the
  * knock flow applies. Only the hash routes the app, so the relative-base
  * build (issue #40) keeps working on any static host.
  */
 export function buildContactLink(fingerprint: string): string {
   const canonical = canonicalFingerprint(fingerprint)
-  return `${window.location.origin}${window.location.pathname}#contacto=${encodeURIComponent(canonical)}`
+  return `${window.location.origin}${window.location.pathname}#contact=${encodeURIComponent(canonical)}`
 }

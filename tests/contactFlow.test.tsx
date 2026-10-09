@@ -73,7 +73,7 @@ import {
  * PNG + caveat), «Contact by fingerprint» knocks out and lands in the DM view
  * on the accept ack (one E2EE round trip through the manager), the inbound
  * consent card accepts/rejects/mutes, the note is capped at input, the
- * `#contacto=` deep link prefills the flow, and toggling off mid-flow hides
+ * `#contact=` deep link prefills the flow, and toggling off mid-flow hides
  * the entries and clears the open states.
  */
 
@@ -668,13 +668,13 @@ describe('inbound knock consent card', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Deep link `#contacto=<fp>`
+// Deep link `#contact=<fp>`
 // ---------------------------------------------------------------------------
 
 describe('#contacto deep link', () => {
   it('a valid fingerprint opens the flow prefilled and consumes the hash', async () => {
     const peer = await makeFakeRemotePeer('peer-b')
-    window.history.pushState({}, '', `/#contacto=${encodeURIComponent(peer.fingerprint)}`)
+    window.history.pushState({}, '', `/#contact=${encodeURIComponent(peer.fingerprint)}`)
     renderLayout()
 
     const dialog = screen.getByRole('dialog', { name: CONTACT_DIALOG_LABEL })
@@ -685,7 +685,7 @@ describe('#contacto deep link', () => {
   })
 
   it('junk is ignored at log level: no dialog, hash consumed', () => {
-    window.history.pushState({}, '', '/#contacto=no-es-huella')
+    window.history.pushState({}, '', '/#contact=no-es-huella')
     renderLayout()
 
     expect(screen.queryByRole('dialog', { name: CONTACT_DIALOG_LABEL })).not.toBeInTheDocument()

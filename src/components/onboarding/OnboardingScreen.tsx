@@ -17,7 +17,7 @@ import { P2P_DISCLOSURE_TEXT } from '../settings/messages'
  * theme background with the typographic logo, the nickname field, the
  * 'surprise me' generator and the 'Enter →' action. Entering persists the
  * identity profile and — when `autoJoinLobby` is on — joins #lobby, which
- * becomes the initial active view. A '#sala' deep link (issue #41) is
+ * becomes the initial active view. A '#room' deep link (issue #41) is
  * carried through: after the nickname is chosen the linked room is joined
  * and focused, and the hash is consumed. The chat layout takes over as soon
  * as the store holds an identity.
@@ -59,7 +59,7 @@ export function OnboardingScreen() {
       if (useSettingsStore.getState().settings.autoJoinLobby) {
         await joinRoomFocused('lobby')
       }
-      // Issue #41 — a '#sala' deep link survives onboarding: the linked
+      // Issue #41 — a '#room' deep link survives onboarding: the linked
       // room is joined and focused after the nickname is chosen (the lobby
       // above may still join per settings; the link wins the focus). The
       // hash is consumed so a reload never re-triggers the join. A failed

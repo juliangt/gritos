@@ -11,7 +11,7 @@ import { useSettingsStore } from '../src/stores/useSettingsStore'
 import { installFakeTrystero } from './fakeTrystero'
 
 /**
- * Issue #41 — '#sala=<name>' deep links end to end: a returning visitor
+ * Issue #41 — '#room=<name>' deep links end to end: a returning visitor
  * lands in the linked room (hash consumed), a first visit carries the room
  * through onboarding, failures degrade to the current behavior, and a link
  * to a password room ends in the regular password join flow — never in the
@@ -44,7 +44,7 @@ const IDENTITY: Identity = {
 describe('deep links — chat shell (existing identity)', () => {
   it('lands in the linked room, focuses it and consumes the hash', async () => {
     useAppStore.getState().setIdentity(IDENTITY)
-    window.history.pushState({}, '', '/#sala=test')
+    window.history.pushState({}, '', '/#room=test')
     render(<App />)
 
     const linkedRoomId = await deriveRoomId('test')
@@ -66,7 +66,7 @@ describe('deep links — chat shell (existing identity)', () => {
   it('joins only the linked room when autoJoinLobby is off', async () => {
     useSettingsStore.getState().setSettings({ autoJoinLobby: false })
     useAppStore.getState().setIdentity(IDENTITY)
-    window.history.pushState({}, '', '/#sala=mi-sala')
+    window.history.pushState({}, '', '/#room=mi-sala')
     render(<App />)
 
     const linkedRoomId = await deriveRoomId('mi-sala')
@@ -79,7 +79,7 @@ describe('deep links — chat shell (existing identity)', () => {
 
   it('degrades to the current behavior on an invalid linked name', async () => {
     useAppStore.getState().setIdentity(IDENTITY)
-    window.history.pushState({}, '', '/#sala=!!nope!!')
+    window.history.pushState({}, '', '/#room=!!nope!!')
     render(<App />)
 
     const lobbyRoomId = await deriveRoomId('lobby')
@@ -98,7 +98,7 @@ describe('deep links — chat shell (existing identity)', () => {
     useSettingsStore.getState().setSettings({ maxActiveRooms: 1 })
     await joinRoom('lobby') // takes the only slot before the app mounts
     useAppStore.getState().setIdentity(IDENTITY)
-    window.history.pushState({}, '', '/#sala=otra')
+    window.history.pushState({}, '', '/#room=otra')
     render(<App />)
 
     await new Promise((resolve) => setTimeout(resolve, 25))
@@ -112,7 +112,7 @@ describe('deep links — chat shell (existing identity)', () => {
 
 describe('deep links — onboarding carry-through', () => {
   it('lands a first visit in the linked room after the nickname', async () => {
-    window.history.pushState({}, '', '/#sala=pueblo-libre')
+    window.history.pushState({}, '', '/#room=pueblo-libre')
     render(<App />)
 
     // The onboarding screen announces the linked room.
@@ -136,7 +136,7 @@ describe('deep links — onboarding carry-through', () => {
 
   it('carries the link through onboarding even with autoJoinLobby off', async () => {
     useSettingsStore.getState().setSettings({ autoJoinLobby: false })
-    window.history.pushState({}, '', '/#sala=duo')
+    window.history.pushState({}, '', '/#room=duo')
     render(<App />)
 
     fireEvent.change(screen.getByLabelText('Your nickname'), {
@@ -156,7 +156,7 @@ describe('deep links — onboarding carry-through', () => {
 describe('deep links — password rooms (RF-05)', () => {
   it('offers the prefilled password join form once the link cannot find peers', async () => {
     useAppStore.getState().setIdentity(IDENTITY)
-    window.history.pushState({}, '', '/#sala=secreta')
+    window.history.pushState({}, '', '/#room=secreta')
     render(<App />)
 
     // The no-password join lands in the public namespace, which can never
@@ -197,7 +197,7 @@ describe('deep links — password rooms (RF-05)', () => {
 
   it('the recovery form can be dismissed', async () => {
     useAppStore.getState().setIdentity(IDENTITY)
-    window.history.pushState({}, '', '/#sala=secreta')
+    window.history.pushState({}, '', '/#room=secreta')
     render(<App />)
 
     const publicRoomId = await deriveRoomId('secreta')

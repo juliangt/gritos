@@ -47,7 +47,7 @@ function qrVersion(matrix: QrMatrix): number {
 
 const SHORT_ORIGIN = 'https://gritos.example/'
 /** The exact share link for room 'lobby' on a short origin. */
-const LOBBY_LINK = `${SHORT_ORIGIN}#sala=lobby`
+const LOBBY_LINK = `${SHORT_ORIGIN}#room=lobby`
 
 describe('dependency pin + license (supply-chain guard)', () => {
   // Same ?raw pattern as license.test.ts: no node:fs (the project ships no
@@ -94,7 +94,7 @@ describe('buildQrMatrix golden (guards EC level + version drift)', () => {
 
     expect(qrVersion(matrix)).toBe(3)
     expect(matrix.moduleCount).toBe(29)
-    expect(countDark(matrix)).toBe(431)
+    expect(countDark(matrix)).toBe(436)
   })
 
   it('reproduces the pinned module layout (finder corners + bit runs)', () => {
@@ -113,14 +113,14 @@ describe('buildQrMatrix golden (guards EC level + version drift)', () => {
     // First 64 modules (rows 0-2, row-major), pinned verbatim from the
     // library's 2.0.4 output for this input.
     expect(
-      toBits(matrix).startsWith('1111111001111111011100111111110000010001001111100101000001101110'),
+      toBits(matrix).startsWith('1111111010110111011100111111110000010101101001010001000001101110'),
     ).toBe(true)
   })
 })
 
 describe('worst-case realistic link', () => {
   // A 64-char origin (long GitHub Pages project URL) + the RF-02 max room
-  // name: `#sala=` + 32 chars of [a-z0-9_-], none of which need
+  // name: `#room=` + 32 chars of [a-z0-9_-], none of which need
   // percent-encoding. 102 chars total -> QR version 6 (moduleCount 41) at
   // EC level M — far under the version-40 ceiling.
   const LONG_ORIGIN =
@@ -130,15 +130,15 @@ describe('worst-case realistic link', () => {
   it('operates on a genuinely worst-case 64-char origin + 32-char name', () => {
     expect(LONG_ORIGIN).toHaveLength(64)
     expect(MAX_NAME).toMatch(/^[a-z0-9_-]{1,32}$/)
-    expect(`${LONG_ORIGIN}#sala=${MAX_NAME}`).toHaveLength(102)
+    expect(`${LONG_ORIGIN}#room=${MAX_NAME}`).toHaveLength(102)
   })
 
   it('encodes it as a version-6 symbol', () => {
-    const matrix = buildQrMatrix(`${LONG_ORIGIN}#sala=${MAX_NAME}`)
+    const matrix = buildQrMatrix(`${LONG_ORIGIN}#room=${MAX_NAME}`)
 
     expect(qrVersion(matrix)).toBe(6)
     expect(matrix.moduleCount).toBe(41)
-    expect(countDark(matrix)).toBe(852)
+    expect(countDark(matrix)).toBe(856)
   })
 })
 
@@ -164,11 +164,11 @@ describe('capacity guard', () => {
 describe('determinism and growth', () => {
   const CORPUS = [
     LOBBY_LINK,
-    'https://gritos.example/#sala=mi-sala',
+    'https://gritos.example/#room=mi-sala',
     // Percent-encoded name: the QR encodes the link text verbatim.
-    'https://gritos.example/#sala=mi%20sala',
-    'https://juliangt.github.io/gritos/#sala=random_1',
-    'http://localhost:5173/#sala=dev',
+    'https://gritos.example/#room=mi%20sala',
+    'https://juliangt.github.io/gritos/#room=random_1',
+    'http://localhost:5173/#room=dev',
   ]
 
   it('re-encodes every corpus link to the identical matrix', () => {
@@ -180,7 +180,7 @@ describe('determinism and growth', () => {
   it('grows the matrix strictly with input length (versions 3..6)', () => {
     // Lengths chosen to cross each version threshold at EC level M:
     // 30 -> v3, 45 -> v4, 63 -> v5, 103 -> v6 total chars.
-    const links = [1, 16, 34, 74].map((len) => `${SHORT_ORIGIN}#sala=${'x'.repeat(len)}`)
+    const links = [1, 16, 34, 74].map((len) => `${SHORT_ORIGIN}#room=${'x'.repeat(len)}`)
     const counts = links.map((link) => buildQrMatrix(link).moduleCount)
 
     expect(counts).toEqual([29, 33, 37, 41])
