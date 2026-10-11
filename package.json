@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "4.3.3",
-    "@trystero-p2p/torrent": "0.25.4",
+    "@trystero-p2p/torrent": "0.26.0",
     "qrcode-generator": "2.0.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
