@@ -35,7 +35,7 @@ describe('PWA shell documentation (issue #104)', () => {
     expect(features).toContain('**Installable PWA with an offline shell (issue #104)**')
     // Honest scope: the shell boots offline; the P2P layer does not.
     expect(features).toContain('boots with **no network**')
-    expect(features).toContain('P2P chat still needs WebRTC and the trackers')
+    expect(features).toContain('P2P chat still needs WebRTC and the Nostr relays')
     // The update toast, with its exact wording, never a silent swap.
     expect(features).toContain('New version available')
     expect(features).toContain('the new worker waits')
@@ -60,7 +60,7 @@ describe('PWA shell documentation (issue #104)', () => {
       'The offline service worker (issue #104) is same-origin by construction',
     )
     expect(security).toContain(
-      'cross-origin traffic (the `wss:` trackers first of all) passes through untouched',
+      'cross-origin traffic (the `wss:` relays first of all) passes through untouched',
     )
     expect(security).toContain('adds no push channel — notifications remain tab-scoped')
   })

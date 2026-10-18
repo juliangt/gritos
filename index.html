@@ -6,9 +6,9 @@
       CSP (RNF-05/M6): the inline bootstrap script (frame-bust + anti-flash)
       is allow-listed by its sha256 hash; 'unsafe-inline' in style-src covers
       Vite's dev-injected styles (the production bundle ships CSS as a file).
-      WebRTC is not governed by CSP; the wss: entry covers the torrent
-      trackers (issue #26 dropped cleartext ws:: both the settings UI and
-      the import validator only accept wss:// tracker URLs, so nothing
+      WebRTC is not governed by CSP; the wss: entry covers the Nostr
+      relays (issue #26 dropped cleartext ws:: both the settings UI and
+      the import validator only accept wss:// relay URLs, so nothing
       legitimate ever used it). form-action 'self' hardens the forms and
       upgrade-insecure-requests upgrades any http:// subresource before it
       is fetched (issue #26). style-src keeps 'unsafe-inline' (issue #26

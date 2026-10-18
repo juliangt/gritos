@@ -77,7 +77,7 @@ Gritos speaks English and Spanish (issue #119). On first boot the UI follows you
 3. **Encrypt** — password rooms derive keys with PBKDF2-SHA-256 (600k iterations); DMs use session-ephemeral ECDH P-256 + AES-256-GCM, so recorded DM history becomes undecryptable when the session ends.
 4. **Persist (almost) nothing** — room passwords and all message content stay memory-only. The whole on-disk footprint is five `gritos:*` settings keys in `localStorage` plus an IndexedDB vault wrapping the private key, encrypted at rest.
 
-Deep dives: [architecture](docs/architecture.md) · [security model](docs/security.md) · [public trackers notice](docs/security.md#public-trackers-notice) · [limitations](docs/limitations.md)
+Deep dives: [architecture](docs/architecture.md) · [security model](docs/security.md) · [public relay notice](docs/security.md#public-relay-notice) · [limitations](docs/limitations.md)
 
 ## Quickstart
 
