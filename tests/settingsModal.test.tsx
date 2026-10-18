@@ -128,7 +128,7 @@ describe('Red tab (RF-07)', () => {
   it('shows the defaults hint and validates the wss:// scheme on trackers', () => {
     renderModal()
     expect(
-      screen.getByText('Empty list: Trystero’s default trackers are used.'),
+      screen.getByText('Empty list: Trystero’s default Nostr relays are used.'),
     ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Add tracker' }))
@@ -137,10 +137,10 @@ describe('Red tab (RF-07)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(TRACKER_ERROR_TEXT)
     expect(useSettingsStore.getState().settings.trackers).toEqual([])
 
-    fireEvent.change(input, { target: { value: 'wss://tracker.example:443' } })
+    fireEvent.change(input, { target: { value: 'wss://relay.example:443' } })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(useSettingsStore.getState().settings.trackers).toEqual(['wss://tracker.example:443'])
-    expect(rawSettings().trackers).toEqual(['wss://tracker.example:443'])
+    expect(useSettingsStore.getState().settings.trackers).toEqual(['wss://relay.example:443'])
+    expect(rawSettings().trackers).toEqual(['wss://relay.example:443'])
   })
 
   it('removes tracker rows and the list returns to defaults (empty)', () => {
@@ -150,7 +150,7 @@ describe('Red tab (RF-07)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove tracker 1' }))
     expect(useSettingsStore.getState().settings.trackers).toEqual([])
     expect(
-      screen.getByText('Empty list: Trystero’s default trackers are used.'),
+      screen.getByText('Empty list: Trystero’s default Nostr relays are used.'),
     ).toBeInTheDocument()
   })
 

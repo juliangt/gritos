@@ -449,7 +449,7 @@ describe('arrival order + 2 s ts-window (spec §7.3)', () => {
 
 describe('connection status texts (spec §10.3 exact)', () => {
   it('uses the exact spec strings', () => {
-    expect(connectionStatusText('searching', 0)).toBe('Searching for peers on the torrent network…')
+    expect(connectionStatusText('searching', 0)).toBe('Searching for peers on Nostr relays…')
     expect(connectionStatusText('searching', 3)).toBe('Connecting (3 peers found)…')
     expect(connectionStatusText('connected', 5)).toBe('P2P channel established · 5 peers')
     expect(connectionStatusText('error', 0)).toBe(

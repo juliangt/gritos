@@ -5,9 +5,10 @@ import { useT } from '../../i18n/index'
 import { Toggle } from './Toggle'
 
 /**
- * Network tab (RF-07): auto-join, custom trackers (wss://), ICE servers
- * (stun:/turn: with TURN credentials), the 1–6 active-room cap and the
- * "Reconnect all" note + button that applies the settings via
+ * Network tab (RF-07): auto-join, custom Nostr relays (wss:// — persisted in
+ * the legacy `trackers` settings field, see lib/validateSettings.ts), ICE
+ * servers (stun:/turn: with TURN credentials), the 1–6 active-room cap and
+ * the "Reconnect all" note + button that applies the settings via
  * reconnectAll(). Valid values persist instantly; invalid ones show the
  * inline (locale-live) error and are not saved. Issue #30: a toggle decides
  * whether TURN credentials persist in this browser — off keeps them
@@ -156,7 +157,7 @@ export function NetworkTab() {
             <input
               type="url"
               value={url}
-              placeholder="wss://tracker.example:443"
+              placeholder="wss://relay.example:443"
               aria-label={t('settings.trackerRowLabel', { index: index + 1 })}
               aria-invalid={url.trim() !== '' && !isValidTrackerUrl(url)}
               onChange={(event) => updateTrackerRow(index, event.target.value)}
