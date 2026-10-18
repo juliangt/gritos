@@ -22,7 +22,21 @@
  * (joining the signal swarm is a visible privacy decision, spec §12.5).
  * Issue #119: the UI language joins the enum pass like `theme` — only
  * 'en'/'es'/'auto' survive verbatim, anything else falls back to 'auto'
- * (follow the browser).
+ * (follow the browser). Issue #132: the signaling transport swapped from
+ * `@trystero-p2p/torrent` to `@trystero-p2p/nostr`, so "trackers" now means
+ * Nostr relay `wss://` URLs. The persisted `Settings` field keeps its
+ * historical `trackers` name for storage compatibility — renaming it would
+ * orphan the value inside every existing `gritos:` record already on disk
+ * and break every store consumer — while the relay rule itself is unchanged.
+ * The five WebTorrent default tracker URLs (`LEGACY_WEBTORRENT_TRACKERS`)
+ * are evicted from any stored or imported list: they are BitTorrent tracker
+ * servers and must never receive Nostr NIP-01 signaling traffic, and an
+ * evicted-to-[] list falls back to `@trystero-p2p/nostr`'s
+ * `defaultRelayUrls`. `relays` is accepted as an INPUT alias for the same
+ * list (`record.trackers` wins when it is an array, `record.relays`
+ * otherwise) so exported or hand-written settings that speak the new
+ * vocabulary hydrate correctly; the alias feeds the identical
+ * validation + eviction pass.
  */
 
 import { canonicalFingerprint } from './crypto/dm'
@@ -39,8 +53,52 @@ export const MAX_MUTED_FINGERPRINTS = 100
 /** §8.1 — the only theme values the app knows (RF-10). */
 const THEMES: readonly ThemeChoice[] = ['light', 'dark', 'system']
 
-/** Issue #119 — the only UI-language values the app knows. */
+/**
+ * Issue #119 — the only UI-language values the app knows.
+ */
 const LANGUAGES: readonly LanguageSetting[] = ['en', 'es', 'auto']
+
+/**
+ * Issue #132 — the five `wss://` defaults baked into the retired
+ * `@trystero-p2p/torrent` transport (Trystero 0.25.4's `defaultRelayUrls`).
+ * They are BitTorrent tracker servers, not Nostr relays: after the #132
+ * transport swap, a stale `gritos:settings` record or an imported settings
+ * file still carrying them would aim Nostr NIP-01 signaling traffic at
+ * servers that cannot speak it and must never receive it. Every occurrence
+ * is therefore evicted during normalization; when the whole list was only
+ * legacy trackers the result is `[]`, which is itself the documented default
+ * and activates `@trystero-p2p/nostr`'s own `defaultRelayUrls`. The eviction
+ * is surgical: any other user-configured `wss://` relay survives untouched.
+ */
+export const LEGACY_WEBTORRENT_TRACKERS: readonly string[] = [
+  'wss://open.ftorrent.com',
+  'wss://tracker.webtorrent.dev',
+  'wss://tracker.openwebtorrent.com',
+  'wss://tracker.btorrent.xyz',
+  'wss://tracker.files.fm:7073/announce',
+]
+
+/**
+ * Comparison key for the legacy-tracker blocklist. Hosts are
+ * case-insensitive per the URL spec (the parser already lowercases them)
+ * and are lowercased again here as belt-and-braces; paths are lowercased
+ * too — over-evicting a differently-cased path on a blocklisted BitTorrent
+ * host is harmless, while under-evicting would leak signaling traffic. The
+ * empty path of a bare-host URL (`wss://open.ftorrent.com`) and its
+ * trailing-slash form are the same key.
+ */
+function legacyTrackerKey(url: URL): string {
+  const path = url.pathname === '' ? '/' : url.pathname
+  return `${url.host.toLowerCase()}${path.toLowerCase()}`
+}
+
+/** The blocklist pre-parsed into comparison keys (all five parse cleanly). */
+const LEGACY_TRACKER_KEYS: ReadonlySet<string> = new Set(
+  LEGACY_WEBTORRENT_TRACKERS.flatMap((entry) => {
+    const url = parseUrl(entry)
+    return url === null ? [] : [legacyTrackerKey(url)]
+  }),
+)
 
 /** `new URL` that yields null instead of throwing (never trust the store). */
 function parseUrl(value: string): URL | null {
@@ -51,10 +109,52 @@ function parseUrl(value: string): URL | null {
   }
 }
 
-/** Tracker rule: parses as a URL, `wss:` scheme, something after it. */
+/**
+ * Relay rule (issue #132: "trackers" now means Nostr relays): parses as a
+ * URL, `wss:` scheme, something after it. The rule itself predates the
+ * transport swap and is unchanged — WebTorrent's `wss://` trackers and
+ * Nostr's relays happen to share the same shape, so the migration only had
+ * to add the blocklist eviction below.
+ */
 function isValidTrackerUrl(value: string): boolean {
   const url = parseUrl(value.trim())
   return url !== null && url.protocol === 'wss:' && url.href !== url.protocol
+}
+
+/**
+ * Exported alias for the relay rule, named for what the list means since
+ * issue #132 (Nostr relays) rather than for the persisted `trackers` field
+ * name. Both names delegate to the identical rule; nothing else about it
+ * changed. See the module docblock for why the field name stays `trackers`.
+ */
+export function isValidRelayUrl(value: string): boolean {
+  return isValidTrackerUrl(value)
+}
+
+/**
+ * Issue #132 — true when the entry is one of the retired WebTorrent default
+ * trackers (see `LEGACY_WEBTORRENT_TRACKERS`). Compared on the parsed
+ * host+path key so a trimmed, differently-cased or trailing-slash spelling
+ * of the same BitTorrent server is still evicted; see `legacyTrackerKey`.
+ */
+function isLegacyWebTorrentTracker(value: string): boolean {
+  const url = parseUrl(value.trim())
+  return url !== null && LEGACY_TRACKER_KEYS.has(legacyTrackerKey(url))
+}
+
+/**
+ * Keeps only well-formed `wss://` relay URLs, trimmed, with the legacy
+ * WebTorrent trackers evicted (issue #132). The eviction is surgical: a
+ * user-configured relay like `wss://relay.damus.io` survives untouched, and
+ * a list that was only legacy trackers normalizes to `[]` — which lets
+ * `@trystero-p2p/nostr`'s `defaultRelayUrls` take over.
+ */
+function normalizeTrackers(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((entry): entry is string => typeof entry === 'string' && isValidTrackerUrl(entry))
+    .map((entry) => entry.trim())
+    .filter((entry) => !isLegacyWebTorrentTracker(entry))
 }
 
 const ICE_PROTOCOLS: readonly string[] = ['stun:', 'turn:', 'turns:']
@@ -63,13 +163,6 @@ const ICE_PROTOCOLS: readonly string[] = ['stun:', 'turn:', 'turns:']
 function isValidIceUrl(value: string): boolean {
   const url = parseUrl(value.trim())
   return url !== null && ICE_PROTOCOLS.includes(url.protocol) && url.href !== url.protocol
-}
-
-function normalizeTrackers(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .filter((entry): entry is string => typeof entry === 'string' && isValidTrackerUrl(entry))
-    .map((entry) => entry.trim())
 }
 
 /**
@@ -168,10 +261,23 @@ export function normalizeSettings(raw: unknown, fallback: Settings): Settings {
     typeof record.rememberTurnCredentials === 'boolean'
       ? record.rememberTurnCredentials
       : fallback.rememberTurnCredentials
+  // Issue #132 — `relays` input alias: the persisted field name stays
+  // `trackers` for storage compatibility (a rename would orphan the value in
+  // every existing `gritos:settings` record and break every store consumer),
+  // but exported/hand-written settings may already speak the new relay
+  // vocabulary. Precedence: `record.trackers` wins when it is an array,
+  // `record.relays` is used when the trackers field is not an array, and
+  // anything else falls back to `normalizeTrackers`' [] default. Both inputs
+  // run through the identical validation + legacy-eviction pass.
+  const rawRelayList: unknown = Array.isArray(record.trackers)
+    ? record.trackers
+    : Array.isArray(record.relays)
+      ? record.relays
+      : undefined
   return {
     autoJoinLobby:
       typeof record.autoJoinLobby === 'boolean' ? record.autoJoinLobby : fallback.autoJoinLobby,
-    trackers: normalizeTrackers(record.trackers),
+    trackers: normalizeTrackers(rawRelayList),
     iceServers: normalizeIceServers(record.iceServers, rememberTurnCredentials),
     maxActiveRooms: normalizeMaxActiveRooms(record.maxActiveRooms, fallback),
     theme: THEMES.includes(record.theme as ThemeChoice)
