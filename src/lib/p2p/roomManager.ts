@@ -5,7 +5,7 @@ import {
   type JoinRoomConfig,
   type MessageAction,
   type Room as TrysteroRoom,
-} from '@trystero-p2p/torrent'
+} from '@trystero-p2p/nostr'
 import { resolveTrysteroAppId } from './appId'
 import { deriveRoomId } from '../crypto/hashes'
 import type { DmTransport } from './dmTransport'

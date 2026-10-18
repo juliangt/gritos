@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultRelayUrls } from '@trystero-p2p/nostr'
 import * as manager from '../src/lib/p2p/roomManager'
 import { useAppStore } from '../src/stores/useAppStore'
 import { useSettingsStore } from '../src/stores/useSettingsStore'
@@ -31,6 +32,7 @@ import {
   SYSTEM_LINE_RATE_WINDOW_MS,
 } from '../src/lib/p2p/roomManager'
 import { installFakeTrystero, makeFakeRemotePeer } from './fakeTrystero'
+import packageJsonRaw from '../package.json?raw'
 
 let fake: ReturnType<typeof installFakeTrystero>
 
@@ -2266,5 +2268,77 @@ describe('issue #102 phase 3 — recovered append (onRecovered → store)', () =
     const last = storedRoom(roomId).messages.at(-1)
     expect(last?.encrypted).toBe(true)
     expect(last?.text).toBe('🔒 encrypted message')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Nostr transport contract (issue #132)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dependency-contract guard for issue #132 (the WebTorrent signaling
+ * transport was replaced by Nostr at the network layer — roomManager.ts is
+ * still the app's single Trystero surface, now backed by
+ * `@trystero-p2p/nostr`). Keeps the swap from silently regressing:
+ *
+ *  1. Dependabot bumps `@trystero-p2p/nostr` like any other dependency, and
+ *     a future transport change (or a careless re-add of the old
+ *     `@trystero-p2p/torrent` package) would ship two signaling stacks — or
+ *     none — without any runtime test noticing: every room suite here drives
+ *     the manager through the fake factory, so the real transport is never
+ *     exercised. This block pins the manifest instead.
+ *  2. The repo's supply-chain policy pins every dependency EXACTLY (no `^`
+ *     or `~` ranges): a range would admit any future published build of the
+ *     package into the tree on a plain `npm install`. Parsed JSON cannot
+ *     distinguish `"0.25.4"` from `"^0.25.4"` surviving a manual edit, so the
+ *     raw bytes of package.json are asserted too (the same vite `?raw`
+ *     discipline as license.test.ts — no `node:fs`, the project deliberately
+ *     ships no Node types).
+ *  3. `defaultRelayUrls` is the effective default signaling surface (the
+ *     nostr counterpart of the tracker list the docs pin for the torrent
+ *     transport — see trackersDoc.test.ts). Every entry must satisfy the
+ *     same rule the settings UI enforces on user-configured relays
+ *     (isValidTrackerUrl: parses as a URL, `wss:` protocol, something after
+ *     `wss://`), so a bump that ships a malformed default fails here loudly
+ *     instead of surfacing as unreachable rooms in production.
+ *
+ * Deliberately independent of this file's fake Trystero install and fake
+ * timers: pure assertions over static imports, so the guard can be neither
+ * broken nor silenced by another suite's beforeEach/afterEach.
+ */
+const packageJson = JSON.parse(packageJsonRaw) as {
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+}
+
+describe('Nostr transport contract (issue #132)', () => {
+  it('depends on @trystero-p2p/nostr at the exact pinned version', () => {
+    expect(packageJson.dependencies?.['@trystero-p2p/nostr']).toBe('0.25.4')
+
+    // Raw-bytes check: the specifier in package.json itself must be exactly
+    // "0.25.4" — a `^`/`~` prefix would violate the exact-pinning policy
+    // even though the parsed object above would look identical.
+    const rawSpecifier = /"@trystero-p2p\/nostr":\s*"([^"]+)"/.exec(packageJsonRaw)
+    expect(rawSpecifier).not.toBeNull()
+    expect(rawSpecifier?.[1]).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(rawSpecifier?.[1]).toBe('0.25.4')
+  })
+
+  it('no longer depends on the WebTorrent transport package', () => {
+    expect(packageJson.dependencies?.['@trystero-p2p/torrent']).toBeUndefined()
+    expect(packageJson.devDependencies?.['@trystero-p2p/torrent']).toBeUndefined()
+  })
+
+  it('ships a non-empty default relay list of well-formed wss:// URLs', () => {
+    expect(Array.isArray(defaultRelayUrls)).toBe(true)
+    expect(defaultRelayUrls.length).toBeGreaterThan(0)
+    for (const url of defaultRelayUrls) {
+      expect(typeof url).toBe('string')
+      // The isValidTrackerUrl rule: parses, wss: protocol, non-empty host.
+      const parsed = new URL(url)
+      expect(parsed.protocol).toBe('wss:')
+      expect(url.startsWith('wss://')).toBe(true)
+      expect(url.length).toBeGreaterThan('wss://'.length)
+    }
   })
 })
