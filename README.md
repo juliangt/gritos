@@ -6,7 +6,7 @@
 
 **No server. No accounts. No trace.**
 Messages travel browser-to-browser over WebRTC data channels — peers find each
-other through public BitTorrent trackers — and disappear when the tab closes.
+other through public Nostr relays — and disappear when the tab closes.
 
 [![Stable release](https://img.shields.io/github/v/tag/juliangt/gritos?label=stable&sort=semver)](https://github.com/juliangt/gritos/releases)
 [![License: MIT](https://img.shields.io/github/license/juliangt/gritos)](LICENSE)
@@ -27,7 +27,7 @@ other through public BitTorrent trackers — and disappear when the tab closes.
 
 Every mainstream chat needs a server that sees everything: accounts, history, metadata. **Gritos needs none of it** — the static bundle is the whole app, and the peers _are_ the network.
 
-- 🛰️ **Zero infrastructure** — host a static bundle anywhere; discovery rides public trackers, conversation flows browser-to-browser.
+- 🛰️ **Zero infrastructure** — host a static bundle anywhere; discovery rides public Nostr relays, conversation flows browser-to-browser.
 - 🔒 **Encrypted where it matters** — DTLS transport, plus Web Crypto payload encryption for password rooms and direct messages, with session-ephemeral DM keys.
 - 💨 **Ephemeral by design** — messages exist only in RAM. Nothing to leak, sell or subpoena.
 - 🕵️ **No accounts** — identity is a locally generated keypair plus a nickname; your 128-bit fingerprint is your name.
@@ -72,7 +72,7 @@ Gritos speaks English and Spanish (issue #119). On first boot the UI follows you
 
 ## How it works
 
-1. **Discover** — [Trystero](https://github.com/tinychat/trystero) (torrent strategy, exact-pinned) introduces peers through public WebTorrent trackers over `wss:`. Only the handshake touches a tracker — the room name is hashed to an opaque id first.
+1. **Discover** — [Trystero](https://github.com/tinychat/trystero) (nostr strategy, exact-pinned) introduces peers through public Nostr relays (NIP-01) over `wss:`. Only the handshake touches a relay — the room name is hashed to an opaque id first.
 2. **Connect** — application traffic flows over direct WebRTC data channels, DTLS-encrypted by the browser. Each room is a full mesh, comfortable up to ~15 peers.
 3. **Encrypt** — password rooms derive keys with PBKDF2-SHA-256 (600k iterations); DMs use session-ephemeral ECDH P-256 + AES-256-GCM, so recorded DM history becomes undecryptable when the session ends.
 4. **Persist (almost) nothing** — room passwords and all message content stay memory-only. The whole on-disk footprint is five `gritos:*` settings keys in `localStorage` plus an IndexedDB vault wrapping the private key, encrypted at rest.
@@ -125,7 +125,7 @@ Host recipes, recommended security headers and the iOS caveat: **[docs/deploymen
 The model trades server conveniences for independence:
 
 - Full mesh: comfortable to ~15 peers per room, degrading beyond ~20.
-- Discovery needs public trackers (your own can be configured); symmetric NAT may need your own TURN server.
+- Discovery needs public Nostr relays (your own can be configured); symmetric NAT may need your own TURN server.
 - No offline delivery, no push, no global message ordering; nicknames are not unique.
 
 The full list, with the reasoning behind each trade-off: **[docs/limitations.md](docs/limitations.md)**.
@@ -134,10 +134,10 @@ The full list, with the reasoning behind each trade-off: **[docs/limitations.md]
 
 - [Feature reference](docs/features.md) — every feature with its guarantees.
 - [Architecture](docs/architecture.md) — discovery, stack and module layout.
-- [Security model](docs/security.md) — encryption, threat-model notes, supply chain and the public trackers notice. Vulnerability reporting: [SECURITY.md](SECURITY.md).
+- [Security model](docs/security.md) — encryption, threat-model notes, supply chain and the public relay notice. Vulnerability reporting: [SECURITY.md](SECURITY.md).
 - [Deployment](docs/deployment.md) — static hosting recipes.
 - [Limitations](docs/limitations.md) — the accepted trade-offs.
-- [Specification](docs/spec.md) · [Development plan](docs/plan.md) · [QA checklist](docs/qa-checklist.md) · [Tracker runbook](docs/runbook-trackers.md)
+- [Specification](docs/spec.md) · [Development plan](docs/plan.md) · [QA checklist](docs/qa-checklist.md) · [Relay runbook](docs/runbook-trackers.md)
 
 ## License
 

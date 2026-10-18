@@ -7,6 +7,8 @@
 | **Reference specification** | `docs/spec.md` (the `RF-xx` / `RNF-xx` IDs cited here are defined there) |
 | **Original source**         | `docs/wishlist.md` + closed decisions D1–D5 (spec, section 2)            |
 
+> **Update (2026-10, issue #132):** the signaling transport described throughout this plan as Trystero's torrent strategy now rides Nostr relays (`@trystero-p2p/nostr`, see `docs/nostr-migration-plan.md` and the docs/security.md "Public relay notice"). The milestone text below is preserved as the historical build record.
+
 ---
 
 ## 1. Executive summary

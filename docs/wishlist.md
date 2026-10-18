@@ -1,3 +1,5 @@
+> **Update (2026-10, issue #132):** this original architecture proposal describes the signaling transport as Trystero's torrent strategy leaning on public BitTorrent trackers; it now rides Nostr relays (`@trystero-p2p/nostr`, see `docs/nostr-migration-plan.md` and the docs/security.md "Public relay notice"). The text below is preserved as written.
+
 This is an excellent architecture proposal: **Trystero** solves precisely the WebRTC signaling by leaning on public BitTorrent trackers (through WebTorrent), achieving the initial _handshake_ without requiring any backend infrastructure of our own. Once the data channel is established (RTCDataChannel), traffic flows strictly peer-to-peer and encrypted at the transport level (DTLS-SRTP by WebRTC standard).
 
 Presented below is the functional definition, the recommended technical architecture and the key questions to close the specifications.
