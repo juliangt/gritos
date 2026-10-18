@@ -158,7 +158,7 @@ export const en = {
   'settings.maxRoomsError': 'The active-room limit must be between 1 and 6.',
 
   /** Network tab — empty-config hints and the reconnect semantics note. */
-  'settings.emptyTrackersHint': 'Empty list: Trystero’s default trackers are used.',
+  'settings.emptyTrackersHint': 'Empty list: Trystero’s default Nostr relays are used.',
   'settings.emptyIceHint': 'Empty list: Trystero’s default ICE configuration is used.',
   'settings.reconnectNote': 'Network changes are applied when the rooms reconnect.',
 
@@ -343,7 +343,7 @@ export const en = {
   // -------------------------------------------------------------------------
 
   /** §10.3 header status: searching with no peers discovered yet. */
-  'chat.searchingStatus': 'Searching for peers on the torrent network…',
+  'chat.searchingStatus': 'Searching for peers on Nostr relays…',
   /** §10.3 transition state: peers discovered, no DataChannel yet (2–6 s). */
   'chat.connectingStatusOne': 'Connecting ({count} peer found)…',
   'chat.connectingStatusOther': 'Connecting ({count} peers found)…',

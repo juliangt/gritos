@@ -112,7 +112,7 @@ export const es: Translations = {
   'settings.iceError': 'Los servidores ICE deben empezar por stun: o turn:',
   'settings.maxRoomsError': 'El límite de salas activas debe estar entre 1 y 6.',
 
-  'settings.emptyTrackersHint': 'Lista vacía: se usan los trackers predeterminados de Trystero.',
+  'settings.emptyTrackersHint': 'Lista vacía: se usan los relays Nostr predeterminados de Trystero.',
   'settings.emptyIceHint': 'Lista vacía: se usa la configuración ICE predeterminada de Trystero.',
   'settings.reconnectNote': 'Los cambios de red se aplican cuando las salas se reconectan.',
 
@@ -224,7 +224,7 @@ export const es: Translations = {
   // status (§10.3/RF-05).
   // -------------------------------------------------------------------------
 
-  'chat.searchingStatus': 'Buscando pares en la red torrent…',
+  'chat.searchingStatus': 'Buscando pares en los relays Nostr…',
   'chat.connectingStatusOne': 'Conectando ({count} par encontrado)…',
   'chat.connectingStatusOther': 'Conectando ({count} pares encontrados)…',
   'chat.connectedStatusOne': 'Canal P2P establecido · {count} par',

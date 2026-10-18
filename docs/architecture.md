@@ -4,7 +4,7 @@ How gritos is built: the discovery path, the stack and the module layout. The se
 
 ## Discovery
 
-[Trystero](https://github.com/tinychat/trystero) (torrent strategy, pinned exact version) uses public WebTorrent trackers over WebSocket (`wss:`) only to introduce peers and exchange SDP. Application traffic never touches a tracker — it flows over direct WebRTC data channels (DTLS-encrypted by the browser).
+[Trystero](https://github.com/tinychat/trystero) (nostr strategy, pinned exact version) uses public Nostr relays over WebSocket (`wss:`) only to introduce peers and exchange SDP (NIP-01). Application traffic never touches a relay — it flows over direct WebRTC data channels (DTLS-encrypted by the browser).
 
 ## Stack
 

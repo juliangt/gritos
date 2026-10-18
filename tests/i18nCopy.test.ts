@@ -76,7 +76,7 @@ describe('dictionary parity and seed shape', () => {
 
 describe('migrated builders resolve the exact legacy strings (en)', () => {
   it('keeps the §10.3 connection-status texts, plural pair included', () => {
-    expect(connectionStatusText('searching', 0)).toBe('Searching for peers on the torrent network…')
+    expect(connectionStatusText('searching', 0)).toBe('Searching for peers on Nostr relays…')
     expect(connectionStatusText('searching', 3)).toBe('Connecting (3 peers found)…')
     expect(connectionStatusText('connected', 5)).toBe('P2P channel established · 5 peers')
     expect(connectionStatusText('error', 0)).toBe(en['chat.networkErrorBanner'])

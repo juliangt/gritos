@@ -25,7 +25,7 @@ import swSource from '../public/sw.js?raw'
  *   allow-all policy, og:/twitter: share meta with a relative og:image, a
  *   theme-color per color scheme and PNG/apple-touch icon fallback links.
  * - Issue #26: the CSP ships hardened — cleartext `ws:` is gone from
- *   connect-src (only `wss:` trackers), `form-action 'self'` and
+ *   connect-src (only `wss:` relays), `form-action 'self'` and
  *   `upgrade-insecure-requests` are set, and the referrer policy meta is
  *   present.
  * - Issue #32: the M1 debug panel is gated behind `import.meta.env.DEV` in
@@ -364,7 +364,7 @@ describe('production build output (issues #37, #40, #27, #49, #26, #32)', () => 
   it('ships the hardened CSP and referrer policy (issue #26)', () => {
     const html = emittedHtml(result)
     const policy = cspPolicy(html)
-    // Cleartext ws: is gone; only wss: remains (trackers are wss: and the
+    // Cleartext ws: is gone; only wss: remains (relays are wss: and the
     // settings validation never accepted anything else). Assert against a
     // standalone token, not a substring: guard the token with whitespace so
     // a future `ws-whatever:` cannot sneak the match back in.
@@ -648,7 +648,7 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
   it('touches only scope-relative URLs: no absolute targets anywhere', () => {
     expect(
       distSw,
-      'no absolute fetch targets: cross-origin traffic (the wss: trackers) is none of the worker business',
+      'no absolute fetch targets: cross-origin traffic (the wss: relays) is none of the worker business',
     ).not.toMatch(/https?:\/\//)
     expect(distSw, 'the same-origin gate must run before any respondWith').toContain(
       'url.origin !== self.location.origin',
@@ -791,7 +791,7 @@ describe('PWA manifest, icons + service worker (issue #104)', () => {
     // the audit green, everything the app reaches at boot is already
     // covered: same-origin shell assets (default-src/script-src/style-src
     // 'self'; offline coverage is the precache test above), the './sw.js'
-    // registration (same-origin; phase-2 test), Trystero tracker sockets —
+    // registration (same-origin; phase-2 test), Trystero relay sockets —
     // user-set URLs validated to wss: only (validateSettings.ts,
     // NetworkTab) — allowed by connect-src wss:, WebRTC (not governed by
     // CSP) and data: URIs for generated QR codes (img-src data:). The

@@ -50,7 +50,7 @@ describe('ChatHeader — peerless hint (issue #125)', () => {
 
     expect(screen.queryByText(PEERLESS_ROOM_HINT_TEXT)).not.toBeInTheDocument()
     // The pinned §10.3 status text is the only status line.
-    expect(screen.getByText('Searching for peers on the torrent network…')).toBeInTheDocument()
+    expect(screen.getByText('Searching for peers on Nostr relays…')).toBeInTheDocument()
   })
 
   it('renders the exact hint text when the room latched peerlessHint', () => {
@@ -59,6 +59,6 @@ describe('ChatHeader — peerless hint (issue #125)', () => {
     expect(screen.getByText(PEERLESS_ROOM_HINT_TEXT)).toBeInTheDocument()
     expect(screen.getByText(PEERLESS_ROOM_HINT_TEXT)).toHaveClass('text-xs', 'text-muted')
     // The §10.3 searching text stays as-is next to the hint.
-    expect(screen.getByText('Searching for peers on the torrent network…')).toBeInTheDocument()
+    expect(screen.getByText('Searching for peers on Nostr relays…')).toBeInTheDocument()
   })
 })

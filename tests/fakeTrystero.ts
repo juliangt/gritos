@@ -10,7 +10,7 @@ import {
  * Fake Trystero layer for tests: captures the joinRoom config/roomId,
  * exposes the room instance with its registered actions, and lets tests
  * drive peer join/leave and inbound action messages. Injected through the
- * roomManager's `setJoinRoomFactory` seam — the real @trystero-p2p/torrent
+ * roomManager's `setJoinRoomFactory` seam — the real @trystero-p2p/nostr
  * module is never contacted.
  */
 

@@ -10,7 +10,7 @@
  *
  * Scope (issue #104): the shell only. Same-origin precached assets are
  * served cache-first; everything else is none of this worker's business —
- * cross-origin requests (the wss: tracker sockets first among them) fall
+ * cross-origin requests (the wss: relay sockets first among them) fall
  * through untouched and nothing is ever cached at runtime.
  *
  * The two placeholders below are rewritten by the gritosSwManifest() Vite

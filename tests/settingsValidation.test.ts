@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MAX_MUTED_FINGERPRINTS, normalizeSettings } from '../src/lib/validateSettings'
+import {
+  isValidRelayUrl,
+  LEGACY_WEBTORRENT_TRACKERS,
+  MAX_MUTED_FINGERPRINTS,
+  normalizeSettings,
+} from '../src/lib/validateSettings'
 import {
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
@@ -12,6 +17,12 @@ import {
  * Hostile/corrupt payloads must never reach the store — every field falls
  * back to the documented defaults (spec §8.1) — while the valid parts of a
  * mixed record survive. Covers both the pure pass and the rehydration path.
+ * Issue #132: since the signaling transport swapped from
+ * `@trystero-p2p/torrent` to `@trystero-p2p/nostr`, the persisted `trackers`
+ * list means Nostr relays. The five retired WebTorrent default trackers are
+ * evicted from stored/imported lists (they are BitTorrent servers and must
+ * never receive NIP-01 signaling traffic), user-configured relays survive,
+ * and a `relays` input alias hydrates settings that speak the new vocabulary.
  */
 
 /** Fresh baseline for the pure pass (normalizeSettings never mutates it). */
@@ -305,6 +316,119 @@ describe('normalizeSettings mute list (issue #95)', () => {
   })
 })
 
+describe('normalizeSettings relay eviction and relays alias (issue #132)', () => {
+  it('exports exactly the five documented legacy WebTorrent trackers', () => {
+    expect([...LEGACY_WEBTORRENT_TRACKERS]).toEqual([
+      'wss://open.ftorrent.com',
+      'wss://tracker.webtorrent.dev',
+      'wss://tracker.openwebtorrent.com',
+      'wss://tracker.btorrent.xyz',
+      'wss://tracker.files.fm:7073/announce',
+    ])
+  })
+
+  it('keeps user-configured Nostr relays intact', () => {
+    // The rule is unchanged for ordinary relays: well-formed wss:// URLs
+    // survive, trimmed — a user-configured list is never rewritten.
+    expect(
+      normalizeSettings(
+        { trackers: ['  wss://relay.damus.io  ', 'wss://nos.lol'] },
+        FALLBACK,
+      ).trackers,
+    ).toEqual(['wss://relay.damus.io', 'wss://nos.lol'])
+    expect(isValidRelayUrl('wss://relay.damus.io')).toBe(true)
+    expect(isValidRelayUrl('wss://open.ftorrent.com')).toBe(true)
+  })
+
+  it('evicts each legacy WebTorrent tracker while keeping valid relays', () => {
+    // Mixed list: every legacy URL is surgically removed, the real relay
+    // survives — the eviction never touches non-blocklisted entries.
+    const { trackers } = normalizeSettings(
+      {
+        trackers: [
+          'wss://open.ftorrent.com',
+          'wss://relay.damus.io',
+          'wss://tracker.webtorrent.dev',
+          'wss://tracker.openwebtorrent.com',
+          'wss://tracker.btorrent.xyz',
+          'wss://tracker.files.fm:7073/announce',
+        ],
+      },
+      FALLBACK,
+    )
+    expect(trackers).toEqual(['wss://relay.damus.io'])
+  })
+
+  it('evicts legacy trackers spelled with a different host case or trailing slash', () => {
+    // The eviction compares the parsed host+path (hosts are
+    // case-insensitive, a bare-host URL and its trailing-slash form are the
+    // same server), so cosmetic respellings cannot smuggle a BitTorrent
+    // tracker back into the relay list.
+    expect(
+      normalizeSettings(
+        {
+          trackers: [
+            'wss://OPEN.FTORRENT.COM',
+            'wss://tracker.webtorrent.dev/',
+            'wss://relay.damus.io',
+          ],
+        },
+        FALLBACK,
+      ).trackers,
+    ).toEqual(['wss://relay.damus.io'])
+  })
+
+  it('normalizes a list of only legacy trackers (and duplicates) to []', () => {
+    // The [] result is the documented default, which lets
+    // @trystero-p2p/nostr's defaultRelayUrls take over.
+    expect(
+      normalizeSettings(
+        {
+          trackers: [
+            ...LEGACY_WEBTORRENT_TRACKERS,
+            ...LEGACY_WEBTORRENT_TRACKERS,
+            'wss://tracker.btorrent.xyz',
+          ],
+        },
+        FALLBACK,
+      ).trackers,
+    ).toEqual([])
+  })
+
+  it('hydrates trackers from the relays input alias', () => {
+    expect(normalizeSettings({ relays: ['wss://relay.damus.io'] }, FALLBACK).trackers).toEqual([
+      'wss://relay.damus.io',
+    ])
+  })
+
+  it('gives the persisted trackers field precedence over the relays alias', () => {
+    expect(
+      normalizeSettings(
+        { trackers: ['wss://a.example'], relays: ['wss://b.example'] },
+        FALLBACK,
+      ).trackers,
+    ).toEqual(['wss://a.example'])
+  })
+
+  it('evicts legacy trackers arriving via the relays alias too', () => {
+    // Same list, same pass: the alias feeds the identical validation +
+    // eviction pipeline, never a laxer one.
+    expect(
+      normalizeSettings(
+        { relays: ['wss://tracker.openwebtorrent.com', 'wss://nos.lol'] },
+        FALLBACK,
+      ).trackers,
+    ).toEqual(['wss://nos.lol'])
+  })
+
+  it('falls back to [] when the relays alias is not an array', () => {
+    expect(normalizeSettings({ relays: 'junk' }, FALLBACK).trackers).toEqual([])
+    expect(normalizeSettings({ relays: { 0: 'wss://relay.damus.io' } }, FALLBACK).trackers).toEqual(
+      [],
+    )
+  })
+})
+
 describe('settings rehydration falls back to safe defaults (issue #29)', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -446,5 +570,18 @@ describe('settings rehydration falls back to safe defaults (issue #29)', () => {
 
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ language: 'fr' }))
     expect((await rehydrate()).settings.language).toBe('auto')
+  })
+
+  it('evicts persisted legacy WebTorrent trackers back to [] on load (issue #132)', async () => {
+    // A long-running browser may still carry the retired
+    // @trystero-p2p/torrent defaults under gritos:settings; after the
+    // transport swap they must never receive Nostr signaling. The
+    // rehydrated store ends up with [] — the documented default, which
+    // activates @trystero-p2p/nostr's own defaultRelayUrls.
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({ trackers: [...LEGACY_WEBTORRENT_TRACKERS] }),
+    )
+    expect((await rehydrate()).settings.trackers).toEqual([])
   })
 })
